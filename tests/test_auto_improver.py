@@ -10,8 +10,10 @@ from memory_decay.auto_improver import AutoImprover, GUIDANCE
 class TestAutoImprover:
     def _make_mock_response(self, params: dict, reasoning: str = "test"):
         text = json.dumps({"reasoning": reasoning, "parameters": params}, ensure_ascii=False)
+        mock_choice = MagicMock()
+        mock_choice.message.content = text
         mock_resp = MagicMock()
-        mock_resp.content = [MagicMock(text=text)]
+        mock_resp.choices = [mock_choice]
         return mock_resp
 
     def test_init_invalid_guidance(self):
@@ -26,26 +28,19 @@ class TestAutoImprover:
     def test_propose_parameters(self):
         improver = AutoImprover(api_key="test", guidance_level="default")
         new_params = {
-            "lambda_fact": 0.03,
-            "lambda_episode": 0.06,
-            "beta_fact": 0.2,
-            "beta_episode": 0.4,
-            "alpha": 0.7,
+            "lambda_fact": 0.03, "lambda_episode": 0.06,
+            "beta_fact": 0.2, "beta_episode": 0.4, "alpha": 0.7,
         }
-        improver.client.messages.create = MagicMock(
+        improver.client.chat.completions.create = MagicMock(
             return_value=self._make_mock_response(new_params)
         )
 
         current = {
-            "lambda_fact": 0.05,
-            "lambda_episode": 0.08,
-            "beta_fact": 0.3,
-            "beta_episode": 0.5,
-            "alpha": 0.5,
+            "lambda_fact": 0.05, "lambda_episode": 0.08,
+            "beta_fact": 0.3, "beta_episode": 0.5, "alpha": 0.5,
         }
 
         result = improver.propose_parameters(current, [], iteration=1, total_budget=10)
-
         assert result["lambda_fact"] == 0.03
         assert result["alpha"] == 0.7
         assert len(improver.history) == 1
@@ -54,25 +49,21 @@ class TestAutoImprover:
         improver = AutoImprover(api_key="test")
 
         proposed = {
-            "lambda_fact": 999.0,  # too high
-            "lambda_episode": -1.0,  # too low
-            "beta_fact": "not_a_number",  # invalid
-            "beta_episode": 1.0,  # valid
-            "alpha": 0.5,  # valid
+            "lambda_fact": 999.0,
+            "lambda_episode": -1.0,
+            "beta_fact": "not_a_number",
+            "beta_episode": 1.0,
+            "alpha": 0.5,
         }
         current = {
-            "lambda_fact": 0.05,
-            "lambda_episode": 0.08,
-            "beta_fact": 0.3,
-            "beta_episode": 0.5,
-            "alpha": 0.5,
+            "lambda_fact": 0.05, "lambda_episode": 0.08,
+            "beta_fact": 0.3, "beta_episode": 0.5, "alpha": 0.5,
         }
 
         result = improver._validate_params(proposed, current)
-
         assert result["lambda_fact"] <= 0.5
         assert result["lambda_episode"] >= 0.001
-        assert result["beta_fact"] == 0.3  # fallback to current
+        assert result["beta_fact"] == 0.3
         assert result["beta_episode"] == 1.0
 
     def test_should_stop_budget_exhausted(self):
@@ -82,10 +73,8 @@ class TestAutoImprover:
     def test_should_stop_no_improvement(self):
         improver = AutoImprover(api_key="test")
         history = [
-            {"composite_score": 0.5},
-            {"composite_score": 0.5},
-            {"composite_score": 0.5},
-            {"composite_score": 0.5},
+            {"composite_score": 0.5}, {"composite_score": 0.5},
+            {"composite_score": 0.5}, {"composite_score": 0.5},
         ]
         assert improver.should_stop(history, iteration=5, total_budget=10, patience=3)
 
@@ -101,8 +90,7 @@ class TestAutoImprover:
     def test_should_not_stop_early(self):
         improver = AutoImprover(api_key="test")
         history = [
-            {"composite_score": 0.3},
-            {"composite_score": 0.5},
+            {"composite_score": 0.3}, {"composite_score": 0.5},
             {"composite_score": 0.7},
         ]
         assert not improver.should_stop(history, iteration=3, total_budget=10)
@@ -111,9 +99,11 @@ class TestAutoImprover:
         improver = AutoImprover(api_key="test")
         params = {"lambda_fact": 0.04, "lambda_episode": 0.07, "beta_fact": 0.25, "beta_episode": 0.45, "alpha": 0.6}
         text = f"Here are my suggestions:\n```json\n{json.dumps({'reasoning': 'analysis', 'parameters': params}, ensure_ascii=False)}\n```"
+        mock_choice = MagicMock()
+        mock_choice.message.content = text
         mock_resp = MagicMock()
-        mock_resp.content = [MagicMock(text=text)]
-        improver.client.messages.create = MagicMock(return_value=mock_resp)
+        mock_resp.choices = [mock_choice]
+        improver.client.chat.completions.create = MagicMock(return_value=mock_resp)
 
         current = {"lambda_fact": 0.05, "lambda_episode": 0.08, "beta_fact": 0.3, "beta_episode": 0.5, "alpha": 0.5}
         result = improver.propose_parameters(current, [], iteration=1, total_budget=5)

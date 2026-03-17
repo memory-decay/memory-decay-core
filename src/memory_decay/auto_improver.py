@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import Optional
 
-import anthropic
+from openai import OpenAI
 
 
-# Pre-defined guidance levels (inspired by autoresearch program.md)
+# Pre-defined guidance levels
 GUIDANCE = {
     "minimal": "Improve recall_rate while maintaining precision > 0.8.",
     "default": """You are optimizing a memory decay system. The system models human memory using:
@@ -41,32 +42,26 @@ not sudden drops or near-perfect retention at all times).""",
 
 
 class AutoImprover:
-    """LLM-driven iterative optimization of memory decay parameters.
-
-    Analyzes evaluation snapshots, proposes parameter modifications,
-    and iterates within a budget limit.
-    """
+    """LLM-driven iterative optimization of memory decay parameters."""
 
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "claude-haiku-4-20250414",
+        model: str = "gpt-4o-mini",
         guidance_level: str = "default",
+        base_url: Optional[str] = None,
     ):
-        self.api_key = api_key or json.loads(
-            Path(__file__).parent.parent.parent.joinpath(".env").read_text()
-        ).get("ANTHROPIC_API_KEY") if Path(__file__).parent.parent.parent.joinpath(".env").exists() else None
-
-        if not self.api_key:
-            self.api_key = api_key
-
+        self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError(
-                "Anthropic API key required. Set ANTHROPIC_API_KEY env var "
+                "OpenAI API key required. Set OPENAI_API_KEY env var "
                 "or pass api_key parameter."
             )
 
-        self.client = anthropic.Anthropic(api_key=self.api_key)
+        kwargs = {"api_key": self.api_key}
+        if base_url:
+            kwargs["base_url"] = base_url
+        self.client = OpenAI(**kwargs)
         self.model = model
 
         if guidance_level not in GUIDANCE:
@@ -76,7 +71,6 @@ class AutoImprover:
             )
         self.guidance = GUIDANCE[guidance_level]
         self.guidance_level = guidance_level
-
         self._history: list[dict] = []
 
     def propose_parameters(
@@ -86,30 +80,19 @@ class AutoImprover:
         iteration: int,
         total_budget: int,
     ) -> dict:
-        """Analyze results and propose new parameters.
-
-        Args:
-            current_params: Current decay engine parameters.
-            evaluation_history: List of evaluation snapshots from past runs.
-            iteration: Current iteration number.
-            total_budget: Total iterations allowed.
-
-        Returns:
-            New parameters dict.
-        """
+        """Analyze results and propose new parameters."""
         prompt = self._build_prompt(
             current_params, evaluation_history, iteration, total_budget
         )
 
-        response = self.client.messages.create(
+        response = self.client.chat.completions.create(
             model=self.model,
             max_tokens=2048,
             messages=[{"role": "user", "content": prompt}],
         )
 
-        text = response.content[0].text.strip()
+        text = response.choices[0].message.content.strip()
 
-        # Extract JSON from response
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0].strip()
         elif "```" in text:
@@ -118,16 +101,13 @@ class AutoImprover:
         try:
             result = json.loads(text)
         except json.JSONDecodeError:
-            # Try to extract JSON object from text
             match = re.search(r"\{[^}]+\}", text, re.DOTALL)
             if match:
                 result = json.loads(match.group())
             else:
-                return current_params  # Fallback: keep current params
+                return current_params
 
         new_params = result.get("parameters", current_params)
-
-        # Validate: ensure all required keys exist with valid ranges
         validated = self._validate_params(new_params, current_params)
 
         record = {
@@ -195,7 +175,6 @@ Respond with JSON:
 JSON만 출력해주세요. 설명은 reasoning 필드에 넣어주세요."""
 
     def _validate_params(self, proposed: dict, current: dict) -> dict:
-        """Validate and clamp proposed parameters to valid ranges."""
         ranges = {
             "lambda_fact": (0.001, 0.5),
             "lambda_episode": (0.001, 0.5),
@@ -222,13 +201,6 @@ JSON만 출력해주세요. 설명은 reasoning 필드에 넣어주세요."""
         total_budget: int,
         patience: int = 3,
     ) -> bool:
-        """Check if optimization should stop early.
-
-        Stops if:
-        - Budget exhausted
-        - No improvement for `patience` consecutive iterations
-        - Recall > 0.95 for all recent ticks (memorization detected)
-        """
         if iteration >= total_budget:
             return True
 
@@ -236,10 +208,8 @@ JSON만 출력해주세요. 설명은 reasoning 필드에 넣어주세요."""
         if len(recent) >= patience:
             scores = [h.get("composite_score", 0) for h in recent]
             if max(scores) == scores[0]:
-                # No improvement in last `patience` iterations
                 return True
 
-        # Memorization detection
         if len(recent) >= 3:
             recalls = [h.get("recall_rate", 0) for h in recent]
             if all(r > 0.95 for r in recalls):

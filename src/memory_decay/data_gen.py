@@ -1,4 +1,4 @@
-"""Synthetic memory dataset generator using Anthropic Claude API.
+"""Synthetic memory dataset generator using LLM API.
 
 Generates memory items with associations, impact scores, and recall test queries.
 Designs hub-and-leaf topology for meaningful re-activation experiments.
@@ -12,37 +12,35 @@ import random
 from pathlib import Path
 from typing import Optional
 
-import anthropic
+from openai import OpenAI
 
 
 class SyntheticDataGenerator:
     """Generate synthetic memory datasets for simulation experiments.
 
-    Uses Anthropic Claude API to create realistic memory items with:
+    Uses OpenAI API to create realistic memory items with:
     - Semantic associations between memories
     - Hub-and-leaf topology (some memories referenced frequently)
     - Impact scores (emotional significance)
     - Held-out recall test queries
     """
 
-    # Hub entities that will be central to many associations
-    DEFAULT_HUB_ENTITIES = [
-        "서울", "김민수", "커피", "대학교", "여행",
-        "음악", "요리", "운동", "프로그래밍", "강아지",
-    ]
-
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "claude-haiku-4-20250414",
+        model: str = "gpt-4o-mini",
+        base_url: Optional[str] = None,
     ):
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError(
-                "Anthropic API key required. Set ANTHROPIC_API_KEY env var "
+                "OpenAI API key required. Set OPENAI_API_KEY env var "
                 "or pass api_key parameter."
             )
-        self.client = anthropic.Anthropic(api_key=self.api_key)
+        kwargs = {"api_key": self.api_key}
+        if base_url:
+            kwargs["base_url"] = base_url
+        self.client = OpenAI(**kwargs)
         self.model = model
 
     def generate_dataset(
@@ -72,7 +70,7 @@ class SyntheticDataGenerator:
         num_hubs = max(1, int(num_memories * hub_ratio))
         num_leaves = num_memories - num_hubs
 
-        # Step 1: Generate hub memories (entities that will be referenced often)
+        # Step 1: Generate hub memories
         hub_memories = self._generate_memories_batch(
             num_hubs, is_hub=True, tick_range=ticks_range
         )
@@ -93,7 +91,7 @@ class SyntheticDataGenerator:
         # Step 4: Sort by tick
         all_memories.sort(key=lambda m: m["tick"])
 
-        # Step 5: Fix association references (use IDs)
+        # Step 5: Fix association references
         all_memories = self._resolve_association_ids(all_memories)
 
         return all_memories
@@ -101,13 +99,10 @@ class SyntheticDataGenerator:
     def _generate_memories_batch(
         self, count: int, is_hub: bool, tick_range: tuple[int, int]
     ) -> list[dict]:
-        """Generate a batch of memories via LLM."""
         if count == 0:
             return []
-
         prompt = self._build_generation_prompt(count, is_hub, tick_range)
-        memories = self._call_llm(prompt)
-        return memories
+        return self._call_llm(prompt)
 
     def _generate_leaves_batch(
         self,
@@ -116,25 +111,20 @@ class SyntheticDataGenerator:
         max_associations: int,
         tick_range: tuple[int, int],
     ) -> list[dict]:
-        """Generate leaf memories that reference hub memories."""
         if count == 0:
             return []
-
         hub_summaries = [
             {"id": h["id"], "content": h["content"], "entities": h["entities"]}
             for h in hub_memories
         ]
-
         prompt = self._build_leaf_generation_prompt(
             count, hub_summaries, max_associations, tick_range
         )
-        memories = self._call_llm(prompt)
-        return memories
+        return self._call_llm(prompt)
 
     def _add_hub_associations(
         self, hub_memories: list[dict], max_associations: int
     ) -> None:
-        """Add associations between hub memories (cross-links)."""
         for i, mem in enumerate(hub_memories):
             possible = [h["id"] for j, h in enumerate(hub_memories) if j != i]
             n_assoc = min(max_associations, len(possible))
@@ -142,12 +132,6 @@ class SyntheticDataGenerator:
             mem["associations"] = list(set(mem.get("associations", []) + chosen))
 
     def _resolve_association_ids(self, memories: list[dict]) -> list[dict]:
-        """Replace entity-based associations with actual memory IDs.
-
-        For memories that reference entities rather than IDs, find matching
-        memory IDs by entity overlap.
-        """
-        # Build entity -> id index
         entity_index: dict[str, list[str]] = {}
         for m in memories:
             for ent in m.get("entities", []):
@@ -157,13 +141,10 @@ class SyntheticDataGenerator:
             resolved = []
             for assoc in m.get("associations", []):
                 if isinstance(assoc, dict):
-                    # Already has id
                     resolved.append(assoc)
                 elif isinstance(assoc, str) and assoc.startswith("mem_"):
-                    # Already an ID
                     resolved.append({"id": assoc, "weight": random.uniform(0.3, 1.0)})
                 elif isinstance(assoc, str):
-                    # Entity name — find matching memory
                     matches = entity_index.get(assoc, [])
                     for mid in matches:
                         if mid != m["id"]:
@@ -178,7 +159,6 @@ class SyntheticDataGenerator:
         self, count: int, is_hub: bool, tick_range: tuple[int, int]
     ) -> str:
         tick_min, tick_max = tick_range
-        type_dist = "기억" if is_hub else "기억"
         hub_note = ""
         if is_hub:
             hub_note = """
@@ -267,21 +247,16 @@ JSON 형식 (배열):
 JSON 배열만 출력해주세요."""
 
     def _call_llm(self, prompt: str) -> list[dict]:
-        """Call Anthropic API and parse response as JSON array."""
-        response = self.client.messages.create(
+        """Call OpenAI API and parse response as JSON array."""
+        response = self.client.chat.completions.create(
             model=self.model,
             max_tokens=4096,
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
-            ],
+            messages=[{"role": "user", "content": prompt}],
         )
 
-        text = response.content[0].text.strip()
+        text = response.choices[0].message.content.strip()
 
-        # Extract JSON from response (handle markdown code blocks)
+        # Extract JSON from response
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0].strip()
         elif "```" in text:
@@ -290,7 +265,6 @@ JSON 배열만 출력해주세요."""
         try:
             items = json.loads(text)
         except json.JSONDecodeError:
-            # Try to fix common issues
             text = text.replace("\n", "").strip()
             items = json.loads(text)
 
@@ -300,19 +274,15 @@ JSON 배열만 출력해주세요."""
         return items
 
     def save_jsonl(self, memories: list[dict], path: str | Path) -> None:
-        """Save memories to JSONL file."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-
         with open(path, "w", encoding="utf-8") as f:
             for mem in memories:
                 f.write(json.dumps(mem, ensure_ascii=False) + "\n")
-
         print(f"Saved {len(memories)} memories to {path}")
 
     @staticmethod
     def load_jsonl(path: str | Path) -> list[dict]:
-        """Load memories from JSONL file."""
         memories = []
         with open(path, "r", encoding="utf-8") as f:
             for line in f:
@@ -324,17 +294,11 @@ JSON 배열만 출력해주세요."""
     def split_test_train(
         self, memories: list[dict], test_ratio: float = 0.2, seed: int = 42
     ) -> tuple[list[dict], list[dict]]:
-        """Split dataset into train and test sets.
-
-        Stratified by type (fact/episode) for balanced splits.
-        Returns (train, test) tuples.
-        """
         if seed is not None:
             random.seed(seed)
 
         facts = [m for m in memories if m["type"] == "fact"]
         episodes = [m for m in memories if m["type"] == "episode"]
-
         random.shuffle(facts)
         random.shuffle(episodes)
 
