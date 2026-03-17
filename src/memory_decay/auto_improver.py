@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -85,13 +86,25 @@ class AutoImprover:
             current_params, evaluation_history, iteration, total_budget
         )
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            max_tokens=2048,
-            messages=[{"role": "user", "content": prompt}],
-        )
-
-        text = response.choices[0].message.content.strip()
+        # Retry with exponential backoff for API errors
+        text = None
+        for attempt in range(3):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    max_tokens=2048,
+                    timeout=60,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                text = response.choices[0].message.content.strip()
+                break
+            except Exception as e:
+                print(f"    API attempt {attempt + 1}/3 failed: {e}")
+                if attempt < 2:
+                    time.sleep(2 ** attempt)
+                else:
+                    print("    All API attempts failed, keeping current params")
+                    return current_params
 
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0].strip()
@@ -101,11 +114,26 @@ class AutoImprover:
         try:
             result = json.loads(text)
         except json.JSONDecodeError:
-            match = re.search(r"\{[^}]+\}", text, re.DOTALL)
+            # Try to find any JSON object in the response
+            match = re.search(r"\{[^{}]*\}", text, re.DOTALL)
             if match:
-                result = json.loads(match.group())
+                try:
+                    result = json.loads(match.group())
+                except json.JSONDecodeError:
+                    print(f"    Could not parse LLM response, keeping current params")
+                    return current_params
             else:
-                return current_params
+                # Try multiline JSON with nested braces
+                match = re.search(r"\{[\s\S]*\}", text)
+                if match:
+                    try:
+                        result = json.loads(match.group())
+                    except json.JSONDecodeError:
+                        print(f"    Could not parse LLM response, keeping current params")
+                        return current_params
+                else:
+                    print(f"    No JSON found in LLM response, keeping current params")
+                    return current_params
 
         new_params = result.get("parameters", current_params)
         validated = self._validate_params(new_params, current_params)
