@@ -7,5 +7,13 @@ and impact factors using graph-based associations and LLM-driven auto-improvemen
 from .graph import MemoryGraph
 from .decay import DecayEngine
 from .evaluator import Evaluator
+from .data_gen import SyntheticDataGenerator
+from .auto_improver import AutoImprover
 
-__all__ = ["MemoryGraph", "DecayEngine", "Evaluator"]
+__all__ = [
+    "MemoryGraph",
+    "DecayEngine",
+    "Evaluator",
+    "SyntheticDataGenerator",
+    "AutoImprover",
+]
