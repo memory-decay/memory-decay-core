@@ -18,38 +18,41 @@ class Evaluator:
     def __init__(self, graph: MemoryGraph, engine: DecayEngine):
         self._graph = graph
         self._engine = engine
-        self._history: list[dict] = []  # recall snapshots per tick
+        self._history: list[dict] = []
 
     def evaluate_recall(
         self,
         test_queries: list[tuple[str, str]],
-        threshold: float = 0.5,
+        threshold: float = 0.3,
         top_k: int = 5,
     ) -> float:
         """Fraction of memories successfully recalled.
 
-        For each (query, expected_id): check if expected_id appears in
-        top_k similarity results AND has activation > threshold.
+        A memory is "recalled" if:
+        1. Its activation_score > threshold (it hasn't decayed beyond retrievability)
+        2. It appears in the top_k similarity search results
 
-        Returns recall_rate in [0, 1].
+        Both conditions must be met — this models the dual requirement that
+        a memory must be both stored (activation) and retrievable (similarity).
         """
         if not test_queries:
             return 0.0
 
         recalled = 0
         for query, expected_id in test_queries:
+            node = self._graph.get_node(expected_id)
+            if not node:
+                continue
+
+            # Condition 1: activation above threshold
+            if node["activation_score"] < threshold:
+                continue
+
+            # Condition 2: appears in similarity results
             results = self._graph.query_by_similarity(query, top_k=top_k)
             result_ids = [rid for rid, _ in results]
 
             if expected_id in result_ids:
-                node = self._graph.get_node(expected_id)
-                if node and node["activation_score"] > threshold:
-                    recalled += 1
-                    continue
-
-            # Also accept if activation alone is high enough (direct retrieval)
-            node = self._graph.get_node(expected_id)
-            if node and node["activation_score"] > threshold:
                 recalled += 1
 
         return recalled / len(test_queries)
@@ -57,13 +60,13 @@ class Evaluator:
     def evaluate_precision(
         self,
         test_queries: list[tuple[str, str]],
-        threshold: float = 0.5,
+        threshold: float = 0.3,
         top_k: int = 5,
     ) -> float:
         """Precision of recall results.
 
-        For each query: of the top_k results, count how many are relevant.
-        Relevant = shares an association with the expected memory, or IS the expected.
+        For each query: of the top_k results with activation > threshold,
+        count how many are relevant (associated with the expected memory).
         """
         if not test_queries:
             return 0.0
@@ -73,7 +76,6 @@ class Evaluator:
 
         for query, expected_id in test_queries:
             results = self._graph.query_by_similarity(query, top_k=top_k)
-            total_retrieved += len(results)
 
             # Get expected node's associations
             expected_assoc = set()
@@ -84,6 +86,12 @@ class Evaluator:
             expected_assoc.add(expected_id)
 
             for rid, _ in results:
+                r_node = self._graph.get_node(rid)
+                if not r_node or r_node.get("type") in ("unknown", None):
+                    continue
+                if r_node["activation_score"] < threshold:
+                    continue
+                total_retrieved += 1
                 if rid in expected_assoc:
                     total_relevant += 1
 
@@ -94,7 +102,7 @@ class Evaluator:
     def activation_recall_correlation(
         self,
         test_queries: list[tuple[str, str]],
-        threshold: float = 0.5,
+        threshold: float = 0.3,
         top_k: int = 5,
     ) -> float:
         """Pearson correlation between activation score and recall success.
@@ -133,7 +141,7 @@ class Evaluator:
     def fact_episode_delta(
         self,
         test_queries: list[tuple[str, str]],
-        threshold: float = 0.5,
+        threshold: float = 0.3,
         top_k: int = 5,
     ) -> float:
         """Absolute difference in recall rates between facts and episodes."""
@@ -177,7 +185,7 @@ class Evaluator:
     def snapshot(
         self,
         test_queries: list[tuple[str, str]],
-        threshold: float = 0.5,
+        threshold: float = 0.3,
         top_k: int = 5,
     ) -> dict:
         """Take a measurement snapshot at current tick."""
@@ -201,18 +209,10 @@ class Evaluator:
     def composite_score(
         self,
         test_queries: list[tuple[str, str]],
-        threshold: float = 0.5,
+        threshold: float = 0.3,
         top_k: int = 5,
     ) -> float:
-        """Weighted composite score combining all 5 metrics.
-
-        Weights:
-          - 0.30 * recall_rate
-          - 0.25 * precision_rate
-          - 0.20 * (1 - |correlation|) — lower absolute corr is penalized
-          - 0.10 * min(delta, 0.3) / 0.3 — rewards meaningful fact/episode difference
-          - 0.15 * (1 - normalized_smoothness)
-        """
+        """Weighted composite score combining all 5 metrics."""
         snap = self.snapshot(test_queries, threshold, top_k)
 
         w_recall = 0.30

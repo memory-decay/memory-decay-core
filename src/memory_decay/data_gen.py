@@ -200,11 +200,24 @@ JSON 배열만 출력. 정확히 {count}개여야 합니다."""
             num_leaves, hub_memories, max_associations, ticks_range
         )
 
+        # Re-assign leaf IDs to avoid collisions with hub IDs
+        hub_ids = {h["id"] for h in hub_memories}
+        max_hub_num = 0
+        for hid in hub_ids:
+            # Extract numeric suffix from IDs like "mem_001"
+            parts = hid.replace("mem_", "")
+            try:
+                max_hub_num = max(max_hub_num, int(parts))
+            except ValueError:
+                pass
+        for j, leaf in enumerate(leaf_memories):
+            if leaf["id"] in hub_ids:
+                leaf["id"] = f"mem_{max_hub_num + j + 1:03d}"
+
         all_memories = hub_memories + leaf_memories
         all_memories = self._resolve_association_ids(all_memories)
 
         # Return only the new leaves (now with resolved associations)
-        hub_ids = {h["id"] for h in hub_memories}
         return [m for m in all_memories if m["id"] not in hub_ids]
 
     def _call_llm(self, prompt: str) -> list[dict]:

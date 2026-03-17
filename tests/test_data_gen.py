@@ -138,4 +138,4 @@ class TestSyntheticDataGenerator:
         mock_response.choices = [mock_choice]
         gen.client.chat.completions.create = MagicMock(return_value=mock_response)
 
-        gen._generate_memories_batch(2, is_hub=True, tick_range=(0, 100))
+        gen._generate_batch_with_retry(2, is_hub=True, tick_range=(0, 100))

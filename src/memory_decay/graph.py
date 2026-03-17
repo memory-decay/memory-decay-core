@@ -26,7 +26,7 @@ class MemoryGraph:
             return self._embedder
         if self._model is None:
             from sentence_transformers import SentenceTransformer
-            self._model = SentenceTransformer("all-MiniLM-L6-v2")
+            self._model = SentenceTransformer("jhgan/ko-sroberta-multitask")
         return self._model.encode
 
     def add_memory(
@@ -134,14 +134,14 @@ class MemoryGraph:
             return
 
         current = self._graph.nodes[node_id]["activation_score"]
-        self._graph.nodes[node_id]["activation_score"] = min(current + boost_amount, 2.0)
+        self._graph.nodes[node_id]["activation_score"] = min(current + boost_amount, 1.0)
 
         # One-hop cascade
         for neighbor, weight in self.get_associated(node_id):
             cascade_boost = boost_amount * weight * 0.5
             n_score = self._graph.nodes[neighbor]["activation_score"]
             self._graph.nodes[neighbor]["activation_score"] = min(
-                n_score + cascade_boost, 2.0
+                n_score + cascade_boost, 1.0
             )
 
     def get_all_activations(self) -> dict[str, float]:
