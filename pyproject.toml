@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "memory-decay"
+version = "0.1.0"
+description = "Research project modeling human-like memory decay with graph-based associations and LLM-driven auto-improvement"
+requires-python = ">=3.10"
+dependencies = [
+    "networkx>=3.0",
+    "sentence-transformers>=2.2",
+    "numpy>=1.24",
+    "anthropic>=0.30",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
