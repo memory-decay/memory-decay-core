@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 import networkx as nx
-from typing import Optional
+import os
+from typing import Optional, Callable
 
 
 class MemoryGraph:
@@ -15,19 +16,54 @@ class MemoryGraph:
     Embeddings enable semantic similarity queries.
     """
 
-    def __init__(self, embedder=None):
+    def __init__(self, embedder: Optional[Callable] = None, embedding_backend: str = "local"):
         self._graph = nx.DiGraph()
-        self._embedder = embedder  # callable(text) -> np.ndarray
+        self._custom_embedder = embedder
         self._model = None
+        self._embedding_backend = embedding_backend
+        self._gemini_client = None
+        self._embedding_dim = 768  # default for ko-sroberta
 
-    def _get_embedder(self):
-        """Lazy-load sentence-transformers on first use if no custom embedder."""
-        if self._embedder is not None:
-            return self._embedder
+    def _get_embedder(self) -> Callable:
+        """Get the embedding function based on backend."""
+        if self._custom_embedder is not None:
+            return self._custom_embedder
+
+        if self._embedding_backend == "gemini":
+            return self._gemini_embed
+        else:
+            return self._local_embed
+
+    def _local_embed(self, text: str) -> np.ndarray:
+        """Local sentence-transformers embedding (Korean-optimized)."""
         if self._model is None:
             from sentence_transformers import SentenceTransformer
             self._model = SentenceTransformer("jhgan/ko-sroberta-multitask")
-        return self._model.encode
+            self._embedding_dim = 768
+        return np.array(self._model.encode(text), dtype=np.float32)
+
+    def _gemini_embed(self, text: str) -> np.ndarray:
+        """Gemini API embedding via google-genai SDK."""
+        if self._gemini_client is None:
+            from google import genai
+            api_key = os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                # Try loading from .env
+                import pathlib
+                env_path = pathlib.Path(__file__).parent.parent.parent / ".env"
+                if env_path.exists():
+                    for line in env_path.read_text().splitlines():
+                        if line.startswith("GEMINI_API_KEY="):
+                            api_key = line.split("=", 1)[1].strip()
+                            break
+            self._gemini_client = genai.Client(api_key=api_key)
+            self._embedding_dim = 768
+
+        result = self._gemini_client.models.embed_content(
+            model="gemini-embedding-exp-03-07",
+            contents=text,
+        )
+        return np.array(result.embeddings[0].values, dtype=np.float32)
 
     def add_memory(
         self,
@@ -38,18 +74,10 @@ class MemoryGraph:
         created_tick: int,
         associations: list[tuple[str, float]] | None = None,
     ) -> None:
-        """Insert a memory node with associations.
-
-        Args:
-            memory_id: Unique identifier.
-            mtype: "fact" or "episode".
-            content: Memory text content.
-            impact: Emotional significance (0.1-1.0).
-            created_tick: Time step when memory was created.
-            associations: List of (target_id, weight) tuples.
-        """
+        """Insert a memory node with associations."""
         embedder = self._get_embedder()
         embedding = np.array(embedder(content), dtype=np.float32)
+        self._embedding_dim = embedding.shape[0]
 
         self._graph.add_node(
             memory_id,
@@ -64,13 +92,12 @@ class MemoryGraph:
 
         if associations:
             for target_id, weight in associations:
-                # Ensure target node exists (may be added later — still create edge)
                 if not self._graph.has_node(target_id):
                     self._graph.add_node(
                         target_id,
                         type="unknown",
                         content="",
-                        embedding=np.zeros(384, dtype=np.float32),
+                        embedding=np.zeros(self._embedding_dim, dtype=np.float32),
                         activation_score=0.0,
                         impact=0.0,
                         created_tick=0,
@@ -79,7 +106,6 @@ class MemoryGraph:
                 self._graph.add_edge(
                     memory_id, target_id, weight=weight, created_tick=created_tick
                 )
-                # Bidirectional association
                 if not self._graph.has_edge(target_id, memory_id):
                     self._graph.add_edge(
                         target_id, memory_id, weight=weight, created_tick=created_tick
@@ -88,11 +114,7 @@ class MemoryGraph:
     def query_by_similarity(
         self, query_text: str, top_k: int = 5
     ) -> list[tuple[str, float]]:
-        """Find memories matching query via embedding cosine similarity.
-
-        Returns list of (node_id, similarity_score) sorted descending.
-        Only returns nodes with actual content (type != "unknown").
-        """
+        """Find memories matching query via embedding cosine similarity."""
         embedder = self._get_embedder()
         query_vec = np.array(embedder(query_text), dtype=np.float32)
 
@@ -112,10 +134,7 @@ class MemoryGraph:
         return results[:top_k]
 
     def get_associated(self, node_id: str) -> list[tuple[str, float]]:
-        """Get neighbors connected by association edges.
-
-        Returns list of (neighbor_id, edge_weight).
-        """
+        """Get neighbors connected by association edges."""
         results = []
         for neighbor in self._graph.predecessors(node_id):
             w = self._graph.edges[neighbor, node_id].get("weight", 0.0)
@@ -126,17 +145,13 @@ class MemoryGraph:
         return results
 
     def re_activate(self, node_id: str, boost_amount: float) -> None:
-        """Boost activation of a node and cascade to associated nodes (one hop).
-
-        Cascade boost = boost_amount * edge_weight * 0.5
-        """
+        """Boost activation and cascade to associated nodes (one hop)."""
         if not self._graph.has_node(node_id):
             return
 
         current = self._graph.nodes[node_id]["activation_score"]
         self._graph.nodes[node_id]["activation_score"] = min(current + boost_amount, 1.0)
 
-        # One-hop cascade
         for neighbor, weight in self.get_associated(node_id):
             cascade_boost = boost_amount * weight * 0.5
             n_score = self._graph.nodes[neighbor]["activation_score"]
@@ -145,7 +160,6 @@ class MemoryGraph:
             )
 
     def get_all_activations(self) -> dict[str, float]:
-        """Return dict of node_id -> activation_score for all nodes."""
         return {
             nid: attrs["activation_score"]
             for nid, attrs in self._graph.nodes(data=True)
@@ -153,12 +167,10 @@ class MemoryGraph:
         }
 
     def set_activation(self, node_id: str, score: float) -> None:
-        """Directly set a node's activation score."""
         if self._graph.has_node(node_id):
             self._graph.nodes[node_id]["activation_score"] = score
 
     def get_node(self, node_id: str) -> dict | None:
-        """Return all attributes for a node."""
         if self._graph.has_node(node_id):
             return dict(self._graph.nodes[node_id])
         return None

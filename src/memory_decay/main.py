@@ -25,10 +25,10 @@ from .auto_improver import AutoImprover
 
 
 def build_graph_from_dataset(
-    dataset: list[dict], embedder=None
+    dataset: list[dict], embedder=None, embedding_backend: str = "local"
 ) -> MemoryGraph:
     """Load a dataset into a MemoryGraph."""
-    graph = MemoryGraph(embedder=embedder)
+    graph = MemoryGraph(embedder=embedder, embedding_backend=embedding_backend)
 
     for mem in dataset:
         # Resolve associations to (id, weight) tuples
