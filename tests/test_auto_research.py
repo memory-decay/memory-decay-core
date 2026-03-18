@@ -1,13 +1,11 @@
 """Integration test for the full auto-research experiment loop."""
 
 import json
-import pickle
-from pathlib import Path
 
 import numpy as np
 import pytest
 
-from memory_decay.cache_builder import build_cache, load_cache
+from memory_decay.cache_builder import build_cache
 from memory_decay.runner import run_experiment
 
 
