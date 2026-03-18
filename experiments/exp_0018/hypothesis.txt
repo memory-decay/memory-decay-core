@@ -1,0 +1,10 @@
+Mixed shapes at ratio=3.0: cubic facts (a^3 rate, slow 1/sqrt(t) tail)
++ quadratic episodes (a^2 rate, 1/t tail). Same lambdas as exp_0013.
+
+The quadratic episode decay creates a faster-dying tail than cubic,
+so episodes at impact=0 reach lower activation by tick 200:
+  cubic episode: a(200) = 1/sqrt(4+12) = 0.250
+  quadratic episode: a(200) = 1/(2+6) = 0.125
+
+This should increase correlation (more dead episodes) while facts
+maintain recall. Essentially exp_0005 revisited with optimized ratio.
