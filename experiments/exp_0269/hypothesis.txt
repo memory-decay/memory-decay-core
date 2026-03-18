@@ -1,0 +1,4 @@
+Activation-dependent rate scaling: approach_rate *= (2 - activation). High
+activation decays slower (preserving spread at top), low activation decays
+faster (converging to floor quickly). Creates more gradient in activation
+distribution, potentially improving both discrimination and correlation.
