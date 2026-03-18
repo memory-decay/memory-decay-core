@@ -1,0 +1,11 @@
+Bi-exponential decay: fast (hippocampal) + slow (neocortical) components.
+
+Low-importance memories dominated by fast component (lambda=0.06) → rapid
+death. High-importance memories dominated by slow component (lambda=0.008)
+→ long survival. Mixing weight = importance*1.5 capped at 1.0.
+
+This creates natural separation: important memories have fat tails while
+unimportant ones die quickly. Should improve both recall (important survive)
+and precision_lift (unimportant pruned) simultaneously.
+
+Uses same reinforcement params as exp_0305.
