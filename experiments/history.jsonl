@@ -3,3 +3,7 @@
 {"exp": "exp_0002", "overall": 0.3441, "retrieval": 0.2416, "plausibility": 0.5834, "status": "no_gain", "hypothesis": "quadratic decay + impact floor (floor never activates, same as exp_0001)"}
 {"exp": "exp_0003", "overall": 0.3640, "retrieval": 0.2908, "plausibility": 0.5350, "status": "improved", "hypothesis": "quadratic decay + exp(alpha*impact) protection, alpha=2.0, higher lambdas for differentiation"}
 {"exp": "exp_0004", "overall": 0.3934, "retrieval": 0.3757, "plausibility": 0.4347, "status": "improved", "hypothesis": "cubic decay (a^3 rate) with exp impact, recall near max 0.494 but corr crashed to 0.058"}
+{"exp": "exp_0005", "overall": 0.3936, "retrieval": 0.3155, "plausibility": 0.5757, "status": "no_gain", "hypothesis": "type-differentiated: cubic facts + quadratic episodes. same overall, different balance (recall 0.408, corr 0.293)"}
+{"exp": "exp_0006", "overall": 0.3747, "retrieval": 0.3263, "plausibility": 0.4875, "status": "no_gain", "hypothesis": "equilibrium-based decay converging to impact-dependent target. convergence too slow for high-impact items, poor correlation"}
+{"exp": "exp_0007", "overall": 0.3936, "retrieval": 0.3757, "plausibility": 0.4354, "status": "no_gain", "hypothesis": "cubic + boosted reinforcement (3x gains, 3x slower stability_decay). reactivation too rare to matter"}
+{"exp": "exp_0008", "overall": 0.3918, "retrieval": 0.3782, "plausibility": 0.4237, "status": "no_gain", "hypothesis": "quartic decay (a^4 rate). max recall at all thresholds but corr dropped to 0.040, net negative"}

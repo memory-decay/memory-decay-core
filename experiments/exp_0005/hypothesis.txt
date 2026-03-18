@@ -1,0 +1,11 @@
+Use different mathematical forms for facts vs episodes:
+- Facts: cubic decay (a^3 rate, lambda=0.010) — very slow tail, nearly
+  all facts survive at tick 200 regardless of impact.
+- Episodes: quadratic decay (a^2 rate, lambda=0.035) — faster, so
+  low-impact episodes fall below threshold while high-impact survive.
+
+This creates a natural two-population structure: facts cluster high,
+low-impact episodes die. The activation-recall correlation should improve
+because the surviving population (facts + high-impact episodes) has
+systematically higher activation than the dying population. Expected:
+recall_mean ~0.42-0.46, correlation ~0.25-0.35, overall > 0.40.

@@ -1,0 +1,17 @@
+Completely different approach: instead of decaying toward zero, items
+converge toward an impact-dependent equilibrium:
+  eq = 0.18 + 0.30 * impact (range: 0.18 to 0.48)
+
+This creates a stable steady-state where activation directly reflects
+importance. High-impact items stabilize at 0.48, low-impact at 0.18.
+The wide spread should produce high activation-recall correlation
+(activation = eq perfectly predicts which items are above threshold).
+
+The exponential convergence (a → eq at rate k) is smooth, maintaining
+smoothness score. The eq_base of 0.18 keeps even zero-impact items
+close to threshold 0.2, maximizing recall.
+
+Trade-off: recall at threshold 0.5 will be near zero (max eq = 0.48),
+but correlation gains at thresholds 0.3 and 0.4 should compensate.
+
+Expected: recall_mean ~0.39, corr ~0.45-0.50, overall ~0.41.

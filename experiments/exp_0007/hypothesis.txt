@@ -1,0 +1,12 @@
+Same cubic decay as exp_0004 but with boosted reinforcement parameters:
+- reinforcement_gain_direct: 0.2 → 0.5 (2.5x stronger reactivation)
+- reinforcement_gain_assoc: 0.05 → 0.15 (3x stronger cascade)
+- stability_cap: 1.0 → 2.0 (higher ceiling for stability accumulation)
+- stability_decay: 0.01 → 0.003 (stability persists 3x longer)
+- stability_weight: 0.8 → 1.2 (stability has stronger protective effect)
+
+Reactivated items gain stability ≈ 0.5, which with stability_weight=1.2
+gives stability_factor ≈ 1.6. Combined with cubic decay's slow tail,
+reactivated items should maintain activation 0.6+ at tick 200 while
+non-reactivated items sit at 0.40-0.45. This gap creates correlation
+signal at threshold 0.5 without reducing recall at lower thresholds.
