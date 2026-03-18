@@ -14,11 +14,12 @@ class Evaluator:
     Prevents single-metric gaming by using a composite score.
     """
 
-    def __init__(self, graph: MemoryGraph, engine: DecayEngine, activation_weight: float = 0.5):
+    def __init__(self, graph: MemoryGraph, engine: DecayEngine, activation_weight: float = 0.5, assoc_boost: float = 0.0):
         self._graph = graph
         self._engine = engine
         self._history: list[dict] = []
         self._activation_weight = activation_weight
+        self._assoc_boost = assoc_boost
 
     def evaluate_recall(
         self,
@@ -57,7 +58,7 @@ class Evaluator:
                 continue
 
             # Condition 2: appears in similarity results
-            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight)
+            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight, assoc_boost=self._assoc_boost)
             result_ids = [rid for rid, _ in results]
 
             if expected_id in result_ids:
@@ -90,7 +91,7 @@ class Evaluator:
             if not node or node.get("created_tick", 0) > current_tick:
                 continue
 
-            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight)
+            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight, assoc_boost=self._assoc_boost)
 
             if mode == "strict":
                 relevant_ids = {expected_id}
@@ -143,7 +144,7 @@ class Evaluator:
                 continue
 
             act = node["activation_score"]
-            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight)
+            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight, assoc_boost=self._assoc_boost)
             result_ids = [rid for rid, _ in results]
             recalled = 1.0 if expected_id in result_ids else 0.0
 
@@ -187,7 +188,7 @@ class Evaluator:
             if not node or node.get("created_tick", 0) > current_tick:
                 continue
 
-            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight)
+            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight, assoc_boost=self._assoc_boost)
 
             # Filter by activation threshold and find rank of expected_id
             rank = 0
@@ -221,7 +222,7 @@ class Evaluator:
             if not node or node.get("created_tick", 0) > current_tick:
                 continue
             total += 1
-            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight)
+            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight, assoc_boost=self._assoc_boost)
             if expected_id in [rid for rid, _ in results]:
                 recalled += 1
         return recalled / max(total, 1)

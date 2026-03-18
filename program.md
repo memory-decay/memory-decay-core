@@ -82,11 +82,13 @@ def compute_decay(activation, impact, stability, mtype, params):
   "reinforcement_gain_direct": 0.2,
   "reinforcement_gain_assoc": 0.05,
   "stability_cap": 1.0,
-  "activation_weight": 0.5
+  "activation_weight": 0.5,
+  "assoc_boost": 0.0
 }
 ```
 (reinforcement/stability params are used by the simulation loop, not the decay function)
 (`activation_weight` controls how strongly activation influences similarity ranking: score = cosine_sim * activation^weight)
+(`assoc_boost` enables spreading-activation retrieval: score *= (1 + assoc_boost * mean_neighbor_activation))
 
 **hypothesis.txt** — One paragraph explaining what you're trying and why.
 

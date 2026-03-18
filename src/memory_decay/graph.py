@@ -130,6 +130,7 @@ class MemoryGraph:
     def query_by_similarity(
         self, query_text: str, top_k: int = 5, current_tick: int | None = None,
         activation_weight: float = 0.0,
+        assoc_boost: float = 0.0,
     ) -> list[tuple[str, float]]:
         """Find memories matching query via embedding cosine similarity.
 
@@ -137,12 +138,17 @@ class MemoryGraph:
 
             score = cosine_sim * activation ^ activation_weight
 
-        This lets the decay function influence ranking, not just threshold
-        filtering.  With activation_weight=0 (default) behaviour is unchanged.
+        When *assoc_boost* > 0, each candidate's score is further boosted
+        by the mean activation of its associated neighbors, weighted by
+        edge weight.  This implements spreading-activation retrieval:
+        memories whose neighbors are also active rank higher.
+
+            score *= (1 + assoc_boost * mean_neighbor_activation)
         """
         query_vec = self._embed_text(query_text)
 
-        results = []
+        # First pass: compute base scores
+        candidates = []
         for nid, attrs in self._graph.nodes(data=True):
             if attrs.get("type") == "unknown":
                 continue
@@ -157,10 +163,30 @@ class MemoryGraph:
             if activation_weight > 0:
                 act = max(float(attrs.get("activation_score", 0.0)), 0.0)
                 sim = sim * (act ** activation_weight)
-            results.append((nid, sim))
+            candidates.append((nid, sim))
 
-        results.sort(key=lambda x: x[1], reverse=True)
-        return results[:top_k]
+        # Second pass: associative boost
+        if assoc_boost > 0:
+            boosted = []
+            for nid, score in candidates:
+                neighbors = self.get_associated(nid)
+                if neighbors:
+                    weighted_act_sum = 0.0
+                    weight_sum = 0.0
+                    for neighbor_id, edge_weight in neighbors:
+                        n_node = self._graph.nodes.get(neighbor_id)
+                        if n_node and n_node.get("type") != "unknown":
+                            n_act = max(float(n_node.get("activation_score", 0.0)), 0.0)
+                            weighted_act_sum += edge_weight * n_act
+                            weight_sum += edge_weight
+                    if weight_sum > 0:
+                        mean_neighbor_act = weighted_act_sum / weight_sum
+                        score *= (1.0 + assoc_boost * mean_neighbor_act)
+                boosted.append((nid, score))
+            candidates = boosted
+
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        return candidates[:top_k]
 
     def get_associated(self, node_id: str) -> list[tuple[str, float]]:
         """Get neighbors connected by association edges."""

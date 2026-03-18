@@ -145,7 +145,8 @@ def run_experiment(
     decay_fn = _load_decay_fn(fn_path)
     engine = DecayEngine(graph, custom_decay_fn=decay_fn, params=params)
     activation_weight = params.get("activation_weight", 0.5)
-    evaluator = Evaluator(graph, engine, activation_weight=activation_weight)
+    assoc_boost = params.get("assoc_boost", 0.0)
+    evaluator = Evaluator(graph, engine, activation_weight=activation_weight, assoc_boost=assoc_boost)
 
     snapshots = run_simulation(
         graph, engine, evaluator, test_queries,
