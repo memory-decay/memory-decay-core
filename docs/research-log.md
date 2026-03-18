@@ -79,7 +79,123 @@
 - [ ] impact ablation study
 - [ ] 최종 리포트 작성
 
+## 2026-03-18 (Day 2)
+
+### Human Calibration Layer 추가
+
+실제 인간 복습 로그를 바로 기존 synthetic 그래프 실험에 섞지 않고, 별도 `human calibration` 레이어로 분리했다.
+
+핵심 결정:
+
+- 인간 로그는 `fact` 파라미터 보정에만 사용
+- synthetic graph benchmark는 외적 타당성 검증 용도로 유지
+- `episode`는 직접 학습하지 않고 제약 기반 외삽으로 유지
+
+추가된 컴포넌트:
+
+| 모듈 | 파일 | 설명 |
+|------|------|------|
+| Human Data | `human_data.py` | Duolingo/Anki 스타일 이벤트 정규화, leakage-safe user split |
+| Human Eval | `human_eval.py` | review event replay, sigmoid observation model, `nll`/`brier`/`ece` |
+| Human Optimizer | `human_optimizer.py` | `fact` 파라미터 random search |
+| Human Runner | `human_runner.py` | calibration artifact 생성 (`best_params.json`, `metrics.json`, `trials.json`) |
+
+연구 범위 제한:
+
+- 실제 인간 리뷰 로그는 `lambda_fact`, `stability_weight`, `stability_decay`, `reinforcement_gain_direct` 계열 보정에 우선 사용
+- `lambda_episode`는 인간 로그에서 직접 학습하지 않음
+- association cascade 관련 파라미터는 여전히 synthetic benchmark에서 해석해야 함
+
+검증:
+
+- 새 human calibration 테스트 12개 통과
+- 기존 `runner`, `simulation`, `cache_builder` 회귀 테스트 17개 통과
+
+### 스모크 테스트용 fixture
+
+- `data/human_reviews_smoke.jsonl` 추가
+- 목적: 전체 실데이터 이전에 fact-only calibration 경로를 빠르게 확인하는 최소 입력
+
 ### 저장소
 
 - **GitHub:** https://github.com/tmdgusya/memory-decay (private)
 - **로컬:** `~/.openclaw/workspace/memory-decay/`
+
+## 2026-03-18 (Day 2, Session 2)
+
+### Auto-Research Loop: exp_0111–0175 (65 experiments)
+
+#### 요약
+
+총 65개 실험을 실행하여 **overall score 0.4099 → 0.4261** (+3.9%) 달성.
+
+| 메트릭 | 이전 최고 (exp_0082) | 새 최고 (exp_0163) | 변화 |
+|--------|---------------------|-------------------|------|
+| **Overall** | 0.4099 | **0.4261** | +0.0162 |
+| Retrieval | 0.2968 | 0.2966 | ~0 |
+| Plausibility | 0.6737 | **0.7282** | +0.0545 |
+| Correlation | 0.1115 | **0.2931** | +0.1816 |
+| Smoothness | 0.9146 | 0.9146 | 0 |
+| Recall | 0.3902 | 0.3902 | 0 |
+| Precision | 0.0788 | 0.0780 | ~0 |
+
+#### 핵심 발견
+
+1. **Retrieval score는 구조적으로 고정되어 있다**
+   - Recall = similarity_recall_rate (0.390) — 활성도 임계값이 아닌 임베딩 유사도 top-5 검색이 병목
+   - 65개 실험 모두 동일한 retrieval (0.2966) — floor, lambda, alpha, 감쇠 형태와 무관
+   - Precision도 동일 (0.078) — 검색 결과의 관련성은 임베딩 품질에 의존
+
+2. **개선 여지는 plausibility뿐이다**
+   - Plausibility = 0.3×correlation + 0.7×smoothness
+   - Smoothness는 이미 0.9146으로 포화 → 유일한 레버는 **correlation**
+   - Correlation: activation과 recall success 간 Pearson 상관계수
+
+3. **Base floor 발견 (exp_0114–0132)**
+   - `base_floor` 파라미터 도입: 모든 메모리에 최소 활성도 하한 부여
+   - base_floor=0.79에서 최적 (floor > consolidation_threshold=0.7 → 진동 효과)
+   - Correlation 0.1115 → 0.2795 (+150%)
+
+4. **Impact-dependent damping 발견 (exp_0161–0163)**
+   - Consolidation phase에서 impact에 비례한 감쇠 속도 조절
+   - `damping = cd_base + cd_impact × (1 - impact)` — 저 impact → 빠른 감쇠, 고 impact → 느린 감쇠
+   - 최적: cd_base=0.1, cd_impact=1.0 → correlation 0.2931
+
+#### 새로운 최고 decay function (exp_0163)
+
+```python
+# 핵심 변경: impact-dependent consolidation damping
+damping = cd_base + cd_impact * (1.0 - impact)  # 0.1 ~ 1.1
+rate = lam * damping / combined                  # 고 impact → 느린 감쇠
+```
+
+기존 고정 damping (0.4) 대신, impact에 따라 0.1~1.1 범위로 가변.
+
+#### 실패한 접근들
+
+| 접근 | 결과 | 실패 원인 |
+|------|------|----------|
+| Sigmoidal impact gating | 0.274 | Recall 0.134로 급락 — 너무 공격적 감쇠 |
+| Power-law floor (impact²) | 0.316 | 같은 이유 — 선택적 floor가 recall 손실 |
+| Inverse-square decay | 0.101 | 대재앙 — 거의 모든 메모리 소실 |
+| Alpha 변경 (1.5–3.0) | 0.400–0.415 | Retrieval 불변, plausibility 미미한 변화 |
+| Reinforcement params (10종) | 0.4099 (전부 동일) | 강화 이벤트가 점수에 영향 없음 |
+| 단일 phase (floor-only) | 0.410 | 두 phase 조합이 더 효과적 |
+
+#### 구조적 한계 분석
+
+현재 시스템에서 decay function으로 개선 가능한 범위는 거의 소진됨:
+
+- **Recall**: 임베딩 유사도 검색 top-5에 의해 결정. Decay function과 무관.
+- **Precision**: 같은 이유. 검색 품질은 임베딩 모델에 의존.
+- **Smoothness**: 0.9146으로 포화. 추가 개선 여지 극소.
+- **Correlation**: 0.2931. Impact가 실제 retrievability를 예측하는 정도에 의해 상한 결정.
+
+Correlation의 이론적 상한: impact와 similarity-based retrievability 간 상관관계에 의존. Impact 분포와 임베딩 품질이 고정된 상태에서 activation spread 최대화만 가능.
+
+#### Escalation 기록
+
+Retrieval 개선을 위해서는 allowed search surface 밖의 변경이 필요:
+- 임베딩 모델 교체 또는 top_k 증가 (evaluator.py)
+- 데이터셋의 recall_query 품질 개선 (dataset)
+- 시뮬레이션 길이 변경 (runner.py)
