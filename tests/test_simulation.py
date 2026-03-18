@@ -65,7 +65,9 @@ class TestSimulationPipeline:
         snapshots = run_simulation(
             graph, engine, evaluator, queries,
             total_ticks=30, eval_interval=10,
+            reactivation_policy="random",
             reactivation_interval=15,
+            seed=42,
         )
 
         assert len(snapshots) > 0
@@ -89,6 +91,7 @@ class TestSimulationPipeline:
         snapshots = run_simulation(
             graph, engine, evaluator, queries,
             total_ticks=30, eval_interval=10,
+            reactivation_policy="none",
         )
 
         assert len(snapshots) > 0
@@ -115,35 +118,65 @@ class TestSimulationPipeline:
         assert ev1.history[-1]["recall_rate"] >= 0.0
         assert ev2.history[-1]["recall_rate"] >= 0.0
 
-    def test_reactivation_improves_recall(self):
-        """Test that re-activation slows down memory decay."""
+    def test_scheduled_reactivation_improves_recall(self):
+        """Scheduled query re-activation should help preserve recall."""
         from memory_decay.main import build_graph_from_dataset, run_simulation
-        import random
-
-        random.seed(42)
 
         queries = [(m["recall_query"], m["id"]) for m in SAMPLE_DATASET]
 
-        # Without re-activation (very long interval)
+        # Without re-activation
         g1 = build_graph_from_dataset(SAMPLE_DATASET, embedder=mock_embedder)
         e1 = DecayEngine(g1, decay_type="exponential", params={
             "lambda_fact": 0.05, "lambda_episode": 0.08,
             "beta_fact": 0.3, "beta_episode": 0.5, "alpha": 0.5,
+            "stability_weight": 0.8, "stability_decay": 0.01,
+            "reinforcement_gain_direct": 0.2, "reinforcement_gain_assoc": 0.05,
+            "stability_cap": 1.0,
         })
         ev1 = Evaluator(g1, e1)
         run_simulation(g1, e1, ev1, queries, total_ticks=100, eval_interval=100,
-                       reactivation_interval=1000)
+                       reactivation_policy="none")
 
-        # With frequent re-activation
-        random.seed(42)
+        # With scheduled query re-activation
         g2 = build_graph_from_dataset(SAMPLE_DATASET, embedder=mock_embedder)
         e2 = DecayEngine(g2, decay_type="exponential", params={
             "lambda_fact": 0.05, "lambda_episode": 0.08,
             "beta_fact": 0.3, "beta_episode": 0.5, "alpha": 0.5,
+            "stability_weight": 0.8, "stability_decay": 0.01,
+            "reinforcement_gain_direct": 0.2, "reinforcement_gain_assoc": 0.05,
+            "stability_cap": 1.0,
         })
         ev2 = Evaluator(g2, e2)
-        run_simulation(g2, e2, ev2, queries, total_ticks=100, eval_interval=100,
-                       reactivation_interval=5)
+        scheduled = run_simulation(
+            g2, e2, ev2, queries,
+            total_ticks=100, eval_interval=20,
+            reactivation_policy="scheduled_query", reactivation_interval=10,
+        )
 
-        # With re-activation should have >= recall (or at least not crash)
-        assert ev2.history[-1]["recall_rate"] >= 0.0
+        assert ev2.history[-1]["recall_rate"] >= ev1.history[-1]["recall_rate"]
+        assert any(s["recall_rate"] < 0.95 for s in scheduled[1:])
+
+    def test_random_policy_is_deterministic_with_seed(self):
+        from memory_decay.main import build_graph_from_dataset, run_simulation
+
+        queries = [(m["recall_query"], m["id"]) for m in SAMPLE_DATASET]
+
+        g1 = build_graph_from_dataset(SAMPLE_DATASET, embedder=mock_embedder)
+        e1 = DecayEngine(g1, decay_type="exponential")
+        ev1 = Evaluator(g1, e1)
+        out1 = run_simulation(
+            g1, e1, ev1, queries,
+            total_ticks=30, eval_interval=10,
+            reactivation_policy="random", reactivation_interval=5, seed=7,
+        )
+
+        g2 = build_graph_from_dataset(SAMPLE_DATASET, embedder=mock_embedder)
+        e2 = DecayEngine(g2, decay_type="exponential")
+        ev2 = Evaluator(g2, e2)
+        out2 = run_simulation(
+            g2, e2, ev2, queries,
+            total_ticks=30, eval_interval=10,
+            reactivation_policy="random", reactivation_interval=5, seed=7,
+        )
+
+        assert [snap["recall_rate"] for snap in out1] == [snap["recall_rate"] for snap in out2]

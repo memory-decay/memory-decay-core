@@ -1,4 +1,4 @@
-"""Time-based decay engine for memory activation scores."""
+"""Time-based decay engine for memory activation and stability scores."""
 
 from __future__ import annotations
 
@@ -35,6 +35,11 @@ class DecayEngine:
             "beta_fact": 0.08,
             "beta_episode": 0.12,
             "alpha": 0.5,
+            "stability_weight": 0.8,
+            "stability_decay": 0.01,
+            "reinforcement_gain_direct": 0.2,
+            "reinforcement_gain_assoc": 0.05,
+            "stability_cap": 1.0,
         }
         if params:
             self._params.update(params)
@@ -46,17 +51,24 @@ class DecayEngine:
         self._params.update(new_params)
 
     def _compute_decay(
-        self, initial_activation: float, delta_t: int, impact: float, mtype: str
+        self,
+        initial_activation: float,
+        impact: float,
+        stability: float,
+        mtype: str,
     ) -> float:
         """Compute activation after decay.
 
-        Exponential: A_new = A₀ * exp(-λ_eff * Δt)
-          where λ_eff = λ / (1 + α * impact)
-        Power law:   A_new = A₀ * (Δt + 1)^(-β_eff)
-          where β_eff = β / (1 + α * impact)
+        Exponential: A_new = A₀ * exp(-λ_eff)
+          where λ_eff = λ / ((1 + α * impact) * (1 + ρ * stability))
+        Power law:   A_new = A₀ * (1 + β_eff)^(-1)
+          where β_eff = β / ((1 + α * impact) * (1 + ρ * stability))
         """
         alpha = self._params["alpha"]
+        rho = self._params["stability_weight"]
         impact_factor = 1.0 + alpha * impact
+        stability_factor = 1.0 + rho * stability
+        combined_factor = max(impact_factor * stability_factor, 1e-9)
 
         if self.decay_type == "exponential":
             lam = (
@@ -64,24 +76,24 @@ class DecayEngine:
                 if mtype == "fact"
                 else self._params["lambda_episode"]
             )
-            effective_lambda = lam / impact_factor
-            decayed = initial_activation * math.exp(-effective_lambda * delta_t)
+            effective_lambda = lam / combined_factor
+            decayed = initial_activation * math.exp(-effective_lambda)
         else:
             beta = (
                 self._params["beta_fact"]
                 if mtype == "fact"
                 else self._params["beta_episode"]
             )
-            effective_beta = beta / impact_factor
-            decayed = initial_activation * ((delta_t + 1) ** (-effective_beta))
+            effective_beta = beta / combined_factor
+            decayed = initial_activation / ((1.0 + effective_beta) ** 1.0)
 
         return min(max(decayed, 0.0), 1.0)
 
     def tick(self) -> None:
         """Advance time by 1 step.
 
-        Each memory decays from its own last_activated_tick.
-        Memories inserted at later ticks decay less overall.
+        Activation decays every tick once a memory has been created.
+        Stability also decays slowly so reinforcement has a long but finite effect.
         """
         self.current_tick += 1
 
@@ -89,18 +101,22 @@ class DecayEngine:
             if attrs.get("type") in ("unknown", None):
                 continue
 
-            initial_activation = attrs["activation_score"]
-            mtype = attrs["type"]
-            impact = attrs["impact"]
-            last_tick = attrs["last_activated_tick"]
-
-            delta_t = self.current_tick - last_tick
-            if delta_t <= 0:
+            if self.current_tick < attrs.get("created_tick", 0):
                 continue
 
+            initial_activation = float(attrs["activation_score"])
+            mtype = attrs["type"]
+            impact = float(attrs["impact"])
+            stability = float(attrs.get("stability_score", 0.0))
+
             new_activation = self._compute_decay(
-                initial_activation, delta_t, impact, mtype
+                initial_activation, impact, stability, mtype
+            )
+            new_stability = max(
+                0.0, stability * (1.0 - self._params["stability_decay"])
             )
 
             self._graph._graph.nodes[nid]["activation_score"] = new_activation
-            self._graph._graph.nodes[nid]["last_activated_tick"] = self.current_tick
+            self._graph._graph.nodes[nid]["stability_score"] = min(
+                new_stability, self._params["stability_cap"]
+            )
