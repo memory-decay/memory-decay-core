@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import numpy as np
-from typing import Optional
 
 from .graph import MemoryGraph
 from .decay import DecayEngine
@@ -40,6 +39,7 @@ class Evaluator:
 
         current_tick = self._engine.current_tick
         recalled = 0
+        observable = 0
         for query, expected_id in test_queries:
             node = self._graph.get_node(expected_id)
             if not node:
@@ -48,6 +48,8 @@ class Evaluator:
             # Skip memories that don't exist yet at current_tick
             if node.get("created_tick", 0) > current_tick:
                 continue
+
+            observable += 1
 
             # Condition 1: activation above threshold
             if node["activation_score"] < threshold:
@@ -60,7 +62,7 @@ class Evaluator:
             if expected_id in result_ids:
                 recalled += 1
 
-        return recalled / len(test_queries)
+        return recalled / max(observable, 1)
 
     def evaluate_precision(
         self,
@@ -83,6 +85,10 @@ class Evaluator:
         total_retrieved = 0
 
         for query, expected_id in test_queries:
+            node = self._graph.get_node(expected_id)
+            if not node or node.get("created_tick", 0) > current_tick:
+                continue
+
             results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick)
 
             if mode == "strict":
@@ -301,10 +307,16 @@ class Evaluator:
         # Similarity recall (threshold-independent)
         sim_recall = self.evaluate_similarity_recall(test_queries, top_k=top_k)
 
+        precision_strict_mean = float(np.mean(strict_precisions)) if strict_precisions else 0.0
+
+        # Primary optimization target uses strict precision (exact match only).
+        # Associative precision is reported as a diagnostic, not used for scoring.
         retrieval_score = (
-            0.7 * sweep["recall_mean"] + 0.3 * sweep["precision_mean"]
+            0.7 * sweep["recall_mean"] + 0.3 * precision_strict_mean
         )
-        plausibility_score = 0.6 * corr_score + 0.4 * smoothness_score
+        # Correlation is a mechanistic plausibility surrogate, not external
+        # validity evidence. Weight kept low; smoothness carries more signal.
+        plausibility_score = 0.3 * corr_score + 0.7 * smoothness_score
         overall_score = 0.7 * retrieval_score + 0.3 * plausibility_score
 
         return {
@@ -317,7 +329,7 @@ class Evaluator:
             "plausibility_score": plausibility_score,
             "overall_score": overall_score,
             "composite_score": overall_score,
-            "precision_strict": float(np.mean(strict_precisions)),
+            "precision_strict": precision_strict_mean,
             "precision_associative": sweep["precision_mean"],
             "similarity_recall_rate": sim_recall,
         }

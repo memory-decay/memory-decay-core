@@ -117,8 +117,15 @@ def run_simulation(
             target_id = rng.choice(candidates)
         else:  # scheduled_query — use rehearsal_targets, NOT test_queries
             assert rehearsal_targets is not None
-            idx = ((tick // reactivation_interval) - 1) % len(rehearsal_targets)
-            target_id = rehearsal_targets[idx]
+            # Filter to only memories that exist at current tick
+            eligible = [
+                mid for mid in rehearsal_targets
+                if graph._graph.nodes[mid].get("created_tick", 0) <= engine.current_tick
+            ]
+            if not eligible:
+                return
+            idx = ((tick // reactivation_interval) - 1) % len(eligible)
+            target_id = eligible[idx]
 
         graph.re_activate(
             target_id,
