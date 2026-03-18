@@ -17,7 +17,7 @@ The human defines the closed loop. The AI agent works only inside the allowed se
 If `outputs/pre_program_pipeline/suite_summary.json` does not exist, run:
 
 ```bash
-PYTHONPATH=src uv run python scripts/run_pre_program_pipeline.py
+PYTHONPATH=src uv run python scripts/run_pre_program_pipeline.py --embedding-backend local
 ```
 
 This bootstrap step does all required pre-program work:
