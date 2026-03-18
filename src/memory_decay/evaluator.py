@@ -38,10 +38,15 @@ class Evaluator:
         if not test_queries:
             return 0.0
 
+        current_tick = self._engine.current_tick
         recalled = 0
         for query, expected_id in test_queries:
             node = self._graph.get_node(expected_id)
             if not node:
+                continue
+
+            # Skip memories that don't exist yet at current_tick
+            if node.get("created_tick", 0) > current_tick:
                 continue
 
             # Condition 1: activation above threshold
@@ -49,7 +54,7 @@ class Evaluator:
                 continue
 
             # Condition 2: appears in similarity results
-            results = self._graph.query_by_similarity(query, top_k=top_k)
+            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick)
             result_ids = [rid for rid, _ in results]
 
             if expected_id in result_ids:
@@ -71,11 +76,12 @@ class Evaluator:
         if not test_queries:
             return 0.0
 
+        current_tick = self._engine.current_tick
         total_relevant = 0
         total_retrieved = 0
 
         for query, expected_id in test_queries:
-            results = self._graph.query_by_similarity(query, top_k=top_k)
+            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick)
 
             # Get expected node's associations
             expected_assoc = set()
@@ -112,6 +118,7 @@ class Evaluator:
         if len(test_queries) < 3:
             return 0.0
 
+        current_tick = self._engine.current_tick
         activations = []
         recall_success = []
 
@@ -120,8 +127,12 @@ class Evaluator:
             if not node:
                 continue
 
+            # Skip memories that don't exist yet at current_tick
+            if node.get("created_tick", 0) > current_tick:
+                continue
+
             act = node["activation_score"]
-            results = self._graph.query_by_similarity(query, top_k=top_k)
+            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick)
             result_ids = [rid for rid, _ in results]
             recalled = 1.0 if (expected_id in result_ids and act > threshold) else 0.0
 

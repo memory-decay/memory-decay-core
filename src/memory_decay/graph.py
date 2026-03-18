@@ -128,7 +128,7 @@ class MemoryGraph:
                     )
 
     def query_by_similarity(
-        self, query_text: str, top_k: int = 5
+        self, query_text: str, top_k: int = 5, current_tick: int | None = None
     ) -> list[tuple[str, float]]:
         """Find memories matching query via embedding cosine similarity."""
         query_vec = self._embed_text(query_text)
@@ -136,6 +136,8 @@ class MemoryGraph:
         results = []
         for nid, attrs in self._graph.nodes(data=True):
             if attrs.get("type") == "unknown":
+                continue
+            if current_tick is not None and attrs.get("created_tick", 0) > current_tick:
                 continue
             emb = attrs["embedding"]
             norm_q = np.linalg.norm(query_vec)
