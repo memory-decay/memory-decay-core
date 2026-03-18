@@ -5,26 +5,26 @@
       "data/memories_50.jsonl",
       "data/memories_500.jsonl"
     ],
-    "iterations": 3,
+    "iterations": 25,
     "seed": 42,
     "total_ticks": 100,
     "eval_interval": 5,
     "decay_type": "exponential",
     "reactivation_policy": "none",
-    "embedding_backend": "auto"
+    "embedding_backend": "local"
   },
   "runs": {
     "memories_50": {
       "inputs": {
         "human_events_path": "data/human_reviews_smoke.jsonl",
         "synthetic_dataset_path": "data/memories_50.jsonl",
-        "iterations": 3,
+        "iterations": 25,
         "seed": 42,
         "total_ticks": 100,
         "eval_interval": 5,
         "decay_type": "exponential",
         "reactivation_policy": "none",
-        "embedding_backend": "auto"
+        "embedding_backend": "local"
       },
       "artifacts": {
         "calibration_dir": "outputs/pre_program_pipeline/memories_50/human_calibration",
@@ -34,43 +34,43 @@
       },
       "human_calibration": {
         "best_params": {
-          "lambda_fact": 0.01152041244720621,
+          "lambda_fact": 0.006460755678937422,
           "lambda_episode": 0.035,
-          "beta_fact": 0.13813810951187572,
+          "beta_fact": 0.28014761255409276,
           "beta_episode": 0.12,
-          "alpha": 0.044695829157105516,
-          "stability_weight": 0.4372759496072067,
-          "stability_decay": 0.05053552881033624,
-          "reinforcement_gain_direct": 0.06194118635773863,
+          "alpha": 1.3180828167347762,
+          "stability_weight": 1.6633310587223589,
+          "stability_decay": 0.030751412540266143,
+          "reinforcement_gain_direct": 0.07606632492238441,
           "reinforcement_gain_assoc": 0.05,
-          "stability_cap": 0.7982564760299727
+          "stability_cap": 1.8170143988060607
         },
         "valid_metrics": {
-          "nll": 0.055014087634902085,
-          "brier": 0.0028652666632417926,
-          "ece": 0.05352818568980078,
+          "nll": 0.050011889853689824,
+          "brier": 0.0023796723442257904,
+          "ece": 0.04878188541073203,
           "num_events": 1
         },
         "test_metrics": {
-          "nll": 1.2910694073292288,
-          "brier": 0.4248125750954356,
-          "ece": 0.43493933114239236,
+          "nll": 1.4862627908065247,
+          "brier": 0.44884165717413954,
+          "ece": 0.44902468564672227,
           "num_events": 2
         }
       },
       "baseline": {
-        "overall_score": 0.1059973214285714,
-        "retrieval_score": 0.036875,
+        "overall_score": 0.029484311104910715,
+        "retrieval_score": 0.033125,
         "plausibility_score": 0.267282738095238
       },
       "calibrated": {
-        "overall_score": 0.3915196428571428,
-        "retrieval_score": 0.425,
+        "overall_score": 0.38459296093749995,
+        "retrieval_score": 0.42875,
         "plausibility_score": 0.3133988095238094
       },
       "delta": {
-        "overall_score": 0.2855,
-        "retrieval_score": 0.3881,
+        "overall_score": 0.3551,
+        "retrieval_score": 0.3956,
         "plausibility_score": 0.0461
       }
     },
@@ -78,13 +78,13 @@
       "inputs": {
         "human_events_path": "data/human_reviews_smoke.jsonl",
         "synthetic_dataset_path": "data/memories_500.jsonl",
-        "iterations": 3,
+        "iterations": 25,
         "seed": 42,
         "total_ticks": 100,
         "eval_interval": 5,
         "decay_type": "exponential",
         "reactivation_policy": "none",
-        "embedding_backend": "auto"
+        "embedding_backend": "local"
       },
       "artifacts": {
         "calibration_dir": "outputs/pre_program_pipeline/memories_500/human_calibration",
@@ -94,44 +94,44 @@
       },
       "human_calibration": {
         "best_params": {
-          "lambda_fact": 0.01152041244720621,
+          "lambda_fact": 0.006460755678937422,
           "lambda_episode": 0.035,
-          "beta_fact": 0.13813810951187572,
+          "beta_fact": 0.28014761255409276,
           "beta_episode": 0.12,
-          "alpha": 0.044695829157105516,
-          "stability_weight": 0.4372759496072067,
-          "stability_decay": 0.05053552881033624,
-          "reinforcement_gain_direct": 0.06194118635773863,
+          "alpha": 1.3180828167347762,
+          "stability_weight": 1.6633310587223589,
+          "stability_decay": 0.030751412540266143,
+          "reinforcement_gain_direct": 0.07606632492238441,
           "reinforcement_gain_assoc": 0.05,
-          "stability_cap": 0.7982564760299727
+          "stability_cap": 1.8170143988060607
         },
         "valid_metrics": {
-          "nll": 0.055014087634902085,
-          "brier": 0.0028652666632417926,
-          "ece": 0.05352818568980078,
+          "nll": 0.050011889853689824,
+          "brier": 0.0023796723442257904,
+          "ece": 0.04878188541073203,
           "num_events": 1
         },
         "test_metrics": {
-          "nll": 1.2910694073292288,
-          "brier": 0.4248125750954356,
-          "ece": 0.43493933114239236,
+          "nll": 1.4862627908065247,
+          "brier": 0.44884165717413954,
+          "ece": 0.44902468564672227,
           "num_events": 2
         }
       },
       "baseline": {
-        "overall_score": 0.28191858263676695,
-        "retrieval_score": 0.10064201347574354,
-        "plausibility_score": 0.7048972440124883
+        "overall_score": 0.08905358028351881,
+        "retrieval_score": 0.09317814959501464,
+        "plausibility_score": 0.7048972440124884
       },
       "calibrated": {
-        "overall_score": 0.348501563205299,
-        "retrieval_score": 0.20002877992143417,
-        "plausibility_score": 0.694938057534317
+        "overall_score": 0.19567510790044607,
+        "retrieval_score": 0.20539826614991083,
+        "plausibility_score": 0.684412842369751
       },
       "delta": {
-        "overall_score": 0.0666,
-        "retrieval_score": 0.0994,
-        "plausibility_score": -0.01
+        "overall_score": 0.1066,
+        "retrieval_score": 0.1122,
+        "plausibility_score": -0.0205
       }
     }
   }
