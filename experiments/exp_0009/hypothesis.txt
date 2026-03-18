@@ -1,0 +1,14 @@
+Memory consolidation model: items with impact > 0.15 grow slowly toward
+1.0, while impact < 0.15 items follow cubic decay. Growth rate =
+growth_rate * impact * (1-activation) / combined, so it slows as
+activation approaches 1.0. The exp(alpha*impact) in combined also
+moderates growth for high-impact items.
+
+Expected dynamics:
+- impact=0: cubic decay, a(200) ≈ 0.35
+- impact=0.5: growth toward 1.0, a(200) ≈ 0.55-0.60
+- impact=1.0: slower growth (large combined), a(200) ≈ 0.55
+
+The gap between growing items (0.55+) and decaying items (0.35)
+creates correlation signal at threshold 0.4/0.5 while maintaining
+high recall. Biologically motivated by memory consolidation.

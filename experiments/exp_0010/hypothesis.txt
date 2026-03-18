@@ -1,0 +1,9 @@
+Same cubic decay as exp_0004 but with equal lambda for both types
+(lambda_episode = lambda_fact = 0.010 instead of 0.020). In exp_0004,
+episodes decayed 2x faster than facts. With equal lambda, episodes
+stay at higher activation, potentially closing the gap between
+recall@0.4 (0.498) and recall@0.5 (0.483). The 0.015 recall_mean
+gap represents the last available recall improvement.
+
+Risk: less type differentiation might reduce the already-low
+correlation. Net effect uncertain — this is a small parameter test.
