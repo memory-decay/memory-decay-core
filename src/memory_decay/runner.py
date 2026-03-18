@@ -1,0 +1,170 @@
+"""Single experiment runner for the auto-research loop.
+
+Loads a custom decay function from an experiment directory,
+runs a simulation using cached embeddings, and saves results.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import time
+from pathlib import Path
+from typing import Optional
+
+from .cache_builder import load_cache
+from .main import build_graph_from_dataset, run_simulation
+from .decay import DecayEngine
+from .evaluator import Evaluator
+
+
+def validate_decay_fn(fn_path: str, params: dict) -> tuple[bool, Optional[str]]:
+    """Validate a decay function file before running a full experiment."""
+    path = Path(fn_path)
+
+    # 1. Syntax check
+    try:
+        with open(path, "r") as f:
+            source = f.read()
+        compile(source, str(path), "exec")
+    except SyntaxError as e:
+        return False, f"SyntaxError: {e}"
+
+    # 2. Load module
+    try:
+        spec = importlib.util.spec_from_file_location("decay_fn", str(path))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    except Exception as e:
+        return False, f"Import error: {e}"
+
+    if not hasattr(module, "compute_decay") or not callable(module.compute_decay):
+        return False, "Module has no callable 'compute_decay'"
+
+    fn = module.compute_decay
+
+    # 3. Basic output range checks
+    test_cases = [
+        (1.0, 0.0, 0.0, "fact"),
+        (1.0, 0.0, 0.0, "episode"),
+        (0.5, 0.5, 0.5, "fact"),
+        (0.8, 1.0, 1.0, "episode"),
+        (0.0, 0.0, 0.0, "fact"),
+    ]
+
+    results = []
+    for activation, impact, stability, mtype in test_cases:
+        try:
+            result = fn(activation, impact, stability, mtype, params)
+        except Exception as e:
+            return False, f"Runtime error with inputs ({activation}, {impact}, {stability}, {mtype}): {e}"
+
+        if not isinstance(result, (int, float)):
+            return False, f"Output is not numeric: {type(result)}"
+        if result < -0.01 or result > 1.01:
+            return False, f"Output {result} out of range [0, 1]"
+        results.append(result)
+
+    # 4. Must actually decay
+    if results[0] >= 1.0 and results[1] >= 1.0:
+        return False, "No decay detected: compute_decay(1.0, 0, 0, ...) returned 1.0 (constant, no decay)"
+
+    # 5. Zero input should stay near zero
+    if results[4] > 0.01:
+        return False, f"Zero activation produced non-zero output: {results[4]}"
+
+    return True, None
+
+
+def _load_decay_fn(fn_path: str):
+    """Dynamically import a decay function from a file."""
+    spec = importlib.util.spec_from_file_location("decay_fn", fn_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.compute_decay
+
+
+def run_experiment(
+    experiment_dir: str,
+    cache_dir: str,
+    total_ticks: int = 200,
+    eval_interval: int = 20,
+    reactivation_policy: str = "scheduled_query",
+    seed: int = 42,
+) -> dict:
+    """Run a single experiment from an experiment directory."""
+    exp_path = Path(experiment_dir)
+    start_time = time.time()
+
+    with open(exp_path / "params.json", "r") as f:
+        params = json.load(f)
+
+    fn_path = str(exp_path / "decay_fn.py")
+
+    ok, error = validate_decay_fn(fn_path, params)
+    if not ok:
+        result = {
+            "status": "validation_failed",
+            "error": error,
+            "duration_seconds": round(time.time() - start_time, 2),
+        }
+        with open(exp_path / "results.json", "w") as f:
+            json.dump(result, f, indent=2)
+        return result
+
+    cached_embedder, dataset, test_queries = load_cache(cache_dir)
+    graph = build_graph_from_dataset(dataset, embedder=cached_embedder)
+    decay_fn = _load_decay_fn(fn_path)
+    engine = DecayEngine(graph, custom_decay_fn=decay_fn, params=params)
+    evaluator = Evaluator(graph, engine)
+
+    snapshots = run_simulation(
+        graph, engine, evaluator, test_queries,
+        total_ticks=total_ticks,
+        eval_interval=eval_interval,
+        reactivation_policy=reactivation_policy,
+        seed=seed,
+    )
+
+    final_summary = evaluator.score_summary(test_queries)
+    duration = time.time() - start_time
+
+    result = {
+        "status": "completed",
+        **final_summary,
+        "snapshots": snapshots,
+        "duration_seconds": round(duration, 2),
+    }
+
+    with open(exp_path / "results.json", "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+
+    return result
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run a single decay experiment")
+    parser.add_argument("experiment_dir", help="Path to experiment directory")
+    parser.add_argument("--cache", default="cache", help="Cache directory")
+    parser.add_argument("--ticks", type=int, default=200)
+    parser.add_argument("--eval-interval", type=int, default=20)
+    parser.add_argument("--policy", default="scheduled_query")
+    parser.add_argument("--seed", type=int, default=42)
+    args = parser.parse_args()
+
+    result = run_experiment(
+        args.experiment_dir, args.cache,
+        total_ticks=args.ticks, eval_interval=args.eval_interval,
+        reactivation_policy=args.policy, seed=args.seed,
+    )
+
+    status = result["status"]
+    if status == "completed":
+        print(f"Done: overall={result['overall_score']:.4f} "
+              f"retrieval={result['retrieval_score']:.4f} "
+              f"plausibility={result['plausibility_score']:.4f} "
+              f"({result['duration_seconds']}s)")
+    else:
+        print(f"Failed: {result.get('error', 'unknown')}")
