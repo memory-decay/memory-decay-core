@@ -3,6 +3,39 @@
 ## Goal
 Discover better decay functions by iterating: hypothesize -> implement -> test -> judge.
 
+## Operating Principle
+
+The human defines the closed loop. The AI agent works only inside the allowed search surface.
+
+- The loop itself is fixed by humans
+- Evaluation, datasets, bootstrap artifacts, and experiment protocol are fixed
+- The agent may explore only the allowed algorithm and weight space
+- If an apparent improvement requires changing the loop, evaluator, or datasets, stop and report it instead of modifying them
+
+## Preflight (run once before the loop if missing)
+
+If `outputs/pre_program_pipeline/suite_summary.json` does not exist, run:
+
+```bash
+PYTHONPATH=src uv run python scripts/run_pre_program_pipeline.py
+```
+
+This bootstrap step does all required pre-program work:
+
+- human calibration on `data/human_reviews_smoke.jsonl`
+- baseline vs calibrated comparison on `data/memories_50.jsonl`
+- baseline vs calibrated comparison on `data/memories_500.jsonl`
+- artifact export under `outputs/pre_program_pipeline/`
+
+After it completes, read:
+
+- `outputs/pre_program_pipeline/suite_summary.json`
+- `outputs/pre_program_pipeline/memories_500/comparison_summary.json`
+
+Use the `memories_500` comparison as the canonical pre-loop reference point.
+
+Treat all files under `outputs/pre_program_pipeline/` as read-only reference artifacts during the loop.
+
 ## Protocol (each cycle)
 
 ### 1. Read State
@@ -63,8 +96,11 @@ PYTHONPATH=src uv run python -m memory_decay.runner experiments/exp_NNNN --cache
 ### 5. Read Results
 Read `experiments/exp_NNNN/results.json`. Key metrics:
 - `overall_score`: main metric (0.7 * retrieval + 0.3 * plausibility)
-- `retrieval_score`: 0.7 * recall_mean + 0.3 * precision_mean (across thresholds)
-- `plausibility_score`: 0.6 * correlation + 0.4 * smoothness
+- `retrieval_score`: 0.7 * recall_mean + 0.3 * precision_strict (across thresholds)
+- `plausibility_score`: 0.3 * correlation + 0.7 * smoothness
+- `precision_strict`: exact-match precision only; used in `retrieval_score`
+- `precision_associative`: diagnostic precision where associated neighbors also count
+- `similarity_recall_rate`: threshold-free similarity retrieval rate; diagnostic only
 - `status`: "completed" or "validation_failed"
 
 ### 6. Judge
@@ -107,6 +143,33 @@ If `experiments/best/` doesn't exist:
 ## Rules
 - NEVER modify evaluator.py, graph.py, or runner.py
 - NEVER modify the dataset or cache
+- NEVER modify `main.py` benchmark protocol during the loop
+- NEVER modify files under `outputs/pre_program_pipeline/`
+- NEVER modify bootstrap scripts to improve scores mid-loop
 - Each experiment is independent — always start from fresh graph state
 - Be creative with decay formulas but respect the interface contract
 - Track what you've tried to avoid repeating failed approaches
+
+## Allowed Search Surface
+
+The agent is allowed to change only these experiment-local files:
+
+- `experiments/exp_NNNN/decay_fn.py`
+- `experiments/exp_NNNN/params.json`
+- `experiments/exp_NNNN/hypothesis.txt`
+
+Interpretation:
+
+- `decay_fn.py` = algorithm slot
+- `params.json` = weight/parameter slot
+- `hypothesis.txt` = rationale only
+
+Everything else is part of the closed loop and should be treated as fixed.
+
+## Escalation Rule
+
+If the best next move appears to require changing any file outside the allowed search surface:
+
+1. Do not make the change
+2. Record why the loop seems insufficient
+3. Stop and ask for a human decision on whether to widen the search space

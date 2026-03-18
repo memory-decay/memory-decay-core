@@ -94,4 +94,42 @@ PYTHONPATH=src uv run python -m memory_decay.main \
   --eval-interval 20
 ```
 
+## Human Calibration Workflow
+
+Real review logs now live in a separate calibration path instead of replacing the synthetic graph benchmark.
+
+Normalized human review JSONL rows must contain:
+
+- `user_id`
+- `item_id`
+- `memory_type`
+- `t_elapsed`
+- `review_index`
+- `outcome`
+- `grade`
+- `metadata`
+
+Fit fact-side parameters from a normalized review log:
+
+```bash
+PYTHONPATH=src uv run python -m memory_decay.human_runner \
+  data/human_reviews_smoke.jsonl \
+  outputs/human_calibration
+```
+
+Reuse those fitted fact-side params in the synthetic benchmark:
+
+```bash
+PYTHONPATH=src uv run python -m memory_decay.main \
+  --dataset data/memories_500.jsonl \
+  --calibrated-params outputs/human_calibration/best_params.json \
+  --budget 0
+```
+
+Scientific boundary:
+
+- Human logs currently calibrate only `fact`-side forgetting and reinforcement parameters
+- `episode` behavior remains constrained extrapolation rather than directly fit
+- Synthetic graph retrieval remains the external validation environment for associations and fact/episode contrast
+
 See [design spec](docs/superpowers/specs/2026-03-17-memory-decay-design.md) for the original architecture notes and [final report](docs/final-report.md) for the current research narrative.

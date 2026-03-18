@@ -1,0 +1,3 @@
+Remove exp(alpha*impact) from combined, use ONLY impact-dependent damping for
+discrimination. combined = 1 + rho*stability (no alpha term). This isolates the
+damping effect. damping = 0.1 + 0.8*(1-impact). With base_floor=0.79.

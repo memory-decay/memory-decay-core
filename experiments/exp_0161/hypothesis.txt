@@ -1,0 +1,5 @@
+Impact-dependent consolidation damping: low-impact items get higher damping (faster
+decay) in the consolidation phase. This creates MORE activation spread at tick 200
+where most items are still in consolidation. damping = cd_base + cd_impact * (1 - impact).
+Low impact → high damping → fast decay. High impact → low damping → slow decay.
+Combined with base_floor=0.79 for the floor phase. This should maximize correlation.

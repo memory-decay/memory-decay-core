@@ -1,0 +1,6 @@
+Raised universal floor: floor = 0.25 + sqrt(impact) * 0.25. Every memory gets
+at least a 0.25 floor, with impact adding up to 0.25 more. This should keep many
+more items above threshold (boosting recall from 0.39→higher) while still
+providing some impact differentiation for correlation. The key insight is that
+recall has 49% effective weight in the scoring — protecting more memories from
+falling below threshold is the highest-leverage change.

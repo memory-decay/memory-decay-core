@@ -1,0 +1,5 @@
+Power-law discriminative floor: use impact^2 instead of sqrt(impact) for the floor.
+This creates much more separation — impact=0.3 gets floor=0.09*scale=0.04 while
+impact=0.9 gets floor=0.81*scale=0.40. Combined with faster base decay, low-impact
+items drop below threshold quickly while high-impact items are strongly protected.
+This should dramatically improve precision while moderately reducing recall.

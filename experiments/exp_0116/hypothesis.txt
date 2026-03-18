@@ -1,0 +1,5 @@
+Cubic-root floor with high scale: floor = cbrt(impact) * 0.42. Cube root is
+even more generous than sqrt for low-impact items: cbrt(0.1)=0.464 vs sqrt(0.1)=0.316.
+This means even impact=0.1 gets floor=0.195, well above the 0.2 threshold.
+Meanwhile cbrt(1.0)=1.0*0.42=0.42. More items survive → higher recall.
+Keeps same two-phase structure that proved best.

@@ -1,0 +1,4 @@
+No consolidation phase at all — just floor-approach for everything. With
+base_floor=0.79, all items converge to 0.79 at different rates based on impact
+(via exp(alpha*impact) in combined). This eliminates the two-phase complexity
+and lets the combined term create spread naturally.

@@ -1,0 +1,138 @@
+{
+  "inputs": {
+    "human_events_path": "data/human_reviews_smoke.jsonl",
+    "synthetic_dataset_paths": [
+      "data/memories_50.jsonl",
+      "data/memories_500.jsonl"
+    ],
+    "iterations": 3,
+    "seed": 42,
+    "total_ticks": 100,
+    "eval_interval": 5,
+    "decay_type": "exponential",
+    "reactivation_policy": "none",
+    "embedding_backend": "auto"
+  },
+  "runs": {
+    "memories_50": {
+      "inputs": {
+        "human_events_path": "data/human_reviews_smoke.jsonl",
+        "synthetic_dataset_path": "data/memories_50.jsonl",
+        "iterations": 3,
+        "seed": 42,
+        "total_ticks": 100,
+        "eval_interval": 5,
+        "decay_type": "exponential",
+        "reactivation_policy": "none",
+        "embedding_backend": "auto"
+      },
+      "artifacts": {
+        "calibration_dir": "outputs/pre_program_pipeline/memories_50/human_calibration",
+        "best_params_path": "outputs/pre_program_pipeline/memories_50/human_calibration/best_params.json",
+        "baseline_output": "outputs/pre_program_pipeline/memories_50/baseline.json",
+        "calibrated_output": "outputs/pre_program_pipeline/memories_50/calibrated.json"
+      },
+      "human_calibration": {
+        "best_params": {
+          "lambda_fact": 0.01152041244720621,
+          "lambda_episode": 0.035,
+          "beta_fact": 0.13813810951187572,
+          "beta_episode": 0.12,
+          "alpha": 0.044695829157105516,
+          "stability_weight": 0.4372759496072067,
+          "stability_decay": 0.05053552881033624,
+          "reinforcement_gain_direct": 0.06194118635773863,
+          "reinforcement_gain_assoc": 0.05,
+          "stability_cap": 0.7982564760299727
+        },
+        "valid_metrics": {
+          "nll": 0.055014087634902085,
+          "brier": 0.0028652666632417926,
+          "ece": 0.05352818568980078,
+          "num_events": 1
+        },
+        "test_metrics": {
+          "nll": 1.2910694073292288,
+          "brier": 0.4248125750954356,
+          "ece": 0.43493933114239236,
+          "num_events": 2
+        }
+      },
+      "baseline": {
+        "overall_score": 0.1059973214285714,
+        "retrieval_score": 0.036875,
+        "plausibility_score": 0.267282738095238
+      },
+      "calibrated": {
+        "overall_score": 0.3915196428571428,
+        "retrieval_score": 0.425,
+        "plausibility_score": 0.3133988095238094
+      },
+      "delta": {
+        "overall_score": 0.2855,
+        "retrieval_score": 0.3881,
+        "plausibility_score": 0.0461
+      }
+    },
+    "memories_500": {
+      "inputs": {
+        "human_events_path": "data/human_reviews_smoke.jsonl",
+        "synthetic_dataset_path": "data/memories_500.jsonl",
+        "iterations": 3,
+        "seed": 42,
+        "total_ticks": 100,
+        "eval_interval": 5,
+        "decay_type": "exponential",
+        "reactivation_policy": "none",
+        "embedding_backend": "auto"
+      },
+      "artifacts": {
+        "calibration_dir": "outputs/pre_program_pipeline/memories_500/human_calibration",
+        "best_params_path": "outputs/pre_program_pipeline/memories_500/human_calibration/best_params.json",
+        "baseline_output": "outputs/pre_program_pipeline/memories_500/baseline.json",
+        "calibrated_output": "outputs/pre_program_pipeline/memories_500/calibrated.json"
+      },
+      "human_calibration": {
+        "best_params": {
+          "lambda_fact": 0.01152041244720621,
+          "lambda_episode": 0.035,
+          "beta_fact": 0.13813810951187572,
+          "beta_episode": 0.12,
+          "alpha": 0.044695829157105516,
+          "stability_weight": 0.4372759496072067,
+          "stability_decay": 0.05053552881033624,
+          "reinforcement_gain_direct": 0.06194118635773863,
+          "reinforcement_gain_assoc": 0.05,
+          "stability_cap": 0.7982564760299727
+        },
+        "valid_metrics": {
+          "nll": 0.055014087634902085,
+          "brier": 0.0028652666632417926,
+          "ece": 0.05352818568980078,
+          "num_events": 1
+        },
+        "test_metrics": {
+          "nll": 1.2910694073292288,
+          "brier": 0.4248125750954356,
+          "ece": 0.43493933114239236,
+          "num_events": 2
+        }
+      },
+      "baseline": {
+        "overall_score": 0.28191858263676695,
+        "retrieval_score": 0.10064201347574354,
+        "plausibility_score": 0.7048972440124883
+      },
+      "calibrated": {
+        "overall_score": 0.348501563205299,
+        "retrieval_score": 0.20002877992143417,
+        "plausibility_score": 0.694938057534317
+      },
+      "delta": {
+        "overall_score": 0.0666,
+        "retrieval_score": 0.0994,
+        "plausibility_score": -0.01
+      }
+    }
+  }
+}

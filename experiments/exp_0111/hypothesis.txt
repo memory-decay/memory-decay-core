@@ -1,0 +1,5 @@
+Sigmoidal impact gating: use a sharp sigmoid to create a keep/forget bifurcation.
+High-impact memories (>0.5) barely decay; low-impact memories decay rapidly.
+This should improve precision by creating activation separation between important
+and unimportant memories, unlike the current floor which protects indiscriminately.
+The sigmoid steepness (k=10) creates a near-binary gate on impact.

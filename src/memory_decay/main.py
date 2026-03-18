@@ -24,6 +24,23 @@ from .evaluator import Evaluator
 from .auto_improver import AutoImprover
 
 
+def merge_human_calibrated_params(base_params: dict, best_params_path: str) -> dict:
+    """Apply only fact-side calibrated params from a human calibration artifact."""
+    with open(best_params_path, "r", encoding="utf-8") as f:
+        fitted = json.load(f)
+
+    merged = dict(base_params)
+    for key in (
+        "lambda_fact",
+        "stability_weight",
+        "stability_decay",
+        "reinforcement_gain_direct",
+    ):
+        if key in fitted:
+            merged[key] = fitted[key]
+    return merged
+
+
 def build_graph_from_dataset(
     dataset: list[dict], embedder=None, embedding_backend: str = "auto"
 ) -> MemoryGraph:
@@ -175,6 +192,7 @@ def run_experiment(
     improvement_budget: int = 12,
     api_key: Optional[str] = None,
     dataset_path: Optional[str] = None,
+    calibrated_params_path: Optional[str] = None,
     output_path: Optional[str] = None,
     seed: int = 42,
 ) -> dict:
@@ -223,6 +241,8 @@ def run_experiment(
         "reinforcement_gain_assoc": 0.05,
         "stability_cap": 1.0,
     }
+    if calibrated_params_path:
+        params = merge_human_calibrated_params(params, calibrated_params_path)
 
     # Step 5: Initial run
     engine = DecayEngine(graph, decay_type=decay_type, params=params)
@@ -341,6 +361,12 @@ def main():
     parser.add_argument("--guidance", choices=["minimal", "default", "expert"], default="default")
     parser.add_argument("--budget", type=int, default=12, help="Auto-improvement iterations")
     parser.add_argument("--dataset", type=str, default=None, help="Path to JSONL dataset")
+    parser.add_argument(
+        "--calibrated-params",
+        type=str,
+        default=None,
+        help="Path to best_params.json produced by human calibration",
+    )
     parser.add_argument("--output", type=str, default="data/results.json", help="Output path")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
@@ -355,6 +381,7 @@ def main():
         guidance_level=args.guidance,
         improvement_budget=args.budget,
         dataset_path=args.dataset,
+        calibrated_params_path=args.calibrated_params,
         output_path=args.output,
         seed=args.seed,
     )

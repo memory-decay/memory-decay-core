@@ -1,0 +1,5 @@
+Ultra-slow decay with sqrt floor at 0.45: same two-phase structure as best,
+but with floor_scale raised from 0.36 to 0.45 and even slower decay rates
+(lambda_fact=0.008, lambda_episode=0.024). The higher floor lifts more low-impact
+items above threshold. Combined with slower decay, items spend more time above
+threshold during the transition, boosting recall at every snapshot.
