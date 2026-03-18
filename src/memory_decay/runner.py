@@ -112,7 +112,7 @@ def run_experiment(
             json.dump(result, f, indent=2)
         return result
 
-    cached_embedder, dataset, test_queries = load_cache(cache_dir)
+    cached_embedder, dataset, test_queries, rehearsal_targets = load_cache(cache_dir)
     graph = build_graph_from_dataset(dataset, embedder=cached_embedder)
     decay_fn = _load_decay_fn(fn_path)
     engine = DecayEngine(graph, custom_decay_fn=decay_fn, params=params)
@@ -123,6 +123,7 @@ def run_experiment(
         total_ticks=total_ticks,
         eval_interval=eval_interval,
         reactivation_policy=reactivation_policy,
+        rehearsal_targets=rehearsal_targets,
         seed=seed,
     )
 

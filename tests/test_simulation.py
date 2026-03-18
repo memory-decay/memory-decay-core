@@ -147,10 +147,12 @@ class TestSimulationPipeline:
             "stability_cap": 1.0,
         })
         ev2 = Evaluator(g2, e2)
+        rehearsal_targets = [m["id"] for m in SAMPLE_DATASET]
         scheduled = run_simulation(
             g2, e2, ev2, queries,
             total_ticks=100, eval_interval=20,
             reactivation_policy="scheduled_query", reactivation_interval=10,
+            rehearsal_targets=rehearsal_targets,
         )
 
         assert ev2.history[-1]["recall_rate"] >= ev1.history[-1]["recall_rate"]

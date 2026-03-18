@@ -61,6 +61,7 @@ def run_simulation(
     reactivation_policy: str = "none",
     reactivation_interval: int = 10,
     reactivation_boost: float = 0.3,
+    rehearsal_targets: list[str] | None = None,
     seed: Optional[int] = None,
 ) -> list[dict]:
     """Run a simulation and return evaluation snapshots.
@@ -75,6 +76,8 @@ def run_simulation(
         reactivation_policy: Re-activation policy: none, random, scheduled_query.
         reactivation_interval: Apply the selected policy every N ticks.
         reactivation_boost: Activation boost for direct re-activation.
+        rehearsal_targets: Memory IDs eligible for scheduled_query reactivation.
+            Required when reactivation_policy is "scheduled_query".
         seed: Random seed used by the random policy.
 
     Returns:
@@ -82,6 +85,11 @@ def run_simulation(
     """
     if reactivation_policy not in {"none", "random", "scheduled_query"}:
         raise ValueError(f"Unsupported reactivation_policy: {reactivation_policy}")
+
+    if reactivation_policy == "scheduled_query" and not rehearsal_targets:
+        raise ValueError(
+            "rehearsal_targets must be provided when reactivation_policy is 'scheduled_query'"
+        )
 
     rng = random.Random(seed)
     summaries = []
@@ -107,11 +115,10 @@ def run_simulation(
             if not candidates:
                 return
             target_id = rng.choice(candidates)
-        else:
-            if not test_queries:
-                return
-            query_index = ((tick // reactivation_interval) - 1) % len(test_queries)
-            _, target_id = test_queries[query_index]
+        else:  # scheduled_query — use rehearsal_targets, NOT test_queries
+            assert rehearsal_targets is not None
+            idx = ((tick // reactivation_interval) - 1) % len(rehearsal_targets)
+            target_id = rehearsal_targets[idx]
 
         graph.re_activate(
             target_id,
@@ -189,6 +196,7 @@ def run_experiment(
 
     # Build test queries
     test_queries = [(m["recall_query"], m["id"]) for m in test if "recall_query" in m]
+    rehearsal_targets = [m["id"] for m in train]
     print(f"Test queries: {len(test_queries)}")
 
     # Step 3: Build graph
@@ -218,6 +226,7 @@ def run_experiment(
         graph, engine, evaluator, test_queries,
         total_ticks=total_ticks, eval_interval=eval_interval,
         reactivation_policy=reactivation_policy,
+        rehearsal_targets=rehearsal_targets,
         seed=seed,
     )
     initial_summary = initial_summaries[-1]
@@ -259,6 +268,7 @@ def run_experiment(
                 graph2, engine2, evaluator2, test_queries,
                 total_ticks=total_ticks, eval_interval=eval_interval,
                 reactivation_policy=reactivation_policy,
+                rehearsal_targets=rehearsal_targets,
                 seed=seed,
             )
             score_summary = summaries[-1]

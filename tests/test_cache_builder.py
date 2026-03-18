@@ -66,6 +66,17 @@ class TestCacheBuilder:
             if "recall_query" in item:
                 assert item["recall_query"] in embeddings
 
+    def test_build_cache_creates_rehearsal_targets(self, tmp_path):
+        dataset_path = tmp_path / "data.jsonl"
+        with open(dataset_path, "w") as f:
+            for item in SAMPLE_DATASET:
+                f.write(json.dumps(item, ensure_ascii=False) + "\n")
+
+        cache_dir = tmp_path / "cache"
+        build_cache(str(dataset_path), str(cache_dir), embedder=mock_embedder)
+
+        assert (cache_dir / "rehearsal_targets.json").exists()
+
     def test_load_cache_returns_embedder(self, tmp_path):
         dataset_path = tmp_path / "data.jsonl"
         with open(dataset_path, "w") as f:
@@ -75,15 +86,14 @@ class TestCacheBuilder:
         cache_dir = tmp_path / "cache"
         build_cache(str(dataset_path), str(cache_dir), embedder=mock_embedder)
 
-        cached_embedder, dataset, test_queries = load_cache(str(cache_dir))
+        cached_embedder, dataset, test_queries, rehearsal_targets = load_cache(str(cache_dir))
 
         emb = cached_embedder("서울은 대한민국의 수도이다")
         assert isinstance(emb, np.ndarray)
         assert emb.shape == (384,)
 
         assert len(dataset) == 2
-        assert len(test_queries) == 2
-        assert test_queries[0] == ("대한민국의 수도는?", "f1")
+        assert isinstance(rehearsal_targets, list)
 
     def test_load_cache_raises_for_unknown_text(self, tmp_path):
         dataset_path = tmp_path / "data.jsonl"
@@ -94,7 +104,41 @@ class TestCacheBuilder:
         cache_dir = tmp_path / "cache"
         build_cache(str(dataset_path), str(cache_dir), embedder=mock_embedder)
 
-        cached_embedder, _, _ = load_cache(str(cache_dir))
+        cached_embedder, _, _, _ = load_cache(str(cache_dir))
 
         with pytest.raises(KeyError):
             cached_embedder("이건 캐시에 없는 텍스트")
+
+
+def _fixed_embedder(text: str) -> np.ndarray:
+    rng = np.random.RandomState(hash(text) % 2**31)
+    vec = rng.randn(16).astype(np.float32)
+    return vec / (np.linalg.norm(vec) + 1e-9)
+
+
+def test_cache_splits_train_test(tmp_path):
+    """Cache must produce separate test_queries and rehearsal_targets."""
+    dataset = [
+        {"id": f"m{i}", "type": "fact", "content": f"fact {i}",
+         "tick": i * 10, "impact": 0.5, "associations": [],
+         "recall_query": f"query {i}"}
+        for i in range(10)
+    ]
+    dataset_path = tmp_path / "data.jsonl"
+    with open(dataset_path, "w") as f:
+        for item in dataset:
+            f.write(json.dumps(item) + "\n")
+
+    build_cache(str(dataset_path), str(tmp_path / "cache"), embedder=_fixed_embedder)
+    _, full_dataset, test_queries, rehearsal_targets = load_cache(str(tmp_path / "cache"))
+
+    test_ids = {tid for _, tid in test_queries}
+    rehearsal_ids = set(rehearsal_targets)
+
+    # No overlap
+    assert test_ids.isdisjoint(rehearsal_ids), (
+        f"Overlap between test and rehearsal: {test_ids & rehearsal_ids}"
+    )
+
+    # Together they cover the full dataset
+    assert test_ids | rehearsal_ids == {item["id"] for item in full_dataset}

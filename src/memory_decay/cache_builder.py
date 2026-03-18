@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import pickle
+import random as _rnd
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -22,6 +23,8 @@ def build_cache(
     cache_dir: str,
     embedder: Optional[Callable] = None,
     embedding_backend: str = "auto",
+    test_ratio: float = 0.2,
+    seed: int = 42,
 ) -> None:
     cache_path = Path(cache_dir)
     cache_path.mkdir(parents=True, exist_ok=True)
@@ -60,16 +63,32 @@ def build_cache(
     with open(cache_path / "dataset.json", "w", encoding="utf-8") as f:
         json.dump(dataset, f, ensure_ascii=False, indent=2)
 
+    # --- train/test split (stratified by type) ---
+    rng = _rnd.Random(seed)
+    facts = [item for item in dataset if item.get("type") == "fact"]
+    episodes = [item for item in dataset if item.get("type") == "episode"]
+    rng.shuffle(facts)
+    rng.shuffle(episodes)
+
+    n_test_facts = max(1, int(len(facts) * test_ratio))
+    n_test_episodes = max(1, int(len(episodes) * test_ratio)) if episodes else 0
+    test_items = facts[:n_test_facts] + episodes[:n_test_episodes]
+    train_items = facts[n_test_facts:] + episodes[n_test_episodes:]
+
     test_queries = [
         (item["recall_query"], item["id"])
-        for item in dataset
-        if "recall_query" in item
+        for item in test_items if "recall_query" in item
     ]
+    rehearsal_targets = [item["id"] for item in train_items]
+
     with open(cache_path / "test_queries.json", "w", encoding="utf-8") as f:
         json.dump(test_queries, f, ensure_ascii=False, indent=2)
 
+    with open(cache_path / "rehearsal_targets.json", "w", encoding="utf-8") as f:
+        json.dump(rehearsal_targets, f, ensure_ascii=False, indent=2)
 
-def load_cache(cache_dir: str) -> tuple[Callable, list[dict], list[tuple[str, str]]]:
+
+def load_cache(cache_dir: str) -> tuple[Callable, list[dict], list[tuple[str, str]], list[str]]:
     cache_path = Path(cache_dir)
 
     with open(cache_path / "embeddings.pkl", "rb") as f:
@@ -81,12 +100,15 @@ def load_cache(cache_dir: str) -> tuple[Callable, list[dict], list[tuple[str, st
     with open(cache_path / "test_queries.json", "r", encoding="utf-8") as f:
         test_queries = [tuple(q) for q in json.load(f)]
 
+    with open(cache_path / "rehearsal_targets.json", "r", encoding="utf-8") as f:
+        rehearsal_targets = json.load(f)
+
     def cached_embedder(text: str) -> np.ndarray:
         if text not in embeddings:
             raise KeyError(f"Text not in embedding cache: {text[:80]}...")
         return embeddings[text].copy()
 
-    return cached_embedder, dataset, test_queries
+    return cached_embedder, dataset, test_queries, rehearsal_targets
 
 
 if __name__ == "__main__":
