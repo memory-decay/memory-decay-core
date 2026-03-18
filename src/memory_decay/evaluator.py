@@ -292,6 +292,15 @@ class Evaluator:
         corr_score = max(min(corr_mean, 1.0), 0.0)
         smoothness_score = self._smoothness_score()
 
+        # Strict precision sweep
+        strict_precisions = []
+        for t in thresholds:
+            sp = self.evaluate_precision(test_queries, threshold=t, top_k=top_k, mode="strict")
+            strict_precisions.append(sp)
+
+        # Similarity recall (threshold-independent)
+        sim_recall = self.evaluate_similarity_recall(test_queries, top_k=top_k)
+
         retrieval_score = (
             0.7 * sweep["recall_mean"] + 0.3 * sweep["precision_mean"]
         )
@@ -308,6 +317,9 @@ class Evaluator:
             "plausibility_score": plausibility_score,
             "overall_score": overall_score,
             "composite_score": overall_score,
+            "precision_strict": float(np.mean(strict_precisions)),
+            "precision_associative": sweep["precision_mean"],
+            "similarity_recall_rate": sim_recall,
         }
 
     def composite_score(
