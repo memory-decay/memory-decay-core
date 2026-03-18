@@ -1,0 +1,15 @@
+Boost reinforcement parameters to leverage association topology.
+
+exp_0302-0304 showed that impact-based pruning hurts recall because
+test query answers aren't always high-impact. Instead, use reinforcement
+to differentiate: rehearsed memories gain stability, unrehearsed don't.
+
+Key changes from exp_0301:
+- reinforcement_gain_direct: 0.25→0.35 (stronger direct boost)
+- reinforcement_gain_assoc: 0.10→0.20 (leverage 955 association links)
+- stability_cap: 1.0→1.5 (allow more stability accumulation)
+- lambda_fact: 0.015→0.012 (slower fact decay)
+
+The 414/416 memories with associations mean association-based reinforcement
+can propagate survival to semantically related clusters. This should create
+natural "important cluster survives, isolated nodes die" dynamics.

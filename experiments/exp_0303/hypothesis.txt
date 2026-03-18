@@ -1,0 +1,5 @@
+Moderate floor tightening: sigmoid_mid 0.25→0.32, episode lambda 0.040→0.050.
+
+exp_0302 showed sigmoid_mid=0.40 was too aggressive — lost 0.08 recall for
+only 0.003 precision_lift gain. Try a gentler midpoint to find the sweet spot
+where some pruning happens without killing too many correct answers.

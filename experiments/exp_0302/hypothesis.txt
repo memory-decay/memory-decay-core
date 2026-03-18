@@ -1,0 +1,14 @@
+Tighten sigmoid floor to high-impact memories only + stronger episode decay.
+
+exp_0301 showed recall_mean ≈ similarity_recall (0.277 vs 0.280), meaning
+activation filtering loses almost nothing. But precision_lift ≈ 0 because
+the floor (sigmoid_mid=0.25) protects nearly all memories.
+
+Changes:
+1. sigmoid_mid 0.25→0.40: only memories with importance > 0.40 get floor
+2. lambda_episode 0.040→0.060: faster episode decay (3x fact, closer to
+   cognitive science recommendation of 2-5x ratio)
+3. jost_power 1.5→2.0: more aggressive pruning of high-activation excess
+
+Expected: precision_lift increases as low-impact distractors die. Some recall
+loss acceptable if precision_lift compensates (30% weight vs 40% for recall).

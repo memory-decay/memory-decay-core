@@ -1,0 +1,9 @@
+Keep exp_0301 floor (sigmoid_mid=0.25) but add prune acceleration for
+low-importance memories. Instead of tightening floor (which kills recall),
+multiply decay rate by prune_factor when importance < sigmoid_mid.
+
+This preserves recall for important memories while accelerating death of
+distractors — targeting precision_lift without recall sacrifice.
+
+Also try slower base decay (lambda_fact 0.015→0.012) to give important
+memories more time above threshold.
