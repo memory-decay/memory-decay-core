@@ -69,9 +69,22 @@ Read `experiments/exp_NNNN/results.json`. Key metrics:
 
 ### 6. Judge
 Compare `overall_score` with `experiments/best/results.json`:
-- **Improved**: update `experiments/best/` symlink, git commit
+- **Improved**: update `experiments/best/` symlink, git commit (Lore format)
 - **No gain**: record in history, move on
 - **Validation failed**: record error, adjust next hypothesis
+
+**Git commit format (Lore)** — only on improvement:
+```
+exp_NNNN: overall 0.24→0.31 (+0.07) via <short description>
+
+<what changed in the decay function and why>
+
+Rejected: <alternative tried earlier> | <why it didn't work>
+Confidence: <high | medium | low>
+Scope-risk: narrow
+Tested: 200-tick simulation, threshold sweep [0.2,0.3,0.4,0.5]
+Directive: <any warning for future experiments>
+```
 
 ### 7. Record
 Append one line to `experiments/history.jsonl`:
