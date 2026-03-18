@@ -1,0 +1,4 @@
+Same architecture as exp_0229 but with higher floor_max=0.65. This ensures
+high-impact memories (impact>0.7) have floors above 0.5, preserving recall at
+all thresholds for the most important memories. The wider floor range (0.25-0.65)
+should maintain discrimination while improving recall_mean vs exp_0228.

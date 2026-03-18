@@ -1,0 +1,4 @@
+Same as exp_0228 but with higher floor range (0.25-0.60) to preserve more recall
+while still creating threshold discrimination. The higher floor_min ensures fewer
+memories fall below threshold 0.2, maintaining recall_mean. Slightly slower
+approach_rate=0.025 to keep some memories further from floor at tick 200.

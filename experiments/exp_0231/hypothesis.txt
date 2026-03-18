@@ -1,0 +1,6 @@
+Linear floor scaling (power=1.0) instead of sqrt. This concentrates floor boost
+at high impact values — low/medium impact memories get lower floors (more
+discrimination), while high-impact memories get high floors (preserved recall).
+Higher floor_min=0.30 ensures almost all memories stay above threshold 0.2.
+Slower approach_rate=0.02 keeps some activation spread even among memories
+approaching their floor.

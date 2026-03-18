@@ -1,0 +1,7 @@
+Impact-dependent floor with constant approach rate for threshold discrimination.
+Key change: use a constant approach_rate (not divided by combined) so memories
+converge to their impact-dependent floors within 200 ticks. sqrt(impact) floor
+scaling spreads activation across the 0.15-0.55 range, creating different recall
+rates at different thresholds (discrimination). The consolidation phase is kept
+for smooth initial decay. This targets the new evaluator formula which weights
+threshold_discrimination at 20% of retrieval_score.

@@ -1,0 +1,6 @@
+Quadratic excess decay: new_excess = excess * (1 - rate * excess). This decays
+faster when far from floor and slower near floor, creating a distribution where
+more memories converge near their floors. Combined with impact-dependent floors
+(convex, 0.25-0.60) and type differentiation. The early experiments (exp_0001-0019)
+using quadratic decay achieved recall ~0.49. This approach combines that with
+the impact-dependent architecture for discrimination and correlation.
