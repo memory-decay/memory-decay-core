@@ -1,0 +1,9 @@
+Switch from quadratic (a^2) to cubic (a^3) decay rate, giving 1/sqrt(t) tail
+instead of 1/t. This keeps items above higher thresholds longer. With
+lambda_fact=0.010 and lambda_episode=0.020, combined with exp(alpha*impact):
+- Low-impact fact: a(200) ≈ 1/sqrt(4+4.0) = 0.354
+- High-impact fact: a(200) ≈ 1/sqrt(4+0.54) = 0.469 — near 0.5!
+- Low-impact episode: a(200) ≈ 1/sqrt(4+8.0) = 0.289
+- High-impact episode: a(200) ≈ 1/sqrt(4+1.08) = 0.444
+
+Expected: recall@0.4 > 0.40, recall@0.5 > 0.20, recall_mean > 0.42.
