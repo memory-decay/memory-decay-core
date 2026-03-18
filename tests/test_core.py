@@ -410,3 +410,62 @@ class TestEvaluator:
         weak = evaluator.score_summary(queries)["plausibility_score"]
 
         assert strong > weak
+
+
+# --- Custom Decay Function Tests ---
+
+class TestCustomDecayFn:
+    def test_custom_fn_is_used_when_provided(self):
+        graph = make_graph()
+        graph.add_memory("m1", "fact", "테스트 기억", 0.5, 0)
+
+        def my_decay(activation, impact, stability, mtype, params):
+            return activation * 0.5  # Always halve
+
+        engine = DecayEngine(graph, custom_decay_fn=my_decay)
+        engine.tick()
+
+        node = graph.get_node("m1")
+        assert abs(node["activation_score"] - 0.5) < 1e-6
+
+    def test_default_behavior_when_no_custom_fn(self):
+        graph = make_graph()
+        graph.add_memory("m1", "fact", "테스트 기억", 0.5, 0)
+
+        engine = make_exponential_engine(graph)
+        engine.tick()
+
+        node = graph.get_node("m1")
+        assert node["activation_score"] != 0.5
+        assert 0.0 < node["activation_score"] < 1.0
+
+    def test_custom_fn_output_clamped_to_0_1(self):
+        graph = make_graph()
+        graph.add_memory("m1", "fact", "테스트 기억", 0.5, 0)
+
+        def bad_decay(activation, impact, stability, mtype, params):
+            return 5.0  # Out of range
+
+        engine = DecayEngine(graph, custom_decay_fn=bad_decay)
+        engine.tick()
+
+        node = graph.get_node("m1")
+        assert node["activation_score"] == 1.0  # Clamped
+
+    def test_custom_fn_receives_params(self):
+        graph = make_graph()
+        graph.add_memory("m1", "fact", "테스트 기억", 0.5, 0)
+
+        received = {}
+
+        def spy_decay(activation, impact, stability, mtype, params):
+            received.update(params)
+            return activation * 0.9
+
+        engine = DecayEngine(
+            graph, custom_decay_fn=spy_decay,
+            params={"lambda_fact": 0.99}
+        )
+        engine.tick()
+
+        assert received["lambda_fact"] == 0.99

@@ -21,10 +21,12 @@ class DecayEngine:
         graph: MemoryGraph,
         decay_type: Literal["exponential", "power_law"] = "exponential",
         params: dict | None = None,
+        custom_decay_fn=None,
     ):
         self._graph = graph
         self.decay_type = decay_type
         self.current_tick = 0
+        self._custom_decay_fn = custom_decay_fn
 
         # Tuned for gradual decay over ~200 ticks
         # Exponential: e^(-0.02) per tick → after 100 ticks: 0.135 (fact, low impact)
@@ -64,6 +66,12 @@ class DecayEngine:
         Power law:   A_new = A₀ * (1 + β_eff)^(-1)
           where β_eff = β / ((1 + α * impact) * (1 + ρ * stability))
         """
+        if self._custom_decay_fn is not None:
+            result = self._custom_decay_fn(
+                initial_activation, impact, stability, mtype, self._params
+            )
+            return min(max(result, 0.0), 1.0)
+
         alpha = self._params["alpha"]
         rho = self._params["stability_weight"]
         impact_factor = 1.0 + alpha * impact
