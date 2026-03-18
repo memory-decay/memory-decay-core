@@ -1,78 +1,97 @@
-# Human-like Memory Decay System
+# Human-Memory-Inspired Memory Decay System
 
-A research project modeling human memory with decay functions, re-activation, and impact factors using graph-based associations and LLM-driven auto-improvement. The system simulates how memories fade over time following configurable decay curves (exponential and power law), how accessing related memories can re-activate fading ones, and how emotional significance affects retention — then uses an AI agent to iteratively optimize the model's parameters.
+Research code for a graph-based memory simulator that separates short-term `activation` from long-term `stability`, compares exponential vs power-law forgetting, and supports reinforcement-aware reactivation plus LLM-driven parameter search.
 
-## Key Research Questions
+The project is intentionally framed as a **human-memory-inspired AI memory model**, not a literal model of human cognition. Current experiments still use synthetic Korean memory datasets, and real-user validation remains future work.
 
-1. **Exponential vs power law**: which decay function better matches human-like recall patterns?
-2. **Re-activation effect**: how much does accessing associated memories affect preservation of related memories?
-3. **Fact vs episode decay**: is there a meaningful difference in decay rates between factual knowledge and episodic memories?
-4. **Impact and retention**: do high-impact (emotionally significant) memories stay recallable longer, and by how much?
+## What Changed In The Reinforcement Redesign
 
-## Architecture Overview
+- Memory nodes now track `activation_score`, `stability_score`, `retrieval_count`, and `last_reinforced_tick`
+- Re-activation distinguishes `direct` recall from weaker `cascade` reinforcement
+- Decay slows down as a function of both `impact` and accumulated `stability`
+- Evaluation is no longer anchored to a single activation threshold
+- The main summary now separates:
+  - `retrieval_score`
+  - `plausibility_score`
+  - `overall_score`
 
-```
-┌─────────────────────────────┐
-│   SyntheticDataGenerator    │  (Anthropic API)
-│   Generate memory items &   │
-│   recall test queries       │
-└─────────────┬───────────────┘
-              │ JSONL dataset
-              ▼
-┌─────────────────────────────┐
-│        MemoryGraph          │  (NetworkX + sentence-transformers)
-│   Nodes: memory items       │
-│   Edges: associations       │
-│   Embeddings: MiniLM-L6-v2  │
-└─────────────┬───────────────┘
-              │
-              ▼
-┌─────────────────────────────┐
-│        DecayEngine          │
-│   Exponential / Power Law   │
-│   Impact modifier           │
-│   Re-activation cascades    │
-└─────────────┬───────────────┘
-              │
-              ▼
-┌─────────────────────────────┐
-│         Evaluator           │
-│   5-metric composite score  │
-│   Periodic recall tests     │
-└─────────────┬───────────────┘
-              │
-              ▼
-┌─────────────────────────────┐
-│       AutoImprover          │  (Anthropic API)
-│   Analyze results           │
-│   Propose parameter changes │
-│   Iterative improvement     │
-└─────────────────────────────┘
-```
-
-## Tech Stack
-
-- **Python** — core language
-- **NetworkX** — graph-based memory representation
-- **sentence-transformers** — embedding generation (all-MiniLM-L6-v2, 384-dim)
-- **Anthropic API** — synthetic data generation and auto-improvement agent
-- **NumPy** — numerical computation for decay functions and evaluation metrics
-
-## Project Structure
+## Architecture
 
 ```
-src/memory_decay/
-  graph.py          # MemoryGraph: NetworkX-based memory store
-  decay.py          # DecayEngine: decay functions and re-activation
-  evaluator.py      # Evaluator: multi-metric recall evaluation
-  data_gen.py       # SyntheticDataGenerator: Anthropic-powered data creation
-  auto_improver.py  # AutoImprover: LLM-driven parameter optimization
+SyntheticDataGenerator (OpenAI API)
+  -> JSONL dataset
+    -> MemoryGraph (NetworkX + sentence-transformers)
+      -> Nodes: activation, stability, impact, retrieval metadata
+      -> Edges: weighted associations
+        -> DecayEngine
+          -> Exponential / power-law forgetting
+          -> Impact-aware slowing
+          -> Stability-aware slowing
+          -> Direct / cascade reinforcement
+            -> Evaluator
+              -> threshold_sweep()
+              -> score_summary()
+              -> recall / precision / plausibility diagnostics
+                -> AutoImprover (OpenAI API)
 ```
 
-## Getting Started
+## Key Parameters
+
+- `lambda_fact`, `lambda_episode`: base exponential decay rates
+- `beta_fact`, `beta_episode`: base power-law decay rates
+- `alpha`: impact modifier strength
+- `stability_weight`: how much accumulated stability slows future decay
+- `stability_decay`: how quickly reinforcement fades
+- `reinforcement_gain_direct`: stability increase for direct recall
+- `reinforcement_gain_assoc`: weaker stability increase for associated recall
+- `stability_cap`: upper bound on reinforcement strength
+
+## Evaluation Model
+
+`Evaluator.threshold_sweep()` measures recall and precision over the fixed grid `[0.2, 0.3, 0.4, 0.5]`.
+
+`Evaluator.score_summary()` reports:
+
+- `retrieval_score = 0.7 * recall_mean + 0.3 * precision_mean`
+- `plausibility_score = 0.6 * corr_score + 0.4 * smoothness_score`
+- `overall_score = 0.7 * retrieval_score + 0.3 * plausibility_score`
+
+`composite_score()` remains as a backward-compatible alias to `overall_score`.
+
+## Canonical Data And Scripts
+
+- Canonical checked-in dataset: `data/memories_500.jsonl`
+- Auto-improvement entrypoint: `scripts/run_auto_improve.py`
+- Visualization entrypoint: `scripts/visualize.py`
+- Current research draft: `docs/final-report.md`
+- Embedding backend default: `auto` (`GEMINI_API_KEY`가 있으면 Gemini, 없으면 local sentence-transformers)
+
+The visualization script now supports:
+
+- `recall_curves.png`
+- `precision_curves.png`
+- `combined_comparison.png`
+- `threshold_sensitivity.png`
+- `reinforcement_ablation.png`
+- `auto_improvement_rounds.png`
+
+## Development
 
 ```bash
-pip install -e .
+uv sync --extra dev
+PYTHONPATH=src uv run pytest -q
 ```
 
-See [design spec](docs/superpowers/specs/2026-03-17-memory-decay-design.md) for full architecture and implementation details.
+Example simulation run:
+
+```bash
+PYTHONPATH=src uv run python -m memory_decay.main \
+  --dataset data/memories_500.jsonl \
+  --decay-type exponential \
+  --embedding-backend auto \
+  --reactivation-policy scheduled_query \
+  --total-ticks 200 \
+  --eval-interval 20
+```
+
+See [design spec](docs/superpowers/specs/2026-03-17-memory-decay-design.md) for the original architecture notes and [final report](docs/final-report.md) for the current research narrative.

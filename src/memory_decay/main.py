@@ -25,7 +25,7 @@ from .auto_improver import AutoImprover
 
 
 def build_graph_from_dataset(
-    dataset: list[dict], embedder=None, embedding_backend: str = "local"
+    dataset: list[dict], embedder=None, embedding_backend: str = "auto"
 ) -> MemoryGraph:
     """Load a dataset into a MemoryGraph."""
     graph = MemoryGraph(embedder=embedder, embedding_backend=embedding_backend)
@@ -58,7 +58,10 @@ def run_simulation(
     test_queries: list[tuple[str, str]],
     total_ticks: int = 100,
     eval_interval: int = 5,
+    reactivation_policy: str = "none",
     reactivation_interval: int = 10,
+    reactivation_boost: float = 0.3,
+    seed: Optional[int] = None,
 ) -> list[dict]:
     """Run a simulation and return evaluation snapshots.
 
@@ -69,37 +72,82 @@ def run_simulation(
         test_queries: List of (query, expected_id) pairs.
         total_ticks: Total simulation ticks.
         eval_interval: Evaluate every N ticks.
-        reactivation_interval: Randomly re-activate a memory every N ticks.
+        reactivation_policy: Re-activation policy: none, random, scheduled_query.
+        reactivation_interval: Apply the selected policy every N ticks.
+        reactivation_boost: Activation boost for direct re-activation.
+        seed: Random seed used by the random policy.
 
     Returns:
-        List of evaluation snapshots.
+        List of evaluation summaries.
     """
-    snapshots = []
+    if reactivation_policy not in {"none", "random", "scheduled_query"}:
+        raise ValueError(f"Unsupported reactivation_policy: {reactivation_policy}")
+
+    rng = random.Random(seed)
+    summaries = []
+    params = engine.get_params()
+
+    def collect_summary() -> dict:
+        snap = evaluator.snapshot(test_queries)
+        summary = evaluator.score_summary(test_queries)
+        summary["tick"] = snap["tick"]
+        return summary
+
+    def apply_reactivation(tick: int) -> None:
+        if reactivation_policy == "none" or tick % reactivation_interval != 0:
+            return
+
+        if reactivation_policy == "random":
+            candidates = [
+                nid
+                for nid, attrs in graph._graph.nodes(data=True)
+                if attrs.get("type") not in ("unknown", None)
+                and attrs.get("created_tick", 0) <= engine.current_tick
+            ]
+            if not candidates:
+                return
+            target_id = rng.choice(candidates)
+        else:
+            if not test_queries:
+                return
+            query_index = ((tick // reactivation_interval) - 1) % len(test_queries)
+            _, target_id = test_queries[query_index]
+
+        graph.re_activate(
+            target_id,
+            reactivation_boost,
+            source="direct",
+            reinforce=True,
+            current_tick=engine.current_tick,
+            reinforcement_gain_direct=params["reinforcement_gain_direct"],
+            reinforcement_gain_assoc=params["reinforcement_gain_assoc"],
+            stability_cap=params["stability_cap"],
+        )
 
     # Initial evaluation (tick 0)
-    snap = evaluator.snapshot(test_queries)
-    snapshots.append(snap)
-    print(f"  Tick {snap['tick']:>4d} | recall={snap['recall_rate']:.3f} | "
-          f"precision={snap['precision_rate']:.3f} | composite={snap.get('composite_score', 0):.3f}")
+    summary = collect_summary()
+    summaries.append(summary)
+    print(
+        f"  Tick {summary['tick']:>4d} | recall={summary['recall_rate']:.3f} | "
+        f"precision={summary['precision_rate']:.3f} | retrieval={summary['retrieval_score']:.3f} | "
+        f"overall={summary['overall_score']:.3f}"
+    )
 
     for t in range(1, total_ticks + 1):
-        # Random re-activation (simulates encountering related information)
-        if t % reactivation_interval == 0:
-            all_ids = [nid for nid, attrs in graph._graph.nodes(data=True)
-                       if attrs.get("type") not in ("unknown", None)]
-            if all_ids:
-                target = random.choice(all_ids)
-                graph.re_activate(target, 0.3)
+        apply_reactivation(t)
 
         engine.tick()
 
         if t % eval_interval == 0:
-            snap = evaluator.snapshot(test_queries)
-            snapshots.append(snap)
-            print(f"  Tick {snap['tick']:>4d} | recall={snap['recall_rate']:.3f} | "
-                  f"precision={snap['precision_rate']:.3f} | composite={snap.get('composite_score', 0):.3f}")
+            summary = collect_summary()
+            summaries.append(summary)
+            print(
+                f"  Tick {summary['tick']:>4d} | recall={summary['recall_rate']:.3f} | "
+                f"precision={summary['precision_rate']:.3f} | retrieval={summary['retrieval_score']:.3f} | "
+                f"overall={summary['overall_score']:.3f}"
+            )
 
-    return snapshots
+    return summaries
 
 
 def run_experiment(
@@ -107,8 +155,10 @@ def run_experiment(
     num_memories: int = 50,
     total_ticks: int = 100,
     eval_interval: int = 5,
+    reactivation_policy: str = "none",
+    embedding_backend: str = "auto",
     guidance_level: str = "default",
-    improvement_budget: int = 5,
+    improvement_budget: int = 12,
     api_key: Optional[str] = None,
     dataset_path: Optional[str] = None,
     output_path: Optional[str] = None,
@@ -143,7 +193,7 @@ def run_experiment(
 
     # Step 3: Build graph
     print("Building memory graph...")
-    graph = build_graph_from_dataset(dataset)
+    graph = build_graph_from_dataset(dataset, embedding_backend=embedding_backend)
 
     # Step 4: Initial parameters
     params = {
@@ -152,6 +202,11 @@ def run_experiment(
         "beta_fact": 0.3,
         "beta_episode": 0.5,
         "alpha": 0.5,
+        "stability_weight": 0.8,
+        "stability_decay": 0.01,
+        "reinforcement_gain_direct": 0.2,
+        "reinforcement_gain_assoc": 0.05,
+        "stability_cap": 1.0,
     }
 
     # Step 5: Initial run
@@ -159,12 +214,15 @@ def run_experiment(
     evaluator = Evaluator(graph, engine)
 
     print(f"\n=== Initial Run (decay_type={decay_type}) ===")
-    initial_snapshots = run_simulation(
+    initial_summaries = run_simulation(
         graph, engine, evaluator, test_queries,
         total_ticks=total_ticks, eval_interval=eval_interval,
+        reactivation_policy=reactivation_policy,
+        seed=seed,
     )
-    initial_score = evaluator.composite_score(test_queries)
-    print(f"Initial composite score: {initial_score:.4f}")
+    initial_summary = initial_summaries[-1]
+    initial_score = initial_summary["overall_score"]
+    print(f"Initial overall score: {initial_score:.4f}")
 
     # Step 6: Auto-improvement loop
     improvement_history = []
@@ -175,7 +233,7 @@ def run_experiment(
             guidance_level=guidance_level,
         )
 
-        all_eval_history = evaluator.history[:]
+        all_eval_history = initial_summaries[:]
 
         for i in range(improvement_budget):
             if improver.should_stop(all_eval_history, i, improvement_budget):
@@ -189,25 +247,33 @@ def run_experiment(
             print(f"  Params: {json.dumps(new_params, indent=4)}")
 
             # Reset graph and run with new params
-            graph2 = build_graph_from_dataset(dataset, embedder=graph._get_embedder())
+            graph2 = build_graph_from_dataset(
+                dataset,
+                embedder=graph._get_embedder(),
+                embedding_backend=embedding_backend,
+            )
             engine2 = DecayEngine(graph2, decay_type=decay_type, params=new_params)
             evaluator2 = Evaluator(graph2, engine2)
 
-            run_simulation(
+            summaries = run_simulation(
                 graph2, engine2, evaluator2, test_queries,
                 total_ticks=total_ticks, eval_interval=eval_interval,
+                reactivation_policy=reactivation_policy,
+                seed=seed,
             )
-            score = evaluator2.composite_score(test_queries)
-            print(f"  Composite score: {score:.4f}")
+            score_summary = summaries[-1]
+            score = score_summary["overall_score"]
+            print(f"  Overall score: {score:.4f}")
 
             improvement_history.append({
                 "iteration": i,
                 "params": new_params,
-                "composite_score": score,
-                "snapshots": evaluator2.history,
+                "score_summary": score_summary,
+                "overall_score": score,
+                "snapshots": summaries,
             })
 
-            all_eval_history.extend(evaluator2.history)
+            all_eval_history.extend(summaries)
             params = new_params
 
             # Clean up to free memory
@@ -218,11 +284,15 @@ def run_experiment(
         "decay_type": decay_type,
         "num_memories": len(dataset),
         "total_ticks": total_ticks,
-        "initial_params": params,
-        "initial_snapshots": initial_snapshots,
+        "initial_params": engine.get_params(),
+        "initial_snapshots": initial_summaries,
+        "initial_score_summary": initial_summary,
+        "initial_overall_score": initial_score,
         "initial_composite_score": initial_score,
         "improvement_history": improvement_history,
         "guidance_level": guidance_level,
+        "reactivation_policy": reactivation_policy,
+        "embedding_backend": embedding_backend,
     }
 
     if output_path:
@@ -241,8 +311,18 @@ def main():
     parser.add_argument("--num-memories", type=int, default=50)
     parser.add_argument("--total-ticks", type=int, default=100)
     parser.add_argument("--eval-interval", type=int, default=5)
+    parser.add_argument(
+        "--embedding-backend",
+        choices=["auto", "local", "gemini"],
+        default="auto",
+    )
+    parser.add_argument(
+        "--reactivation-policy",
+        choices=["none", "random", "scheduled_query"],
+        default="none",
+    )
     parser.add_argument("--guidance", choices=["minimal", "default", "expert"], default="default")
-    parser.add_argument("--budget", type=int, default=5, help="Auto-improvement iterations")
+    parser.add_argument("--budget", type=int, default=12, help="Auto-improvement iterations")
     parser.add_argument("--dataset", type=str, default=None, help="Path to JSONL dataset")
     parser.add_argument("--output", type=str, default="data/results.json", help="Output path")
     parser.add_argument("--seed", type=int, default=42)
@@ -253,6 +333,8 @@ def main():
         num_memories=args.num_memories,
         total_ticks=args.total_ticks,
         eval_interval=args.eval_interval,
+        reactivation_policy=args.reactivation_policy,
+        embedding_backend=args.embedding_backend,
         guidance_level=args.guidance,
         improvement_budget=args.budget,
         dataset_path=args.dataset,

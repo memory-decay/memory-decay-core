@@ -14,31 +14,33 @@ from openai import OpenAI
 
 # Pre-defined guidance levels
 GUIDANCE = {
-    "minimal": "Improve recall_rate while maintaining precision > 0.8.",
+    "minimal": (
+        "Improve overall_score with emphasis on retrieval_score. "
+        "Avoid near-perfect retention across all ticks."
+    ),
     "default": """You are optimizing a memory decay system. The system models human memory using:
-- Decay functions: exponential (A(t) = A₀·e^(-λt)·(1+α·impact)) or power law (A(t) = A₀·(t+1)^(-β)·(1+α·impact))
-- Re-activation: when associated memories are activated, activation gets boosted
+- Decay functions: exponential or power law
+- Impact modifier: higher impact slows forgetting
+- Stability reinforcement: direct recalls and cascades increase long-term stability
 - Per-type parameters: facts and episodes have separate decay rates
-- Higher impact memories decay slower (alpha parameter)
-Adjust parameters to maximize the composite score.""",
-    "expert": """You are optimizing a memory decay system based on cognitive science principles:
+Optimize for overall_score, but treat retrieval_score as the primary driver and plausibility_score as a guardrail.""",
+    "expert": """You are optimizing a reinforcement-aware memory decay system.
 
-1. Ebbinghaus Forgetting Curve: Memory retention follows R = e^(-t/S) where S is stability.
-   Higher stability = slower decay. Impact should increase stability.
+Tune these behaviors directly:
+- lambda_fact / lambda_episode: base forgetting speed for each memory type
+- beta_fact / beta_episode: power-law forgetting speed for each memory type
+- alpha: how much memory impact slows forgetting
+- stability_weight (rho): how much accumulated stability slows future decay
+- stability_decay (mu): how quickly reinforcement fades if not revisited
+- reinforcement_gain_direct (r_direct): how much a directly recalled memory hardens
+- reinforcement_gain_assoc (r_assoc): how much associated memories harden
+- stability_cap: upper bound on reinforcement strength
 
-2. Spacing Effect: Repeated activation at increasing intervals strengthens memory more
-   than massed practice. The re-activation boost should be meaningful but not overwhelming.
-
-3. Levels of Processing: Deeper semantic processing creates stronger memories.
-   Episodes (personal experiences) often have richer encoding than facts.
-
-4. Serial Position Effect: Items encountered first and last are better remembered.
-   The decay curve should show characteristic patterns.
-
-Parameters to tune: lambda_fact, lambda_episode, beta_fact, beta_episode, alpha (impact modifier).
-The re-activation cascade boost is fixed at 0.5 * weight.
-Aim for a forgetting curve that is smooth (not jagged) and realistic (shows gradual decay,
-not sudden drops or near-perfect retention at all times).""",
+Prefer parameter sets that:
+1. Improve retrieval_score across the threshold grid, not just at one threshold
+2. Keep plausibility_score healthy via positive activation-recall correlation and smooth curves
+3. Avoid pathological flat recall curves near 1.0 across all ticks
+4. Use cascade reinforcement conservatively relative to direct reinforcement""",
 }
 
 
@@ -142,7 +144,9 @@ class AutoImprover:
             "iteration": iteration,
             "current_params": current_params,
             "proposed_params": validated,
-            "last_composite": evaluation_history[-1].get("composite_score", 0)
+            "last_overall": evaluation_history[-1].get(
+                "overall_score", evaluation_history[-1].get("composite_score", 0)
+            )
             if evaluation_history
             else 0,
             "reasoning": result.get("reasoning", text[:500]),
@@ -177,14 +181,14 @@ class AutoImprover:
 - Guidance level: {self.guidance_level}
 
 ## Task
-Based on the evaluation results, propose new parameter values to improve the composite score.
+Based on the evaluation results, propose new parameter values to improve the overall_score.
 
 Analyze:
-1. Is recall_rate too low or too high? (suspicious if > 0.95 at all ticks)
-2. Is precision_rate adequate? (should stay > 0.8)
-3. Is the activation-recall correlation strong? (should be high positive)
-4. Is there meaningful difference between fact and episode recall? (fact_episode_delta)
-5. Is the forgetting curve smooth? (low smoothness variance = better)
+1. Is retrieval_score improving across thresholds, not just at one cutoff?
+2. Is plausibility_score supported by positive activation-recall correlation?
+3. Is reinforcement too strong, causing unrealistically flat retention?
+4. Are direct and associative reinforcement gains proportionate?
+5. Is the forgetting curve smooth without collapsing to zero too quickly?
 
 Respond with JSON:
 ```json
@@ -195,20 +199,44 @@ Respond with JSON:
     "lambda_episode": <float, 0.001-0.5>,
     "beta_fact": <float, 0.01-2.0>,
     "beta_episode": <float, 0.01-2.0>,
-    "alpha": <float, 0.0-2.0>
+    "alpha": <float, 0.0-2.0>,
+    "stability_weight": <float, 0.0-5.0>,
+    "stability_decay": <float, 0.0-0.5>,
+    "reinforcement_gain_direct": <float, 0.0-1.0>,
+    "reinforcement_gain_assoc": <float, 0.0-1.0>,
+    "stability_cap": <float, 0.1-5.0>
   }}
 }}
 ```
 
 JSON만 출력해주세요. 설명은 reasoning 필드에 넣어주세요."""
 
+    def _canonicalize_param_names(self, proposed: dict) -> dict:
+        aliases = {
+            "rho": "stability_weight",
+            "mu": "stability_decay",
+            "r_direct": "reinforcement_gain_direct",
+            "r_assoc": "reinforcement_gain_assoc",
+        }
+        canonical = dict(proposed)
+        for alias, canonical_name in aliases.items():
+            if alias in canonical and canonical_name not in canonical:
+                canonical[canonical_name] = canonical[alias]
+        return canonical
+
     def _validate_params(self, proposed: dict, current: dict) -> dict:
+        proposed = self._canonicalize_param_names(proposed)
         ranges = {
             "lambda_fact": (0.001, 0.5),
             "lambda_episode": (0.001, 0.5),
             "beta_fact": (0.01, 2.0),
             "beta_episode": (0.01, 2.0),
             "alpha": (0.0, 2.0),
+            "stability_weight": (0.0, 5.0),
+            "stability_decay": (0.0, 0.5),
+            "reinforcement_gain_direct": (0.0, 1.0),
+            "reinforcement_gain_assoc": (0.0, 1.0),
+            "stability_cap": (0.1, 5.0),
         }
 
         validated = {}
@@ -227,14 +255,16 @@ JSON만 출력해주세요. 설명은 reasoning 필드에 넣어주세요."""
         evaluation_history: list[dict],
         iteration: int,
         total_budget: int,
-        patience: int = 3,
+        patience: int = 4,
     ) -> bool:
         if iteration >= total_budget:
             return True
 
         recent = evaluation_history[-patience:] if evaluation_history else []
         if len(recent) >= patience:
-            scores = [h.get("composite_score", 0) for h in recent]
+            scores = [
+                h.get("overall_score", h.get("composite_score", 0)) for h in recent
+            ]
             if max(scores) == scores[0]:
                 return True
 

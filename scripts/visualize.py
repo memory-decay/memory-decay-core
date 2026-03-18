@@ -30,6 +30,30 @@ def load_results(path: str) -> dict:
         return json.load(f)
 
 
+def extract_model_score(result: dict) -> float:
+    if "initial_score_summary" in result:
+        return result["initial_score_summary"].get("overall_score", 0.0)
+    if "score_summary" in result:
+        return result["score_summary"].get("overall_score", 0.0)
+    if "overall_score" in result:
+        return result.get("overall_score", 0.0)
+    return result.get("composite_score", 0.0)
+
+
+def extract_threshold_metrics(result: dict) -> dict:
+    if "initial_score_summary" in result:
+        raw = result["initial_score_summary"].get("threshold_metrics", {})
+    elif result.get("snapshots"):
+        raw = result["snapshots"][-1].get("threshold_metrics", {})
+    else:
+        raw = result.get("threshold_metrics", {})
+
+    normalized = {}
+    for key, value in raw.items():
+        normalized[float(key)] = value
+    return normalized
+
+
 def plot_recall_curves(results: dict, output_path: str):
     """Recall rate over time for exponential vs power law."""
     exp = results["exponential"]["snapshots"]
@@ -41,8 +65,8 @@ def plot_recall_curves(results: dict, output_path: str):
     pl_recall = [s["recall_rate"] for s in pl]
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.plot(exp_ticks, exp_recall, "o-", color="#2196F3", linewidth=2, markersize=6, label=f"Exponential (score: {results['exponential']['composite_score']:.4f})")
-    ax.plot(pl_ticks, pl_recall, "s-", color="#FF5722", linewidth=2, markersize=6, label=f"Power Law (score: {results['power_law']['composite_score']:.4f})")
+    ax.plot(exp_ticks, exp_recall, "o-", color="#2196F3", linewidth=2, markersize=6, label=f"Exponential (overall: {extract_model_score(results['exponential']):.4f})")
+    ax.plot(pl_ticks, pl_recall, "s-", color="#FF5722", linewidth=2, markersize=6, label=f"Power Law (overall: {extract_model_score(results['power_law']):.4f})")
 
     ax.set_xlabel("Time (ticks)", fontsize=12)
     ax.set_ylabel("Recall Rate", fontsize=12)
@@ -151,6 +175,104 @@ def plot_decay_shape_comparison(results: dict, output_path: str):
     print(f"Saved: {output_path}")
 
 
+def plot_threshold_sensitivity(results: dict, output_path: str):
+    """Plot threshold-grid recall means for each model."""
+    exp_metrics = extract_threshold_metrics(results["exponential"])
+    pl_metrics = extract_threshold_metrics(results["power_law"])
+    if not exp_metrics or not pl_metrics:
+        print("Skipping threshold sensitivity plot: threshold metrics not found")
+        return
+
+    thresholds = sorted(float(k) for k in exp_metrics.keys())
+    exp_recall = [exp_metrics[t]["recall_rate"] for t in thresholds]
+    pl_recall = [pl_metrics[t]["recall_rate"] for t in thresholds]
+    exp_precision = [exp_metrics[t]["precision_rate"] for t in thresholds]
+    pl_precision = [pl_metrics[t]["precision_rate"] for t in thresholds]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
+    ax1.plot(thresholds, exp_recall, "o-", color="#2196F3", lw=2, label="Exponential")
+    ax1.plot(thresholds, pl_recall, "s-", color="#FF5722", lw=2, label="Power Law")
+    ax1.set_title("Threshold Sensitivity: Recall")
+    ax1.set_xlabel("Activation Threshold")
+    ax1.set_ylabel("Recall Rate")
+    ax1.grid(True, alpha=0.3)
+    ax1.legend()
+
+    ax2.plot(thresholds, exp_precision, "o-", color="#2196F3", lw=2, label="Exponential")
+    ax2.plot(thresholds, pl_precision, "s-", color="#FF5722", lw=2, label="Power Law")
+    ax2.set_title("Threshold Sensitivity: Precision")
+    ax2.set_xlabel("Activation Threshold")
+    ax2.set_ylabel("Precision Rate")
+    ax2.grid(True, alpha=0.3)
+    ax2.legend()
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    print(f"Saved: {output_path}")
+
+
+def plot_reinforcement_ablation(results: dict, output_path: str):
+    """Plot reinforcement ablation if present in the results payload."""
+    ablation = results.get("reinforcement_ablation", {})
+    if not ablation:
+        print("Skipping reinforcement ablation plot: no ablation data found")
+        return
+
+    labels = list(ablation.keys())
+    retrieval = [ablation[label].get("retrieval_score", 0.0) for label in labels]
+    overall = [ablation[label].get("overall_score", 0.0) for label in labels]
+
+    x = np.arange(len(labels))
+    width = 0.35
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    ax.bar(x - width / 2, retrieval, width, label="Retrieval", color="#2196F3")
+    ax.bar(x + width / 2, overall, width, label="Overall", color="#FFB300")
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=10)
+    ax.set_ylabel("Score")
+    ax.set_title("Reinforcement Ablation")
+    ax.legend()
+    ax.grid(True, axis="y", alpha=0.3)
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    print(f"Saved: {output_path}")
+
+
+def plot_auto_improvement_rounds(results: dict, output_path: str):
+    """Plot auto-improvement score trajectories by guidance level."""
+    if not {"minimal", "default", "expert"}.issubset(results.keys()):
+        print("Skipping auto-improvement plot: guidance-level results not found")
+        return
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    colors = {"minimal": "#78909C", "default": "#2E7D32", "expert": "#EF6C00"}
+
+    for level in ("minimal", "default", "expert"):
+        entries = results[level].get("log", [])
+        scores = [results[level].get("baseline_score", 0.0)]
+        scores.extend(
+            entry.get("overall_score", entry.get("score_summary", {}).get("overall_score", 0.0))
+            for entry in entries
+        )
+        rounds = list(range(len(scores)))
+        ax.plot(rounds, scores, "o-", lw=2, ms=5, color=colors[level], label=level)
+
+    ax.set_title("Auto-Improvement Trajectories")
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Overall Score")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    print(f"Saved: {output_path}")
+
+
 if __name__ == "__main__":
     results_path = sys.argv[1] if len(sys.argv) > 1 else "data/comparison_results_korean_emb.json"
     out_dir = sys.argv[2] if len(sys.argv) > 2 else "docs/figures"
@@ -158,7 +280,13 @@ if __name__ == "__main__":
     Path(out_dir).mkdir(parents=True, exist_ok=True)
     results = load_results(results_path)
 
-    plot_recall_curves(results, f"{out_dir}/recall_curves.png")
-    plot_precision_curves(results, f"{out_dir}/precision_curves.png")
-    plot_combined(results, f"{out_dir}/combined_comparison.png")
-    plot_decay_shape_comparison(results, f"{out_dir}/decay_shape_comparison.png")
+    if {"exponential", "power_law"}.issubset(results.keys()):
+        plot_recall_curves(results, f"{out_dir}/recall_curves.png")
+        plot_precision_curves(results, f"{out_dir}/precision_curves.png")
+        plot_combined(results, f"{out_dir}/combined_comparison.png")
+        plot_decay_shape_comparison(results, f"{out_dir}/decay_shape_comparison.png")
+        plot_threshold_sensitivity(results, f"{out_dir}/threshold_sensitivity.png")
+        plot_reinforcement_ablation(results, f"{out_dir}/reinforcement_ablation.png")
+
+    if {"minimal", "default", "expert"}.issubset(results.keys()):
+        plot_auto_improvement_rounds(results, f"{out_dir}/auto_improvement_rounds.png")
