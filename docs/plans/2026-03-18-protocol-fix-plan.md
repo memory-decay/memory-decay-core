@@ -4,7 +4,12 @@
 
 **Goal:** 리뷰에서 지적된 5개 실험 프로토콜 결함을 수정하여, 현재 시스템의 결과가 방법론적으로 타당하도록 만든다.
 
-**Architecture:** 핵심 아키텍처(graph, decay engine)는 그대로 두고, query/evaluation 경로에 시간 필터링을 추가하며, evaluator에 standard precision과 독립적 plausibility 지표를 도입한다. cache_builder와 scheduled_query 정책의 데이터 누수를 분리한다.
+**Architecture:** 핵심 아키텍처(graph, decay engine)는 그대로 두고, query/evaluation 경로에 시간 필터링을 추가하며, evaluator에 strict precision 기반 retrieval_score와 독립적 plausibility 지표를 도입한다. cache_builder와 scheduled_query 정책의 데이터 누수를 분리한다.
+
+**핵심 설계 원칙:**
+- **시간 타당성은 runtime temporal gate가 보장한다.** train/test random split은 역할 분리(rehearsal vs evaluation)를 위한 것이며, 시간적 인과성은 evaluator의 `created_tick <= current_tick` 필터와 reactivation의 temporal eligibility 체크가 담당한다.
+- **retrieval_score의 최적화 목표는 strict precision이다.** `retrieval_score = 0.7 * recall_mean + 0.3 * precision_strict_mean`. associative precision은 별도 진단 지표로만 보고한다.
+- **correlation은 mechanistic plausibility surrogate이다.** 외부 타당성 근거가 아니므로, plausibility_score 내 가중치를 낮춘다 (0.3). smoothness가 0.7.
 
 **Tech Stack:** Python 3.13, networkx, numpy, pytest
 
@@ -199,19 +204,21 @@ def evaluate_recall(self, test_queries, threshold=0.3, top_k=5):
         return 0.0
     current_tick = self._engine.current_tick
     recalled = 0
+    observable = 0  # 분모는 현재 tick에 관측 가능한 query 수
     for query, expected_id in test_queries:
         node = self._graph.get_node(expected_id)
         if not node:
             continue
         if node.get("created_tick", 0) > current_tick:
             continue
+        observable += 1
         if node["activation_score"] < threshold:
             continue
         results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick)
         result_ids = [rid for rid, _ in results]
         if expected_id in result_ids:
             recalled += 1
-    return recalled / len(test_queries)
+    return recalled / max(observable, 1)
 ```
 
 `evaluate_precision` — pass `current_tick`:
@@ -399,8 +406,15 @@ def run_simulation(
                 return
             target_id = rng.choice(candidates)
         else:  # scheduled_query — use rehearsal_targets, NOT test_queries
-            idx = ((tick // reactivation_interval) - 1) % len(rehearsal_targets)
-            target_id = rehearsal_targets[idx]
+            # Filter to only memories that exist at current tick
+            eligible = [
+                mid for mid in rehearsal_targets
+                if graph._graph.nodes[mid].get("created_tick", 0) <= engine.current_tick
+            ]
+            if not eligible:
+                return
+            idx = ((tick // reactivation_interval) - 1) % len(eligible)
+            target_id = eligible[idx]
 
         graph.re_activate(
             target_id, reactivation_boost,
@@ -503,7 +517,9 @@ Expected: FAIL — load_cache returns 3 values, not 4
 
 **Step 3: Write minimal implementation**
 
-`build_cache` — add train/test split, save `rehearsal_targets.json`:
+`build_cache` — add train/test split, save `rehearsal_targets.json`.
+
+**Note:** 이 random split은 **역할 분리**(rehearsal vs evaluation)를 위한 것이다. **시간적 타당성**(미래 기억 제외)은 runtime temporal gate가 보장한다: evaluator의 `created_tick <= current_tick` 필터, reactivation의 temporal eligibility 체크.
 
 ```python
 def build_cache(dataset_path, cache_dir, embedder=None, embedding_backend="auto",
@@ -672,13 +688,16 @@ def evaluate_precision(self, test_queries, threshold=0.3, top_k=5, mode="associa
     total_retrieved = 0
 
     for query, expected_id in test_queries:
+        node = self._graph.get_node(expected_id)
+        if not node or node.get("created_tick", 0) > current_tick:
+            continue
+
         results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick)
 
         if mode == "strict":
             relevant_ids = {expected_id}
         else:
             relevant_ids = set()
-            node = self._graph.get_node(expected_id)
             if node:
                 for assoc_id, _ in self._graph.get_associated(expected_id):
                     relevant_ids.add(assoc_id)
@@ -699,7 +718,7 @@ def evaluate_precision(self, test_queries, threshold=0.3, top_k=5, mode="associa
     return total_relevant / total_retrieved
 ```
 
-In `score_summary`, add strict precision sweep:
+In `score_summary`, use strict precision for retrieval_score (primary optimization target):
 
 ```python
 def score_summary(self, test_queries, thresholds=(0.2, 0.3, 0.4, 0.5), threshold=0.3, top_k=5):
@@ -709,11 +728,21 @@ def score_summary(self, test_queries, thresholds=(0.2, 0.3, 0.4, 0.5), threshold
     for t in thresholds:
         sp = self.evaluate_precision(test_queries, threshold=t, top_k=top_k, mode="strict")
         strict_precisions.append(sp)
+    precision_strict_mean = float(np.mean(strict_precisions))
+
+    # Primary optimization target uses strict precision (exact match only).
+    # Associative precision is reported as a diagnostic, not used for scoring.
+    retrieval_score = 0.7 * sweep["recall_mean"] + 0.3 * precision_strict_mean
+
+    # Correlation is a mechanistic plausibility surrogate, not external
+    # validity evidence. Weight kept low; smoothness carries more signal.
+    plausibility_score = 0.3 * corr_score + 0.7 * smoothness_score
 
     return {
         # ... existing fields ...
-        "precision_strict": float(np.mean(strict_precisions)),
-        "precision_associative": sweep["precision_mean"],
+        "retrieval_score": retrieval_score,
+        "precision_strict": precision_strict_mean,
+        "precision_associative": sweep["precision_mean"],  # diagnostic only
     }
 ```
 
@@ -982,7 +1011,9 @@ Addresses all 5 review findings:
 4. evaluate_precision reports both strict and associative modes
 5. activation_recall_correlation no longer self-referential
 
-Constraint: Kept backward compatibility — all new params are optional with defaults matching original behavior
+Constraint: scheduled_query policy now requires rehearsal_targets (breaking change)
+Constraint: retrieval_score now uses strict precision — existing experiment scores will shift
+Constraint: plausibility_score weights changed (correlation 0.3, smoothness 0.7)
 Confidence: high
 Scope-risk: broad
 Tested: All new unit tests + existing test_data_gen.py
