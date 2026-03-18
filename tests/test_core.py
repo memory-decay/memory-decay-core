@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from memory_decay import MemoryGraph, DecayEngine, Evaluator
+from memory_decay.decay import soft_floor_decay_step
 
 
 # --- Helpers ---
@@ -218,7 +219,45 @@ class TestDecayEngine:
         after = g.get_node("mem_001")["activation_score"]
 
         assert isinstance(after, float)
-        assert after >= 0.0
+
+    def test_soft_floor_decay_step_is_monotone_and_bounded(self):
+        for activation in (0.01, 0.05, 0.2, 0.6, 0.95):
+            updated = soft_floor_decay_step(
+                activation,
+                impact=1.0,
+                stability=0.5,
+                lam=0.036,
+                alpha=2.0,
+                rho=0.8,
+                floor_min=0.05,
+                floor_max=0.35,
+                floor_power=2.0,
+                gate_center=0.4,
+                gate_width=0.08,
+                consolidation_gain=0.6,
+                min_rate_scale=0.1,
+            )
+            assert 0.0 <= updated <= activation
+
+    def test_soft_floor_decay_step_clamps_floor_above_current_activation(self):
+        updated = soft_floor_decay_step(
+            0.2,
+            impact=1.0,
+            stability=0.0,
+            lam=0.02,
+            alpha=2.0,
+            rho=0.8,
+            floor_min=0.05,
+            floor_max=0.4,
+            floor_power=1.0,
+            gate_center=0.4,
+            gate_width=0.08,
+            consolidation_gain=0.5,
+            min_rate_scale=0.1,
+        )
+
+        assert updated <= 0.2
+        assert updated >= 0.0
 
     def test_tick_advances(self):
         g = make_graph()

@@ -73,6 +73,34 @@ def validate_decay_fn(fn_path: str, params: dict) -> tuple[bool, Optional[str]]:
     if results[4] > 0.01:
         return False, f"Zero activation produced non-zero output: {results[4]}"
 
+    # 6. Pure decay must not increase activation without reactivation.
+    # Check a representative grid to reject self-exciting floor hacks.
+    eps = 1e-6
+    inflation_cases = [
+        (activation, impact, stability, mtype)
+        for activation in (0.01, 0.05, 0.1, 0.2, 0.5, 0.7, 0.9)
+        for impact in (0.0, 0.5, 1.0)
+        for stability in (0.0, 0.5, 1.0)
+        for mtype in ("fact", "episode")
+    ]
+
+    for activation, impact, stability, mtype in inflation_cases:
+        try:
+            result = fn(activation, impact, stability, mtype, params)
+        except Exception as e:
+            return False, (
+                f"Runtime error during monotonicity check "
+                f"({activation}, {impact}, {stability}, {mtype}): {e}"
+            )
+
+        if result > activation + eps:
+            return False, (
+                "Activation increase detected without reactivation: "
+                f"compute_decay({activation}, {impact}, {stability}, {mtype}) "
+                f"returned {result:.6f} > {activation:.6f}. "
+                "Decay functions must be monotone non-increasing."
+            )
+
     return True, None
 
 

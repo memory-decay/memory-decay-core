@@ -95,10 +95,12 @@ PYTHONPATH=src uv run python -m memory_decay.runner experiments/exp_NNNN --cache
 
 ### 5. Read Results
 Read `experiments/exp_NNNN/results.json`. Key metrics:
-- `overall_score`: main metric (0.7 * retrieval + 0.3 * plausibility)
-- `retrieval_score`: 0.7 * recall_mean + 0.3 * precision_strict (across thresholds)
-- `plausibility_score`: 0.3 * correlation + 0.7 * smoothness
-- `precision_strict`: exact-match precision only; used in `retrieval_score`
+- `overall_score`: main metric (retrieval_score * (0.85 + 0.15 * plausibility_score))
+- `retrieval_score`: 0.55 * recall_mean + 0.30 * mrr_mean + 0.15 * precision_lift
+- `plausibility_score`: 0.30 * correlation + 0.70 * smoothness
+- `precision_lift`: how much the decay engine pruned distractors above the baseline (null_precision)
+- `mrr_mean`: Mean Reciprocal Rank across thresholds
+- `precision_strict`: exact-match precision only; used to calculate precision_lift
 - `precision_associative`: diagnostic precision where associated neighbors also count
 - `similarity_recall_rate`: threshold-free similarity retrieval rate; diagnostic only
 - `status`: "completed" or "validation_failed"

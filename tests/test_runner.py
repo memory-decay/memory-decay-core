@@ -69,9 +69,38 @@ def compute_decay(activation, impact, stability, mtype, params):
     return activation * math.exp(-effective)
 '''
 
+GOOD_SOFT_FLOOR_DECAY_FN = '''\
+from memory_decay.decay import soft_floor_decay_step
+
+def compute_decay(activation, impact, stability, mtype, params):
+    lam = params.get("lambda_fact", 0.02) if mtype == "fact" else params.get("lambda_episode", 0.035)
+    return soft_floor_decay_step(
+        activation,
+        impact=impact,
+        stability=stability,
+        lam=lam,
+        alpha=params.get("alpha", 2.0),
+        rho=params.get("stability_weight", 0.8),
+        floor_min=params.get("floor_min", 0.05),
+        floor_max=params.get("floor_max", 0.35),
+        floor_power=params.get("floor_power", 2.0),
+        gate_center=params.get("gate_center", 0.4),
+        gate_width=params.get("gate_width", 0.08),
+        consolidation_gain=params.get("consolidation_gain", 0.6),
+        min_rate_scale=params.get("min_rate_scale", 0.1),
+    )
+'''
+
 BAD_DECAY_RETURNS_CONSTANT = '''\
 def compute_decay(activation, impact, stability, mtype, params):
     return 1.0  # No decay at all
+'''
+
+BAD_DECAY_INCREASES_ACTIVATION = '''\
+def compute_decay(activation, impact, stability, mtype, params):
+    if activation <= 0.7 and activation > 0.0:
+        return 0.79  # Artificial floor inflation, not decay
+    return activation * 0.99
 '''
 
 BAD_DECAY_SYNTAX_ERROR = '''\
@@ -87,6 +116,13 @@ DEFAULT_PARAMS = {
     "reinforcement_gain_direct": 0.2,
     "reinforcement_gain_assoc": 0.05,
     "stability_cap": 1.0,
+    "floor_min": 0.05,
+    "floor_max": 0.35,
+    "floor_power": 2.0,
+    "gate_center": 0.4,
+    "gate_width": 0.08,
+    "consolidation_gain": 0.6,
+    "min_rate_scale": 0.1,
 }
 
 
@@ -94,6 +130,14 @@ class TestValidateDecayFn:
     def test_valid_function_passes(self, tmp_path):
         fn_path = tmp_path / "decay_fn.py"
         fn_path.write_text(GOOD_DECAY_FN)
+
+        ok, error = validate_decay_fn(str(fn_path), DEFAULT_PARAMS)
+        assert ok is True
+        assert error is None
+
+    def test_valid_soft_floor_function_passes(self, tmp_path):
+        fn_path = tmp_path / "decay_fn.py"
+        fn_path.write_text(GOOD_SOFT_FLOOR_DECAY_FN)
 
         ok, error = validate_decay_fn(str(fn_path), DEFAULT_PARAMS)
         assert ok is True
@@ -114,6 +158,14 @@ class TestValidateDecayFn:
         ok, error = validate_decay_fn(str(fn_path), {})
         assert ok is False
         assert "decay" in error.lower() or "constant" in error.lower()
+
+    def test_activation_inflation_function_caught(self, tmp_path):
+        fn_path = tmp_path / "decay_fn.py"
+        fn_path.write_text(BAD_DECAY_INCREASES_ACTIVATION)
+
+        ok, error = validate_decay_fn(str(fn_path), DEFAULT_PARAMS)
+        assert ok is False
+        assert "increase" in error.lower() or "inflation" in error.lower()
 
 
 class TestRunExperiment:

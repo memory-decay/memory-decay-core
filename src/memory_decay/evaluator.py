@@ -159,6 +159,55 @@ class Evaluator:
 
         return float(np.corrcoef(a, r)[0, 1])
 
+    def evaluate_mrr(
+        self,
+        test_queries: list[tuple[str, str]],
+        threshold: float = 0.3,
+        top_k: int = 5,
+    ) -> float:
+        """Mean Reciprocal Rank — measures ranking quality independently of recall.
+
+        For each query, finds the rank of the expected_id among retrieved results
+        (filtered by activation threshold). RR = 1/rank if found, 0 otherwise.
+        MRR = mean of all reciprocal ranks.
+
+        Unlike precision_strict (which equals recall/top_k when all activations
+        exceed the threshold), MRR captures WHERE in the ranking the correct
+        answer appears, providing independent information from recall.
+        """
+        if not test_queries:
+            return 0.0
+
+        current_tick = self._engine.current_tick
+        reciprocal_ranks = []
+
+        for query, expected_id in test_queries:
+            node = self._graph.get_node(expected_id)
+            if not node or node.get("created_tick", 0) > current_tick:
+                continue
+
+            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick)
+
+            # Filter by activation threshold and find rank of expected_id
+            rank = 0
+            found = False
+            for rid, _ in results:
+                r_node = self._graph.get_node(rid)
+                if not r_node or r_node.get("type") in ("unknown", None):
+                    continue
+                if r_node["activation_score"] < threshold:
+                    continue
+                rank += 1
+                if rid == expected_id:
+                    found = True
+                    break
+
+            reciprocal_ranks.append(1.0 / rank if found else 0.0)
+
+        if not reciprocal_ranks:
+            return 0.0
+        return float(np.mean(reciprocal_ranks))
+
     def evaluate_similarity_recall(self, test_queries, top_k=5):
         """Pure similarity-based recall — no activation threshold."""
         if not test_queries:
@@ -269,10 +318,15 @@ class Evaluator:
             recalls.append(recall)
             precisions.append(precision)
 
+        threshold_discrimination = (
+            (float(np.max(recalls)) - float(np.min(recalls))) if recalls else 0.0
+        )
+
         return {
             "threshold_metrics": threshold_metrics,
             "recall_mean": float(np.mean(recalls)) if recalls else 0.0,
             "precision_mean": float(np.mean(precisions)) if precisions else 0.0,
+            "threshold_discrimination": threshold_discrimination,
         }
 
     def _smoothness_score(self) -> float:
@@ -298,26 +352,45 @@ class Evaluator:
         corr_score = max(min(corr_mean, 1.0), 0.0)
         smoothness_score = self._smoothness_score()
 
-        # Strict precision sweep
+        # Strict precision sweep (legacy — reported but no longer used for scoring)
         strict_precisions = []
         for t in thresholds:
             sp = self.evaluate_precision(test_queries, threshold=t, top_k=top_k, mode="strict")
             strict_precisions.append(sp)
+
+        # MRR sweep — replaces precision_strict in retrieval_score.
+        # Unlike precision_strict (which degenerates to recall/k when all
+        # activations exceed the threshold), MRR captures ranking quality
+        # independently: where in the top-k the correct answer appears.
+        mrr_scores = []
+        for t in thresholds:
+            mrr = self.evaluate_mrr(test_queries, threshold=t, top_k=top_k)
+            mrr_scores.append(mrr)
+        mrr_mean = float(np.mean(mrr_scores)) if mrr_scores else 0.0
 
         # Similarity recall (threshold-independent)
         sim_recall = self.evaluate_similarity_recall(test_queries, top_k=top_k)
 
         precision_strict_mean = float(np.mean(strict_precisions)) if strict_precisions else 0.0
 
-        # Primary optimization target uses strict precision (exact match only).
-        # Associative precision is reported as a diagnostic, not used for scoring.
+        # Calculate precision lift
+        null_precision = sweep["recall_mean"] / max(top_k, 1)
+        precision_lift = max(0.0, precision_strict_mean - null_precision)
+
+        # retrieval_score: recall + ranking quality + precision lift
+        # precision_lift isolates the actual pruning contribution of the decay engine.
         retrieval_score = (
-            0.7 * sweep["recall_mean"] + 0.3 * precision_strict_mean
+            0.55 * sweep["recall_mean"]
+            + 0.30 * mrr_mean
+            + 0.15 * precision_lift
         )
+        
         # Correlation is a mechanistic plausibility surrogate, not external
         # validity evidence. Weight kept low; smoothness carries more signal.
-        plausibility_score = 0.3 * corr_score + 0.7 * smoothness_score
-        overall_score = 0.7 * retrieval_score + 0.3 * plausibility_score
+        plausibility_score = 0.30 * corr_score + 0.70 * smoothness_score
+        
+        # Multiplicative gate: retrieval must support plausibility
+        overall_score = retrieval_score * (0.85 + 0.15 * plausibility_score)
 
         return {
             **snap,
@@ -329,7 +402,9 @@ class Evaluator:
             "plausibility_score": plausibility_score,
             "overall_score": overall_score,
             "composite_score": overall_score,
+            "mrr_mean": mrr_mean,
             "precision_strict": precision_strict_mean,
+            "precision_lift": precision_lift,
             "precision_associative": sweep["precision_mean"],
             "similarity_recall_rate": sim_recall,
         }
