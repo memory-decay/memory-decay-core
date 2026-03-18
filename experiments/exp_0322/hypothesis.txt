@@ -1,0 +1,7 @@
+Replace sigmoid floor with linear importance-scaled floor (0.05 + 0.30*importance).
+Most memories settle at 0.05-0.20 activation, while important+reinforced ones
+stay at 0.20-0.35. This creates wide activation spread for ranking signal.
+
+Trade recall for precision_lift: some memories will fall below threshold,
+but activation-weighted ranking (score = cosine * activation^0.5) will
+strongly prefer high-activation memories, improving MRR.
