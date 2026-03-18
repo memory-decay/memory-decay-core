@@ -1,7 +1,7 @@
-"""Human-like Memory Decay System.
+"""Human-memory-inspired memory decay system.
 
-Research project modeling human memory with decay functions, re-activation,
-and impact factors using graph-based associations and LLM-driven auto-improvement.
+Research code for a graph-based memory model with activation, stability,
+reinforcement-aware reactivation, and LLM-driven parameter optimization.
 """
 
 from .graph import MemoryGraph

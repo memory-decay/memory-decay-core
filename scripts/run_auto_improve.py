@@ -23,7 +23,8 @@ RESULTS_PATH = "data/auto_improvement_results.json"
 SENTINEL = "/tmp/auto_improve_DONE"
 TOTAL_TICKS = 200
 EVAL_INTERVAL = 20
-BUDGET = 5  # improvement rounds
+BUDGET = 12  # improvement rounds
+REACTIVATION_POLICY = "scheduled_query"
 
 
 def main():
@@ -50,9 +51,19 @@ def main():
         engine = DecayEngine(graph, decay_type="exponential")
         evaluator = Evaluator(graph, engine)
 
-        run_simulation(graph, engine, evaluator, test_queries, total_ticks=TOTAL_TICKS, eval_interval=EVAL_INTERVAL)
-        baseline_score = evaluator.composite_score(test_queries)
-        print(f"Baseline composite: {baseline_score:.4f}")
+        baseline_summaries = run_simulation(
+            graph,
+            engine,
+            evaluator,
+            test_queries,
+            total_ticks=TOTAL_TICKS,
+            eval_interval=EVAL_INTERVAL,
+            reactivation_policy=REACTIVATION_POLICY,
+            seed=42,
+        )
+        baseline_summary = baseline_summaries[-1]
+        baseline_score = baseline_summary["overall_score"]
+        print(f"Baseline overall: {baseline_score:.4f}")
 
         # --- Improvement loop ---
         # Cache the embedder from the first graph so we reuse it
@@ -60,7 +71,7 @@ def main():
 
         improver = AutoImprover(guidance_level=level)
         params = engine.get_params()
-        all_eval_history = evaluator.history[:]
+        all_eval_history = baseline_summaries[:]
         improvement_log = []
 
         for i in range(BUDGET):
@@ -77,30 +88,44 @@ def main():
             engine2 = DecayEngine(graph2, decay_type="exponential", params=new_params)
             evaluator2 = Evaluator(graph2, engine2)
 
-            run_simulation(graph2, engine2, evaluator2, test_queries, total_ticks=TOTAL_TICKS, eval_interval=EVAL_INTERVAL)
-            score = evaluator2.composite_score(test_queries)
-            print(f"  Composite score: {score:.4f}")
+            summaries = run_simulation(
+                graph2,
+                engine2,
+                evaluator2,
+                test_queries,
+                total_ticks=TOTAL_TICKS,
+                eval_interval=EVAL_INTERVAL,
+                reactivation_policy=REACTIVATION_POLICY,
+                seed=42,
+            )
+            score_summary = summaries[-1]
+            score = score_summary["overall_score"]
+            print(f"  Overall score: {score:.4f}")
 
             improvement_log.append({
                 "iteration": i,
                 "params": new_params,
-                "composite_score": score,
+                "score_summary": score_summary,
+                "overall_score": score,
+                "threshold_metrics": score_summary["threshold_metrics"],
             })
 
-            all_eval_history.extend(evaluator2.history)
+            all_eval_history.extend(summaries)
             params = new_params
             del graph2, engine2, evaluator2
 
         # Final score is the last iteration's score (or baseline if no iterations ran)
-        final_score = improvement_log[-1]["composite_score"] if improvement_log else baseline_score
-        print(f"Final composite: {final_score:.4f} (delta: {final_score - baseline_score:+.4f})")
+        final_score = improvement_log[-1]["overall_score"] if improvement_log else baseline_score
+        print(f"Final overall: {final_score:.4f} (delta: {final_score - baseline_score:+.4f})")
 
         results[level] = {
             "baseline_score": baseline_score,
+            "baseline_summary": baseline_summary,
             "final_score": final_score,
             "improvement_delta": final_score - baseline_score,
             "rounds": len(improvement_log),
             "log": improvement_log,
+            "reactivation_policy": REACTIVATION_POLICY,
         }
 
     # Save results

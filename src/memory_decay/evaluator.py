@@ -187,6 +187,7 @@ class Evaluator:
         test_queries: list[tuple[str, str]],
         threshold: float = 0.3,
         top_k: int = 5,
+        record: bool = True,
     ) -> dict:
         """Take a measurement snapshot at current tick."""
         recall = self.evaluate_recall(test_queries, threshold, top_k)
@@ -203,8 +204,79 @@ class Evaluator:
             "fact_episode_delta": delta,
             "forgetting_curve_smoothness": smoothness,
         }
-        self._history.append(snap)
+        if record:
+            self._history.append(snap)
         return snap
+
+    def threshold_sweep(
+        self,
+        test_queries: list[tuple[str, str]],
+        thresholds: tuple[float, ...] = (0.2, 0.3, 0.4, 0.5),
+        top_k: int = 5,
+    ) -> dict:
+        """Evaluate retrieval metrics over a fixed threshold grid."""
+        threshold_metrics: dict[float, dict[str, float]] = {}
+        recalls = []
+        precisions = []
+
+        for threshold in thresholds:
+            recall = self.evaluate_recall(test_queries, threshold=threshold, top_k=top_k)
+            precision = self.evaluate_precision(
+                test_queries, threshold=threshold, top_k=top_k
+            )
+            threshold_metrics[threshold] = {
+                "recall_rate": recall,
+                "precision_rate": precision,
+            }
+            recalls.append(recall)
+            precisions.append(precision)
+
+        return {
+            "threshold_metrics": threshold_metrics,
+            "recall_mean": float(np.mean(recalls)) if recalls else 0.0,
+            "precision_mean": float(np.mean(precisions)) if precisions else 0.0,
+        }
+
+    def _smoothness_score(self) -> float:
+        if len(self._history) < 2:
+            return 0.5
+        return max(1.0 - self.forgetting_curve_smoothness() * 10, 0.0)
+
+    def score_summary(
+        self,
+        test_queries: list[tuple[str, str]],
+        thresholds: tuple[float, ...] = (0.2, 0.3, 0.4, 0.5),
+        threshold: float = 0.3,
+        top_k: int = 5,
+    ) -> dict:
+        """Balanced summary split into retrieval and plausibility sub-scores."""
+        snap = self.snapshot(test_queries, threshold=threshold, top_k=top_k, record=False)
+        sweep = self.threshold_sweep(test_queries, thresholds=thresholds, top_k=top_k)
+        correlations = [
+            self.activation_recall_correlation(test_queries, threshold=t, top_k=top_k)
+            for t in thresholds
+        ]
+        corr_mean = float(np.mean(correlations)) if correlations else 0.0
+        corr_score = max(min(corr_mean, 1.0), 0.0)
+        smoothness_score = self._smoothness_score()
+
+        retrieval_score = (
+            0.7 * sweep["recall_mean"] + 0.3 * sweep["precision_mean"]
+        )
+        plausibility_score = 0.6 * corr_score + 0.4 * smoothness_score
+        overall_score = 0.7 * retrieval_score + 0.3 * plausibility_score
+
+        return {
+            **snap,
+            **sweep,
+            "corr_mean": corr_mean,
+            "corr_score": corr_score,
+            "smoothness_score": smoothness_score,
+            "retrieval_score": retrieval_score,
+            "plausibility_score": plausibility_score,
+            "overall_score": overall_score,
+            "composite_score": overall_score,
+        }
 
     def composite_score(
         self,
@@ -212,25 +284,10 @@ class Evaluator:
         threshold: float = 0.3,
         top_k: int = 5,
     ) -> float:
-        """Weighted composite score combining all 5 metrics."""
-        snap = self.snapshot(test_queries, threshold, top_k)
-
-        w_recall = 0.30
-        w_precision = 0.25
-        w_corr = 0.20
-        w_delta = 0.10
-        w_smooth = 0.15
-
-        score = (
-            w_recall * snap["recall_rate"]
-            + w_precision * snap["precision_rate"]
-            + w_corr * (1 - abs(snap["activation_recall_correlation"]))
-            + w_delta * min(snap["fact_episode_delta"], 0.3) / 0.3
-            + w_smooth * max(1.0 - snap["forgetting_curve_smoothness"] * 10, 0.0)
-        )
-
-        snap["composite_score"] = score
-        return score
+        """Backward-compatible alias for the overall score summary."""
+        return self.score_summary(test_queries, threshold=threshold, top_k=top_k)[
+            "overall_score"
+        ]
 
     @property
     def history(self) -> list[dict]:
