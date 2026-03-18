@@ -1,0 +1,8 @@
+Switch from exponential decay (a * exp(-lambda)) to quadratic decay
+(a * (1 - lambda * a / combined)). This produces 1/t power-law tail
+behavior: initial decay rate is similar to exponential, but activation
+approaches zero much more slowly. Predicted a(200) ≈ 0.23 for low-impact
+items vs baseline 0.009. Also increased alpha from 0.5 to 0.8 so impact
+has a stronger protective effect, and reduced lambda values to slow the
+overall rate. This should dramatically improve recall while maintaining
+plausibility through better high/low impact differentiation.
