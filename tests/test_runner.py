@@ -50,8 +50,12 @@ def build_test_cache(cache_dir: Path):
         pickle.dump(embeddings, f)
     with open(cache_dir / "dataset.json", "w") as f:
         json.dump(SAMPLE_DATASET, f, ensure_ascii=False)
+    test_items = SAMPLE_DATASET[:1]
+    train_items = SAMPLE_DATASET[1:]
     with open(cache_dir / "test_queries.json", "w") as f:
-        json.dump([(item["recall_query"], item["id"]) for item in SAMPLE_DATASET], f)
+        json.dump([(item["recall_query"], item["id"]) for item in test_items], f)
+    with open(cache_dir / "rehearsal_targets.json", "w") as f:
+        json.dump([item["id"] for item in train_items], f)
 
 
 GOOD_DECAY_FN = '''\
