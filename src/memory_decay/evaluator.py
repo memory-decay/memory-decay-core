@@ -67,11 +67,13 @@ class Evaluator:
         test_queries: list[tuple[str, str]],
         threshold: float = 0.3,
         top_k: int = 5,
+        mode: str = "associative",
     ) -> float:
         """Precision of recall results.
 
-        For each query: of the top_k results with activation > threshold,
-        count how many are relevant (associated with the expected memory).
+        Args:
+            mode: "strict" = only exact expected_id is relevant.
+                  "associative" = associated nodes also count (original behavior).
         """
         if not test_queries:
             return 0.0
@@ -83,13 +85,15 @@ class Evaluator:
         for query, expected_id in test_queries:
             results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick)
 
-            # Get expected node's associations
-            expected_assoc = set()
-            node = self._graph.get_node(expected_id)
-            if node:
-                for assoc_id, _ in self._graph.get_associated(expected_id):
-                    expected_assoc.add(assoc_id)
-            expected_assoc.add(expected_id)
+            if mode == "strict":
+                relevant_ids = {expected_id}
+            else:
+                relevant_ids = set()
+                node = self._graph.get_node(expected_id)
+                if node:
+                    for assoc_id, _ in self._graph.get_associated(expected_id):
+                        relevant_ids.add(assoc_id)
+                relevant_ids.add(expected_id)
 
             for rid, _ in results:
                 r_node = self._graph.get_node(rid)
@@ -98,7 +102,7 @@ class Evaluator:
                 if r_node["activation_score"] < threshold:
                     continue
                 total_retrieved += 1
-                if rid in expected_assoc:
+                if rid in relevant_ids:
                     total_relevant += 1
 
         if total_retrieved == 0:
@@ -134,7 +138,7 @@ class Evaluator:
             act = node["activation_score"]
             results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick)
             result_ids = [rid for rid, _ in results]
-            recalled = 1.0 if (expected_id in result_ids and act > threshold) else 0.0
+            recalled = 1.0 if expected_id in result_ids else 0.0
 
             activations.append(act)
             recall_success.append(recalled)
@@ -148,6 +152,23 @@ class Evaluator:
             return 0.0
 
         return float(np.corrcoef(a, r)[0, 1])
+
+    def evaluate_similarity_recall(self, test_queries, top_k=5):
+        """Pure similarity-based recall — no activation threshold."""
+        if not test_queries:
+            return 0.0
+        current_tick = self._engine.current_tick
+        recalled = 0
+        total = 0
+        for query, expected_id in test_queries:
+            node = self._graph.get_node(expected_id)
+            if not node or node.get("created_tick", 0) > current_tick:
+                continue
+            total += 1
+            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick)
+            if expected_id in [rid for rid, _ in results]:
+                recalled += 1
+        return recalled / max(total, 1)
 
     def fact_episode_delta(
         self,
