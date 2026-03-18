@@ -106,3 +106,53 @@
 {"exp": "exp_0108", "overall": 0.4099, "retrieval": 0.2968, "plausibility": 0.6737, "status": "no_gain", "hypothesis": "extreme reinf: sd=0.0 gd=0.0 ga=0.0 sw=0.0"}
 {"exp": "exp_0109", "overall": 0.4099, "retrieval": 0.2968, "plausibility": 0.6737, "status": "no_gain", "hypothesis": "extreme reinf: sd=0.1 gd=1.0 ga=0.5 sw=0.8"}
 {"exp": "exp_0110", "overall": 0.4099, "retrieval": 0.2968, "plausibility": 0.6737, "status": "no_gain", "hypothesis": "extreme reinf: sd=0.0 gd=0.0 ga=0.0 sw=0.0"}
+{"exp": "exp_0111", "overall": 0.274, "retrieval": 0.1102, "plausibility": 0.6563, "status": "no_gain", "hypothesis": "Sigmoidal impact gating: use a sharp sigmoid to create a keep/forget bifurcation"}
+{"exp": "exp_0112", "overall": 0.3164, "retrieval": 0.1589, "plausibility": 0.6838, "status": "no_gain", "hypothesis": "Power-law discriminative floor: use impact^2 instead of sqrt(impact) for the flo"}
+{"exp": "exp_0113", "overall": 0.1008, "retrieval": 0.0061, "plausibility": 0.3219, "status": "no_gain", "hypothesis": "Inverse-square adaptive decay: decay rate is inversely proportional to impact^2."}
+{"exp": "exp_0114", "overall": 0.4115, "retrieval": 0.2966, "plausibility": 0.6796, "status": "no_gain", "hypothesis": "Raised universal floor: floor = 0.25 + sqrt(impact) * 0.25. Every memory gets"}
+{"exp": "exp_0115", "overall": 0.4085, "retrieval": 0.2966, "plausibility": 0.6695, "status": "no_gain", "hypothesis": "Ultra-slow decay with sqrt floor at 0.45: same two-phase structure as best,"}
+{"exp": "exp_0116", "overall": 0.4106, "retrieval": 0.2967, "plausibility": 0.6763, "status": "no_gain", "hypothesis": "Cubic-root floor with high scale: floor = cbrt(impact) * 0.42. Cube root is"}
+{"exp": "exp_0117", "overall": 0.4116, "retrieval": 0.2966, "plausibility": 0.6801, "status": "no_gain", "hypothesis": "Higher base floor (0.30) + lower impact bonus (0.20). Total range 0.30-0.50. Mor"}
+{"exp": "exp_0118", "overall": 0.4113, "retrieval": 0.2966, "plausibility": 0.679, "status": "no_gain", "hypothesis": "Lower base (0.20) + higher impact bonus (0.30). Total range 0.20-0.50. More impa"}
+{"exp": "exp_0119", "overall": 0.4118, "retrieval": 0.2966, "plausibility": 0.6806, "status": "no_gain", "hypothesis": "High base (0.35) + small impact bonus (0.15). Total range 0.35-0.50. Nearly univ"}
+{"exp": "exp_0120", "overall": 0.4109, "retrieval": 0.2966, "plausibility": 0.6778, "status": "no_gain", "hypothesis": "Same as exp_0114 but linear impact instead of sqrt. floor=0.25+impact*0.25. More"}
+{"exp": "exp_0121", "overall": 0.4119, "retrieval": 0.2966, "plausibility": 0.6811, "status": "no_gain", "hypothesis": "base_floor=0.40 impact_floor_scale=0.10"}
+{"exp": "exp_0122", "overall": 0.4121, "retrieval": 0.2966, "plausibility": 0.6818, "status": "no_gain", "hypothesis": "base_floor=0.45 impact_floor_scale=0.08"}
+{"exp": "exp_0123", "overall": 0.4123, "retrieval": 0.2966, "plausibility": 0.6822, "status": "no_gain", "hypothesis": "base_floor=0.50 impact_floor_scale=0.05"}
+{"exp": "exp_0124", "overall": 0.4119, "retrieval": 0.2966, "plausibility": 0.6809, "status": "no_gain", "hypothesis": "base_floor=0.38 impact_floor_scale=0.12"}
+{"exp": "exp_0125", "overall": 0.4123, "retrieval": 0.2966, "plausibility": 0.6824, "status": "no_gain", "hypothesis": "base_floor=0.55 impact_floor_scale=0.03 \u2014 pushing floor ceiling higher"}
+{"exp": "exp_0126", "overall": 0.4123, "retrieval": 0.2966, "plausibility": 0.6824, "status": "no_gain", "hypothesis": "base_floor=0.60 impact_floor_scale=0.02 \u2014 pushing floor ceiling higher"}
+{"exp": "exp_0127", "overall": 0.4128, "retrieval": 0.2966, "plausibility": 0.6839, "status": "no_gain", "hypothesis": "base_floor=0.70 impact_floor_scale=0.01 \u2014 pushing floor ceiling higher"}
+{"exp": "exp_0128", "overall": 0.4169, "retrieval": 0.2966, "plausibility": 0.6976, "status": "no_gain", "hypothesis": "base_floor=0.80 impact_floor_scale=0.005 \u2014 pushing floor ceiling higher"}
+{"exp": "exp_0129", "overall": 0.4164, "retrieval": 0.2966, "plausibility": 0.6958, "status": "no_gain", "hypothesis": "base_floor=0.85 impact_floor_scale=0.003"}
+{"exp": "exp_0130", "overall": 0.4053, "retrieval": 0.2966, "plausibility": 0.6591, "status": "no_gain", "hypothesis": "base_floor=0.90 impact_floor_scale=0.002"}
+{"exp": "exp_0131", "overall": 0.4028, "retrieval": 0.2966, "plausibility": 0.6507, "status": "no_gain", "hypothesis": "base_floor=0.95 impact_floor_scale=0.001"}
+{"exp": "exp_0132", "overall": 0.4179, "retrieval": 0.2966, "plausibility": 0.701, "status": "no_gain", "hypothesis": "base_floor=0.75 impact_floor_scale=0.01"}
+{"exp": "exp_0133", "overall": 0.4113, "retrieval": 0.2966, "plausibility": 0.6788, "status": "no_gain", "hypothesis": "base_floor=0.72 impact_floor_scale=0.01 \u2014 refining 0.72-0.78 sweep"}
+{"exp": "exp_0134", "overall": 0.4143, "retrieval": 0.2966, "plausibility": 0.6889, "status": "no_gain", "hypothesis": "base_floor=0.73 impact_floor_scale=0.01 \u2014 refining 0.72-0.78 sweep"}
+{"exp": "exp_0135", "overall": 0.4083, "retrieval": 0.2966, "plausibility": 0.6691, "status": "no_gain", "hypothesis": "base_floor=0.74 impact_floor_scale=0.01 \u2014 refining 0.72-0.78 sweep"}
+{"exp": "exp_0136", "overall": 0.4147, "retrieval": 0.2966, "plausibility": 0.6902, "status": "no_gain", "hypothesis": "base_floor=0.76 impact_floor_scale=0.01 \u2014 refining 0.72-0.78 sweep"}
+{"exp": "exp_0137", "overall": 0.412, "retrieval": 0.2966, "plausibility": 0.6814, "status": "no_gain", "hypothesis": "base_floor=0.78 impact_floor_scale=0.01 \u2014 refining 0.72-0.78 sweep"}
+{"exp": "exp_0138", "overall": 0.415, "retrieval": 0.2966, "plausibility": 0.6913, "status": "no_gain", "hypothesis": "base_floor=0.75 ct=0.75 \u2014 aligning consolidation threshold with floor"}
+{"exp": "exp_0139", "overall": 0.4141, "retrieval": 0.2966, "plausibility": 0.6881, "status": "no_gain", "hypothesis": "base_floor=0.75 ct=0.80 \u2014 aligning consolidation threshold with floor"}
+{"exp": "exp_0140", "overall": 0.4147, "retrieval": 0.2966, "plausibility": 0.6904, "status": "no_gain", "hypothesis": "base_floor=0.75 ct=0.65 \u2014 aligning consolidation threshold with floor"}
+{"exp": "exp_0141", "overall": 0.4091, "retrieval": 0.2966, "plausibility": 0.6717, "status": "no_gain", "hypothesis": "base_floor=0.65 ct=0.60 \u2014 gap of .05 between floor and threshold"}
+{"exp": "exp_0142", "overall": 0.408, "retrieval": 0.2967, "plausibility": 0.6675, "status": "no_gain", "hypothesis": "base_floor=0.55 ct=0.50 \u2014 gap of .05 between floor and threshold"}
+{"exp": "exp_0143", "overall": 0.4134, "retrieval": 0.2966, "plausibility": 0.6859, "status": "no_gain", "hypothesis": "base_floor=0.85 ct=0.80 \u2014 gap of .05 between floor and threshold"}
+{"exp": "exp_0144", "overall": 0.4183, "retrieval": 0.2966, "plausibility": 0.7023, "status": "no_gain", "hypothesis": "base_floor=0.77 ct=0.70 \u2014 gap of .07 between floor and threshold"}
+{"exp": "exp_0145", "overall": 0.4147, "retrieval": 0.2966, "plausibility": 0.6902, "status": "no_gain", "hypothesis": "base_floor=0.76 impact_floor=0.01 ct=0.7"}
+{"exp": "exp_0146", "overall": 0.412, "retrieval": 0.2966, "plausibility": 0.6814, "status": "no_gain", "hypothesis": "base_floor=0.78 impact_floor=0.01 ct=0.7"}
+{"exp": "exp_0147", "overall": 0.4248, "retrieval": 0.2966, "plausibility": 0.7241, "status": "improved", "hypothesis": "base_floor=0.79 impact_floor=0.01 ct=0.7"}
+{"exp": "exp_0148", "overall": 0.4123, "retrieval": 0.2966, "plausibility": 0.6824, "status": "no_gain", "hypothesis": "base_floor=0.77 impact_floor=0.02 ct=0.7"}
+{"exp": "exp_0149", "overall": 0.4162, "retrieval": 0.2966, "plausibility": 0.6953, "status": "no_gain", "hypothesis": "base_floor=0.785 impact_floor=0.01 ct=0.7 \u2014 refining around 0.79"}
+{"exp": "exp_0150", "overall": 0.416, "retrieval": 0.2966, "plausibility": 0.6947, "status": "no_gain", "hypothesis": "base_floor=0.795 impact_floor=0.01 ct=0.7 \u2014 refining around 0.79"}
+{"exp": "exp_0151", "overall": 0.4187, "retrieval": 0.2966, "plausibility": 0.7036, "status": "no_gain", "hypothesis": "base_floor=0.79 impact_floor=0.005 ct=0.7 \u2014 refining around 0.79"}
+{"exp": "exp_0152", "overall": 0.417, "retrieval": 0.2966, "plausibility": 0.6979, "status": "no_gain", "hypothesis": "base_floor=0.79 impact_floor=0.02 ct=0.7 \u2014 refining around 0.79"}
+{"exp": "exp_0153", "overall": 0.4156, "retrieval": 0.2966, "plausibility": 0.6934, "status": "no_gain", "hypothesis": "base_floor=0.79 impact_floor=0.015 ct=0.7 \u2014 refining around 0.79"}
+{"exp": "exp_0154", "overall": 0.4056, "retrieval": 0.2966, "plausibility": 0.6599, "status": "no_gain", "hypothesis": "base=0.79, lf=0.008 le=0.024 cd=0.4"}
+{"exp": "exp_0155", "overall": 0.4122, "retrieval": 0.2966, "plausibility": 0.6819, "status": "no_gain", "hypothesis": "base=0.79, lf=0.015 le=0.045 cd=0.4"}
+{"exp": "exp_0156", "overall": 0.4101, "retrieval": 0.2966, "plausibility": 0.6749, "status": "no_gain", "hypothesis": "base=0.79, lf=0.012 le=0.036 cd=0.3"}
+{"exp": "exp_0157", "overall": 0.4122, "retrieval": 0.2966, "plausibility": 0.6819, "status": "no_gain", "hypothesis": "base=0.79, lf=0.012 le=0.036 cd=0.5"}
+{"exp": "exp_0158", "overall": 0.3997, "retrieval": 0.2966, "plausibility": 0.6403, "status": "no_gain", "hypothesis": "base=0.79, alpha=1.5"}
+{"exp": "exp_0159", "overall": 0.4154, "retrieval": 0.2966, "plausibility": 0.6927, "status": "no_gain", "hypothesis": "base=0.79, alpha=2.5"}
+{"exp": "exp_0160", "overall": 0.4088, "retrieval": 0.2966, "plausibility": 0.6705, "status": "no_gain", "hypothesis": "base=0.79, alpha=3.0"}
