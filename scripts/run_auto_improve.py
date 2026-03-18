@@ -34,8 +34,9 @@ def main():
 
     print("Loading dataset...")
     dataset = SyntheticDataGenerator.load_jsonl(DATASET_PATH)
-    _, test = SyntheticDataGenerator(api_key="dummy").split_test_train(dataset, test_ratio=0.2, seed=42)
+    train, test = SyntheticDataGenerator(api_key="dummy").split_test_train(dataset, test_ratio=0.2, seed=42)
     test_queries = [(m["recall_query"], m["id"]) for m in test if "recall_query" in m]
+    rehearsal_targets = [m["id"] for m in train]
     print(f"Dataset: {len(dataset)}, Test queries: {len(test_queries)}")
 
     guidance_levels = ["minimal", "default", "expert"]
@@ -59,6 +60,7 @@ def main():
             total_ticks=TOTAL_TICKS,
             eval_interval=EVAL_INTERVAL,
             reactivation_policy=REACTIVATION_POLICY,
+            rehearsal_targets=rehearsal_targets,
             seed=42,
         )
         baseline_summary = baseline_summaries[-1]
@@ -96,6 +98,7 @@ def main():
                 total_ticks=TOTAL_TICKS,
                 eval_interval=EVAL_INTERVAL,
                 reactivation_policy=REACTIVATION_POLICY,
+                rehearsal_targets=rehearsal_targets,
                 seed=42,
             )
             score_summary = summaries[-1]

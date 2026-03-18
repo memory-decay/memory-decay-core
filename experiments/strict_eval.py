@@ -118,6 +118,10 @@ def compute_strict_score(result: dict) -> dict:
     result["adj_plausibility"] = round(adj_plausibility, 4)
     result["strict_score"] = round(adj_overall, 6)
 
+    result["precision_strict"] = result.get("precision_strict", 0.0)
+    result["precision_associative"] = result.get("precision_associative", 0.0)
+    result["similarity_recall_rate"] = result.get("similarity_recall_rate", 0.0)
+
     return result
 
 
