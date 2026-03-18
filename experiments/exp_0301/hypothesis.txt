@@ -1,0 +1,15 @@
+Jost's Law decay with impact-based sigmoid floor.
+
+The baseline exponential decay uses a constant rate regardless of current
+activation level. Jost's Law states that older (lower-activation) memories
+decay more slowly — mathematically, the decay rate is proportional to
+activation itself: da/dt = -lambda * a^2, yielding hyperbolic-like behavior.
+
+Combined with a sigmoid floor that protects high-impact memories, this should:
+1. Produce "steep early, gradual late" curves (improved plausibility/correlation)
+2. Keep important memories above threshold longer (improved recall)
+3. Let low-impact memories die faster (improved precision_lift via pruning)
+
+The activation-weighted ranking (new in graph.py) means that even partially
+decayed memories contribute less to ranking, so selective preservation of
+high-impact nodes should directly improve MRR.
