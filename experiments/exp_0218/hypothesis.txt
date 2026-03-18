@@ -1,0 +1,5 @@
+Focus on maximizing correlation by making decay rate directly proportional to (1-impact).
+High-impact memories decay very slowly, low-impact ones decay faster. Use a moderate
+floor (floor_max=0.35) to allow some discrimination while keeping high-impact memories
+above retrieval thresholds. The key insight: use impact^2 in the effective rate to
+create stronger separation between high and low impact memories.

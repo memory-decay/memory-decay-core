@@ -1,0 +1,6 @@
+Focus on maximizing correlation through extreme impact differentiation in decay rate.
+Use very slow lambda (0.005/0.015), high alpha=3.0 for strong exponential impact scaling,
+minimal floor (0/0.15). After 200 ticks:
+- impact=1: a(200) ≈ exp(-200*0.005/e^3) ≈ 0.95 (barely decays)
+- impact=0: a(200) ≈ exp(-200*0.005) ≈ 0.37 (significant decay)
+This creates a wide activation spread that should correlate with recall labels.

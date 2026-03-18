@@ -1,0 +1,6 @@
+MRR is 21% of overall. Currently ~0.27 because low-impact noise clutters similarity
+results. Using fast decay (lambda_fact=0.04, lambda_episode=0.06) with high alpha=3.0
+to aggressively filter low-impact memories below threshold while keeping high-impact
+ones above. After 50 ticks without reinforcement: impact=0 → exp(-2) ≈ 0.14 (below 0.2),
+impact=0.5 → exp(-0.45) ≈ 0.64 (above 0.5), impact=1 → 0.90. This should improve MRR
+by removing noise from similarity results, potentially improving ranking of correct answers.

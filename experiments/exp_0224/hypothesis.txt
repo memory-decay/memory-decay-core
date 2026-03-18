@@ -1,0 +1,4 @@
+Try power-law decay instead of exponential. Power-law has a longer tail (slower late-stage
+decay) which could create smoother forgetting curves and better plausibility.
+a(t+1) = floor + (a(t) - floor) / (1 + effective_rate) instead of *exp(-effective_rate).
+This gives heavier tails and more gradual convergence to floor.

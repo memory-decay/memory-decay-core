@@ -1,0 +1,6 @@
+Add stability to the floor calculation: floor = base_floor * (1 + stability_floor_scale * stability).
+Memories that have been reinforced (higher stability) get a higher floor, protecting
+them from excessive decay. Train memories (directly reactivated) have high stability
+and keep high activation. Test memories with associative reinforcement get moderate
+stability and moderate floor. This creates a stability-based activation ordering that
+could correlate with recall (more connected memories → more associations → more stability).

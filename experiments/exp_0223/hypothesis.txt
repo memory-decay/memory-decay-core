@@ -1,0 +1,7 @@
+Test memories never get direct reactivation — only associative reinforcement from
+connected train memories. Default reinforcement_gain_assoc=0.05 is too low to create
+meaningful stability differentiation among test memories. Increasing to 0.15 should
+make test memories with many associations (likely more semantically central, more
+likely to appear in similarity results) have higher stability → slower decay → higher
+activation at tick 200 → improved activation-recall correlation.
+Also: higher stability_weight pushes the stability effect further.

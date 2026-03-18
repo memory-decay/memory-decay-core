@@ -1,0 +1,5 @@
+Threshold discrimination is 14% of overall score. Currently 0 because activations are
+bimodal (>0.5 or <0.2). Using ultra-slow lambda_fact=0.005 to keep unreinforced memories
+in the 0.2-0.5 range at tick 200. Math: with lambda=0.005, impact=0, excess_remaining ≈
+exp(-1) ≈ 0.37, giving activation ≈ 0.40 — in the discrimination zone. Disable
+consolidation gating (gain=0) for clean exponential decay toward floor.

@@ -1,0 +1,6 @@
+exp_0221 showed fast decay creates discrimination (0.24) but kills recall. Finding the
+sweet spot: lambda_fact=0.02, lambda_episode=0.04 (moderate), alpha=3.0 (max impact
+protection). Low-impact memories decay to ~0.14 after 100 ticks, but mid-impact (0.5)
+stay at 0.64. With moderate floor (floor_max=0.20), low-impact memories stabilize
+near 0.05 while mid-impact stabilize near 0.20. Strong consolidation (0.8) protects
+high-activation high-impact memories from premature decay.

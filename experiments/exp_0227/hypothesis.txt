@@ -1,0 +1,7 @@
+Activation-dependent decay rate: memories at high activation decay faster, creating
+a convergent behavior toward a mid-range target. This is different from floor-based
+decay (which decays excess above floor). Here, the rate itself scales with activation:
+effective_rate = lam * activation / combined. This creates softer, more gradual
+convergence and potentially smoother forgetting curves. Higher-impact memories still
+decay slower (through combined factor) but the rate scaling prevents extremely slow
+decay at low activations.

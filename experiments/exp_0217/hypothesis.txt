@@ -1,0 +1,8 @@
+The best function (exp_0163) achieves high correlation (0.293) through an oscillation trap
+where base_floor=0.79 > consolidation_threshold=0.7, keeping all memories near 0.79.
+This gives zero discrimination. This experiment tries a hybrid approach: use the best
+function's consolidation damping structure but with a much lower, impact-dependent floor
+(floor_min=0.05, floor_max=0.45). High-impact memories get a floor of ~0.45, low-impact
+near 0.05. The consolidation damping (cd_base=0.1, cd_impact=1.0) preserves impact
+ordering in the decay rates, boosting correlation while allowing activation spread for
+discrimination.
