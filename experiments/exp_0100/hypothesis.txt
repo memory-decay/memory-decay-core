@@ -1,0 +1,6 @@
+Impact-dependent lambda: effective_lam = base_lam * (1 + boost * (1-impact)).
+Low-impact items (impact=0) get 3x lambda, high-impact (impact=1) get 1x.
+Combined with exp(2*impact) in the denominator, this creates 22x decay rate
+differential (vs 7.4x with constant lambda). Should push low-impact irrelevant
+items below threshold faster, improving precision and correlation while the
+sqrt floor maintains recall for high-impact items.

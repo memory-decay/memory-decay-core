@@ -1,0 +1,5 @@
+Impact-floor quadratic decay: instead of decaying toward 0, decay the excess
+above an impact-proportional floor (floor = impact * 0.15). High-impact items
+stabilize at higher activation levels, creating natural stratification that
+should boost activation-recall correlation without hurting recall (floor=0.15
+is below all thresholds 0.2-0.5). Uses exp_0033's proven lambda/ratio params.

@@ -1,0 +1,4 @@
+Non-linear floor using sqrt(impact) instead of linear impact. This gives
+mid-impact items (0.25-0.5) significantly higher floors while keeping the
+max floor the same. impact=0.25 gets floor=0.175 (vs 0.0875 linear),
+impact=0.5 gets floor=0.247 (vs 0.175). Should boost recall at low thresholds.

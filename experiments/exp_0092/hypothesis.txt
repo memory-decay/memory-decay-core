@@ -1,0 +1,5 @@
+Extreme impact sensitivity: alpha=5.0 (vs 2.0) creates exp(5)=148x protection
+for max-impact items. Higher lambdas (0.025/0.075) compensate so low-impact
+items actually forget quickly. No floor needed — the exponential protection
+creates natural stratification. Should dramatically improve correlation and
+precision (low-impact irrelevant items decay away fast).

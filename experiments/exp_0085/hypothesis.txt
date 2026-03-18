@@ -1,0 +1,5 @@
+Smooth warmup: effective_lam = lam * (1 - warmup * a^2). At a=1.0 decay rate
+is 50% of normal (consolidation), smoothly increasing to full rate as a→0.
+Combined with sqrt(impact) floor. No discontinuous if/else — the warmup
+function is C∞ smooth which should maintain or improve smoothness_score.
+This should slow the initial tick 0-40 recall plunge from 1.0→0.44.

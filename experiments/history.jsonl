@@ -23,3 +23,76 @@
 {"exp": "exp_0022", "overall": 0.3956, "retrieval": 0.3782, "plausibility": 0.4364, "status": "no_gain", "hypothesis": "0.004/0.012, too slow, declining"}
 {"exp": "exp_0023", "overall": 0.3960, "retrieval": 0.3735, "plausibility": 0.4486, "status": "no_gain", "hypothesis": "0.007/0.021, essentially tied with 0.008/0.024"}
 {"exp": "exp_0024", "overall": 0.3956, "retrieval": 0.3647, "plausibility": 0.4676, "status": "no_gain", "hypothesis": "0.009/0.027, slightly below peak"}
+{"exp": "exp_0025", "overall": 0.3113, "retrieval": 0.2411, "plausibility": 0.4751, "status": "no_gain", "hypothesis": "Cubic decay with lambda high enough for strict validation."}
+{"exp": "exp_0026", "overall": 0.373, "retrieval": 0.2925, "plausibility": 0.5607, "status": "no_gain", "hypothesis": "Quadratic decay tuned from exp_0003. Lower fact lambda (0.015 vs 0.018)"}
+{"exp": "exp_0027", "overall": 0.3817, "retrieval": 0.3046, "plausibility": 0.5617, "status": "no_gain", "hypothesis": "Hybrid: cubic facts (lambda=0.020, 1/sqrt(t) tail) + quadratic"}
+{"exp": "exp_0028", "overall": 0.3822, "retrieval": 0.3045, "plausibility": 0.5635, "status": "no_gain", "hypothesis": "Slower facts (0.013 vs 0.015), same episode lambda"}
+{"exp": "exp_0029", "overall": 0.3488, "retrieval": 0.2057, "plausibility": 0.6828, "status": "no_gain", "hypothesis": "Same fact lambda, higher episode ratio (3.0)"}
+{"exp": "exp_0030", "overall": 0.3745, "retrieval": 0.3056, "plausibility": 0.5352, "status": "no_gain", "hypothesis": "Same fact lambda, lower episode ratio (2.0)"}
+{"exp": "exp_0031", "overall": 0.3683, "retrieval": 0.2534, "plausibility": 0.6364, "status": "no_gain", "hypothesis": "ratio=4.0"}
+{"exp": "exp_0032", "overall": 0.3696, "retrieval": 0.264, "plausibility": 0.6162, "status": "no_gain", "hypothesis": "ratio=3.5"}
+{"exp": "exp_0033", "overall": 0.3852, "retrieval": 0.3057, "plausibility": 0.5708, "status": "no_gain", "hypothesis": "ratio=3.0 scaled down"}
+{"exp": "exp_0034", "overall": 0.3522, "retrieval": 0.2359, "plausibility": 0.6235, "status": "no_gain", "hypothesis": "alpha=1.5"}
+{"exp": "exp_0035", "overall": 0.3828, "retrieval": 0.3044, "plausibility": 0.5657, "status": "no_gain", "hypothesis": "alpha=2.5"}
+{"exp": "exp_0036", "overall": 0.3766, "retrieval": 0.2854, "plausibility": 0.5893, "status": "no_gain", "hypothesis": "scaled down 0.93x"}
+{"exp": "exp_0037", "overall": 0.366, "retrieval": 0.2643, "plausibility": 0.6033, "status": "no_gain", "hypothesis": "scaled up 1.07x"}
+{"exp": "exp_0038", "overall": 0.3707, "retrieval": 0.277, "plausibility": 0.5895, "status": "no_gain", "hypothesis": "between exp_0026 and exp_0029"}
+{"exp": "exp_0039", "overall": 0.3704, "retrieval": 0.2722, "plausibility": 0.5994, "status": "no_gain", "hypothesis": "slightly above exp_0029"}
+{"exp": "exp_0040", "overall": 0.3762, "retrieval": 0.2803, "plausibility": 0.6001, "status": "no_gain", "hypothesis": "lower fact, higher ratio"}
+{"exp": "exp_0041", "overall": 0.3828, "retrieval": 0.2576, "plausibility": 0.6749, "status": "improved", "hypothesis": "Impact-floor quadratic decay: instead of decaying toward 0, decay the excess"}
+{"exp": "exp_0042", "overall": 0.3488, "retrieval": 0.2057, "plausibility": 0.6828, "status": "no_gain", "hypothesis": "Re-run of exp_0029 (current best) as baseline under current evaluator"}
+{"exp": "exp_0043", "overall": 0.3705, "retrieval": 0.2385, "plausibility": 0.6785, "status": "no_gain", "hypothesis": "Re-run of exp_0033 params (0.012/0.036) as control, no floor"}
+{"exp": "exp_0044", "overall": 0.3785, "retrieval": 0.2511, "plausibility": 0.6756, "status": "no_gain", "hypothesis": "Floor scale 0.10 exploration (exp_0041 variant)"}
+{"exp": "exp_0046", "overall": 0.3875, "retrieval": 0.2647, "plausibility": 0.6742, "status": "no_gain", "hypothesis": "Floor scale 0.20 exploration (exp_0041 variant)"}
+{"exp": "exp_0047", "overall": 0.3919, "retrieval": 0.2713, "plausibility": 0.6734, "status": "improved", "hypothesis": "Floor scale 0.25 exploration (exp_0041 variant)"}
+{"exp": "exp_0048", "overall": 0.4024, "retrieval": 0.2867, "plausibility": 0.6725, "status": "no_gain", "hypothesis": "Floor scale 0.30 exploration"}
+{"exp": "exp_0049", "overall": 0.4035, "retrieval": 0.2886, "plausibility": 0.6716, "status": "improved", "hypothesis": "Floor scale 0.35 exploration"}
+{"exp": "exp_0050", "overall": 0.403, "retrieval": 0.2883, "plausibility": 0.6705, "status": "no_gain", "hypothesis": "Floor scale 0.40 exploration"}
+{"exp": "exp_0051", "overall": 0.4014, "retrieval": 0.2838, "plausibility": 0.6757, "status": "no_gain", "hypothesis": "Type-dependent floor: facts get lower floor (0.25) since they should be more"}
+{"exp": "exp_0052", "overall": 0.4035, "retrieval": 0.2886, "plausibility": 0.6716, "status": "no_gain", "hypothesis": "Stability-enhanced floor: floor = impact * (0.35 + 0.15 * stability)."}
+{"exp": "exp_0053", "overall": 0.4062, "retrieval": 0.2924, "plausibility": 0.6716, "status": "improved", "hypothesis": "Non-linear floor using sqrt(impact) instead of linear impact. This gives"}
+{"exp": "exp_0054", "overall": 0.4037, "retrieval": 0.2883, "plausibility": 0.6729, "status": "no_gain", "hypothesis": "sqrt floor with floor_scale=0.28"}
+{"exp": "exp_0055", "overall": 0.4035, "retrieval": 0.2882, "plausibility": 0.6726, "status": "no_gain", "hypothesis": "sqrt floor with floor_scale=0.30"}
+{"exp": "exp_0056", "overall": 0.405, "retrieval": 0.2905, "plausibility": 0.6722, "status": "no_gain", "hypothesis": "sqrt floor with floor_scale=0.32"}
+{"exp": "exp_0059", "overall": 0.4091, "retrieval": 0.2968, "plausibility": 0.671, "status": "no_gain", "hypothesis": "sqrt floor with floor_scale=0.38"}
+{"exp": "exp_0060", "overall": 0.409, "retrieval": 0.2968, "plausibility": 0.6706, "status": "no_gain", "hypothesis": "sqrt floor with floor_scale=0.40"}
+{"exp": "exp_0061", "overall": 0.4088, "retrieval": 0.2968, "plausibility": 0.6702, "status": "no_gain", "hypothesis": "sqrt floor with floor_scale=0.42"}
+{"exp": "exp_0062", "overall": 0.4093, "retrieval": 0.2969, "plausibility": 0.6714, "status": "improved", "hypothesis": "sqrt floor with floor_scale=0.36"}
+{"exp": "exp_0063", "overall": 0.4091, "retrieval": 0.2968, "plausibility": 0.6712, "status": "no_gain", "hypothesis": "sqrt floor with floor_scale=0.37"}
+{"exp": "exp_0064", "overall": 0.409, "retrieval": 0.2968, "plausibility": 0.6708, "status": "no_gain", "hypothesis": "sqrt floor with floor_scale=0.39"}
+{"exp": "exp_0065", "overall": 0.404, "retrieval": 0.2883, "plausibility": 0.6741, "status": "no_gain", "hypothesis": "sqrt floor 0.36 + alpha=1.5"}
+{"exp": "exp_0066", "overall": 0.4083, "retrieval": 0.2968, "plausibility": 0.6685, "status": "no_gain", "hypothesis": "sqrt floor 0.36 + alpha=2.5"}
+{"exp": "exp_0067", "overall": 0.4073, "retrieval": 0.2967, "plausibility": 0.6653, "status": "no_gain", "hypothesis": "sqrt floor 0.36 + alpha=3.0"}
+{"exp": "exp_0068", "overall": 0.4063, "retrieval": 0.2967, "plausibility": 0.6621, "status": "no_gain", "hypothesis": "sqrt floor 0.36 + alpha=3.5"}
+{"exp": "exp_0069", "overall": 0.4088, "retrieval": 0.2967, "plausibility": 0.6706, "status": "no_gain", "hypothesis": "sqrt floor 0.36 + lf=0.008 le=0.024"}
+{"exp": "exp_0070", "overall": 0.4091, "retrieval": 0.2968, "plausibility": 0.671, "status": "no_gain", "hypothesis": "sqrt floor 0.36 + lf=0.010 le=0.030"}
+{"exp": "exp_0071", "overall": 0.4049, "retrieval": 0.2905, "plausibility": 0.6719, "status": "no_gain", "hypothesis": "sqrt floor 0.36 + lf=0.014 le=0.042"}
+{"exp": "exp_0072", "overall": 0.4035, "retrieval": 0.2883, "plausibility": 0.6724, "status": "no_gain", "hypothesis": "sqrt floor 0.36 + lf=0.016 le=0.048"}
+{"exp": "exp_0073", "overall": 0.4055, "retrieval": 0.2926, "plausibility": 0.6689, "status": "no_gain", "hypothesis": "sqrt floor 0.36 + lf=0.010 le=0.040"}
+{"exp": "exp_0074", "overall": 0.4026, "retrieval": 0.2883, "plausibility": 0.6693, "status": "no_gain", "hypothesis": "sqrt floor 0.36 + lf=0.012 le=0.048"}
+{"exp": "exp_0075", "overall": 0.3745, "retrieval": 0.247, "plausibility": 0.672, "status": "no_gain", "hypothesis": "Linear excess decay instead of quadratic. The quadratic form excess*(1-lam*exces"}
+{"exp": "exp_0076", "overall": 0.4095, "retrieval": 0.2968, "plausibility": 0.6725, "status": "improved", "hypothesis": "Two-phase decay: above activation 0.6, items decay slowly (30% of normal rate)"}
+{"exp": "exp_0077", "overall": 0.4094, "retrieval": 0.2966, "plausibility": 0.6725, "status": "no_gain", "hypothesis": "Two-phase: ct=0.5 cd=0.2"}
+{"exp": "exp_0078", "overall": 0.4065, "retrieval": 0.2926, "plausibility": 0.6724, "status": "no_gain", "hypothesis": "Two-phase: ct=0.5 cd=0.3"}
+{"exp": "exp_0079", "overall": 0.4022, "retrieval": 0.2866, "plausibility": 0.6719, "status": "no_gain", "hypothesis": "Two-phase: ct=0.5 cd=0.4"}
+{"exp": "exp_0080", "overall": 0.4096, "retrieval": 0.2967, "plausibility": 0.6732, "status": "no_gain", "hypothesis": "Two-phase: ct=0.7 cd=0.2"}
+{"exp": "exp_0081", "overall": 0.4092, "retrieval": 0.2968, "plausibility": 0.6714, "status": "no_gain", "hypothesis": "Two-phase: ct=0.7 cd=0.3"}
+{"exp": "exp_0082", "overall": 0.4099, "retrieval": 0.2968, "plausibility": 0.6737, "status": "improved", "hypothesis": "Two-phase: ct=0.7 cd=0.4"}
+{"exp": "exp_0083", "overall": 0.4085, "retrieval": 0.2968, "plausibility": 0.6693, "status": "no_gain", "hypothesis": "Two-phase: ct=0.8 cd=0.3"}
+{"exp": "exp_0084", "overall": 0.4066, "retrieval": 0.2927, "plausibility": 0.6724, "status": "no_gain", "hypothesis": "Two-phase: ct=0.4 cd=0.3"}
+{"exp": "exp_0085", "overall": 0.4084, "retrieval": 0.2967, "plausibility": 0.669, "status": "no_gain", "hypothesis": "Smooth warmup: effective_lam = lam * (1 - warmup * a^2). At a=1.0 decay rate"}
+{"exp": "exp_0086", "overall": 0.4092, "retrieval": 0.2969, "plausibility": 0.6715, "status": "no_gain", "hypothesis": "Reciprocal decay of excess: excess/(1 + lam*excess/combined) instead of"}
+{"exp": "exp_0087", "overall": 0.3995, "retrieval": 0.2821, "plausibility": 0.6733, "status": "no_gain", "hypothesis": "Reciprocal floor decay lf=0.020 le=0.060 (faster approach to floor)"}
+{"exp": "exp_0088", "overall": 0.3889, "retrieval": 0.2666, "plausibility": 0.6743, "status": "no_gain", "hypothesis": "Reciprocal floor decay lf=0.025 le=0.075 (faster approach to floor)"}
+{"exp": "exp_0089", "overall": 0.3766, "retrieval": 0.2486, "plausibility": 0.6751, "status": "no_gain", "hypothesis": "Reciprocal floor decay lf=0.030 le=0.090 (faster approach to floor)"}
+{"exp": "exp_0090", "overall": 0.3633, "retrieval": 0.229, "plausibility": 0.6765, "status": "no_gain", "hypothesis": "Reciprocal floor decay lf=0.040 le=0.120 (faster approach to floor)"}
+{"exp": "exp_0091", "overall": 0.4022, "retrieval": 0.2863, "plausibility": 0.6729, "status": "no_gain", "hypothesis": "Reciprocal floor decay lf=0.018 le=0.054 (faster approach to floor)"}
+{"exp": "exp_0092", "overall": 0.395, "retrieval": 0.2815, "plausibility": 0.6599, "status": "no_gain", "hypothesis": "Extreme impact sensitivity: alpha=5.0 (vs 2.0) creates exp(5)=148x protection"}
+{"exp": "exp_0093", "overall": 0.4055, "retrieval": 0.2967, "plausibility": 0.6595, "status": "no_gain", "hypothesis": "sqrt floor + alpha=4.0 lf=0.020 le=0.060"}
+{"exp": "exp_0094", "overall": 0.4036, "retrieval": 0.2967, "plausibility": 0.6529, "status": "no_gain", "hypothesis": "sqrt floor + alpha=5.0 lf=0.025 le=0.075"}
+{"exp": "exp_0095", "overall": 0.4075, "retrieval": 0.2968, "plausibility": 0.6658, "status": "no_gain", "hypothesis": "sqrt floor + alpha=3.0 lf=0.015 le=0.045"}
+{"exp": "exp_0096", "overall": 0.4054, "retrieval": 0.2967, "plausibility": 0.659, "status": "no_gain", "hypothesis": "sqrt floor + alpha=4.0 lf=0.015 le=0.045"}
+{"exp": "exp_0097", "overall": 0.4087, "retrieval": 0.2966, "plausibility": 0.6702, "status": "no_gain", "hypothesis": "sqrt floor 0.36 + slow decay lf=0.006 le=0.018"}
+{"exp": "exp_0098", "overall": 0.4088, "retrieval": 0.2967, "plausibility": 0.6706, "status": "no_gain", "hypothesis": "sqrt floor 0.36 + slow decay lf=0.008 le=0.024"}
+{"exp": "exp_0099", "overall": 0.4086, "retrieval": 0.2966, "plausibility": 0.6699, "status": "no_gain", "hypothesis": "sqrt floor 0.36 + slow decay lf=0.004 le=0.012"}
+{"exp": "exp_0100", "overall": 0.3881, "retrieval": 0.2669, "plausibility": 0.6709, "status": "no_gain", "hypothesis": "Impact-dependent lambda: effective_lam = base_lam * (1 + boost * (1-impact))."}

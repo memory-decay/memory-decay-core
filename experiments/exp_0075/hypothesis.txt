@@ -1,0 +1,5 @@
+Linear excess decay instead of quadratic. The quadratic form excess*(1-lam*excess/combined)
+causes items near the floor to barely decay (rate proportional to excess^2). Linear form
+excess*(1-lam/combined) maintains a constant proportional decay rate regardless of distance
+from floor, which gives more differentiated decay rates between impact levels. This should
+preserve impact-activation correlation while maintaining the floor's recall benefits.

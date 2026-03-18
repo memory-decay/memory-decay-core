@@ -1,0 +1,5 @@
+Reciprocal decay of excess: excess/(1 + lam*excess/combined) instead of
+excess*(1 - lam*excess/combined). Mathematically, this creates a 1/t
+power-law tail (a_n ~ combined/(lam*n)) instead of the quadratic form's
+faster-than-exponential decay. Items should stay above retrieval thresholds
+much longer, potentially breaking the recall@0.2 ceiling of 0.39.
