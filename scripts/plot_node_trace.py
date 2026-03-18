@@ -58,9 +58,9 @@ def run_tracking_simulation(dataset: list[dict], total_ticks: int = 200):
     # 1. Dual axis target (will be heavily rehearsed)
     node_dual = "mem_0001"  # 한글/세종대왕 (Fact)
     
-    # 2. Impact comparison
+    # 2. Impact comparison (Use two episodes to isolate impact effect)
     node_high_impact = "mem_0014" # 첫 차 드라이브 (Episode, impact 0.6)
-    node_low_impact = "mem_0003"  # 백두산 (Fact, impact 0.3)
+    node_low_impact = "mem_0019"  # 첫 연애 편지 (Episode, impact 0.4)
     
     # 3. Type comparison
     node_fact = "mem_0006"     # 서울 (Fact, impact 0.4)
@@ -157,7 +157,7 @@ def plot_impact_comparison(history, high_id: str, low_id: str, out_dir: Path):
     
     plt.figure(figsize=(10, 5))
     plt.plot(ticks, history[high_id]["activation"], label=f'High Impact (0.6) - {high_id}', color='purple', linewidth=2)
-    plt.plot(ticks, history[low_id]["activation"], label=f'Low Impact (0.3) - {low_id}', color='gray', linewidth=2)
+    plt.plot(ticks, history[low_id]["activation"], label=f'Low Impact (0.4) - {low_id}', color='gray', linewidth=2)
     
     plt.axhline(y=0.3, color='black', linestyle='--', alpha=0.3)
     plt.title('Effect of Emotional Impact on Forgetting Curve')
@@ -225,7 +225,7 @@ def main():
     
     print(f"Generating plots in {out_dir}...")
     plot_dual_axis(history, "mem_0001", out_dir)
-    plot_impact_comparison(history, "mem_0014", "mem_0003", out_dir)
+    plot_impact_comparison(history, "mem_0014", "mem_0019", out_dir)
     plot_type_comparison(history, "mem_0006", "mem_0005", out_dir)
     plot_cascade_effect(history, "mem_0010", "mem_0002", "mem_0008", out_dir)
     
