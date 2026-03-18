@@ -14,10 +14,11 @@ class Evaluator:
     Prevents single-metric gaming by using a composite score.
     """
 
-    def __init__(self, graph: MemoryGraph, engine: DecayEngine):
+    def __init__(self, graph: MemoryGraph, engine: DecayEngine, activation_weight: float = 0.5):
         self._graph = graph
         self._engine = engine
         self._history: list[dict] = []
+        self._activation_weight = activation_weight
 
     def evaluate_recall(
         self,
@@ -56,7 +57,7 @@ class Evaluator:
                 continue
 
             # Condition 2: appears in similarity results
-            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick)
+            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight)
             result_ids = [rid for rid, _ in results]
 
             if expected_id in result_ids:
@@ -89,7 +90,7 @@ class Evaluator:
             if not node or node.get("created_tick", 0) > current_tick:
                 continue
 
-            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick)
+            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight)
 
             if mode == "strict":
                 relevant_ids = {expected_id}
@@ -142,7 +143,7 @@ class Evaluator:
                 continue
 
             act = node["activation_score"]
-            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick)
+            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight)
             result_ids = [rid for rid, _ in results]
             recalled = 1.0 if expected_id in result_ids else 0.0
 
@@ -186,7 +187,7 @@ class Evaluator:
             if not node or node.get("created_tick", 0) > current_tick:
                 continue
 
-            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick)
+            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight)
 
             # Filter by activation threshold and find rank of expected_id
             rank = 0
@@ -220,7 +221,7 @@ class Evaluator:
             if not node or node.get("created_tick", 0) > current_tick:
                 continue
             total += 1
-            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick)
+            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight)
             if expected_id in [rid for rid, _ in results]:
                 recalled += 1
         return recalled / max(total, 1)
@@ -349,19 +350,17 @@ class Evaluator:
             for t in thresholds
         ]
         corr_mean = float(np.mean(correlations)) if correlations else 0.0
-        corr_score = max(min(corr_mean, 1.0), 0.0)
+        # Allow negative correlation to penalize anti-causal models
+        corr_score = max(min(corr_mean, 1.0), -1.0)
         smoothness_score = self._smoothness_score()
 
-        # Strict precision sweep (legacy — reported but no longer used for scoring)
+        # Strict precision sweep
         strict_precisions = []
         for t in thresholds:
             sp = self.evaluate_precision(test_queries, threshold=t, top_k=top_k, mode="strict")
             strict_precisions.append(sp)
 
-        # MRR sweep — replaces precision_strict in retrieval_score.
-        # Unlike precision_strict (which degenerates to recall/k when all
-        # activations exceed the threshold), MRR captures ranking quality
-        # independently: where in the top-k the correct answer appears.
+        # MRR sweep — captures ranking quality independently of recall
         mrr_scores = []
         for t in thresholds:
             mrr = self.evaluate_mrr(test_queries, threshold=t, top_k=top_k)
@@ -377,18 +376,18 @@ class Evaluator:
         null_precision = sweep["recall_mean"] / max(top_k, 1)
         precision_lift = max(0.0, precision_strict_mean - null_precision)
 
-        # retrieval_score: recall + ranking quality + precision lift
-        # precision_lift isolates the actual pruning contribution of the decay engine.
+        # retrieval_score: rebalanced — lower recall weight, higher precision_lift
+        # to incentivize selective forgetting over "keep everything alive"
         retrieval_score = (
-            0.55 * sweep["recall_mean"]
+            0.40 * sweep["recall_mean"]
             + 0.30 * mrr_mean
-            + 0.15 * precision_lift
+            + 0.30 * precision_lift
         )
-        
-        # Correlation is a mechanistic plausibility surrogate, not external
-        # validity evidence. Weight kept low; smoothness carries more signal.
-        plausibility_score = 0.30 * corr_score + 0.70 * smoothness_score
-        
+
+        # Plausibility: correlation now allows negative values (penalty),
+        # smoothness weight reduced as it has low discriminating power
+        plausibility_score = 0.50 * corr_score + 0.50 * smoothness_score
+
         # Multiplicative gate: retrieval must support plausibility
         overall_score = retrieval_score * (0.85 + 0.15 * plausibility_score)
 

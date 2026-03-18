@@ -128,9 +128,18 @@ class MemoryGraph:
                     )
 
     def query_by_similarity(
-        self, query_text: str, top_k: int = 5, current_tick: int | None = None
+        self, query_text: str, top_k: int = 5, current_tick: int | None = None,
+        activation_weight: float = 0.0,
     ) -> list[tuple[str, float]]:
-        """Find memories matching query via embedding cosine similarity."""
+        """Find memories matching query via embedding cosine similarity.
+
+        When *activation_weight* > 0 the ranking score becomes:
+
+            score = cosine_sim * activation ^ activation_weight
+
+        This lets the decay function influence ranking, not just threshold
+        filtering.  With activation_weight=0 (default) behaviour is unchanged.
+        """
         query_vec = self._embed_text(query_text)
 
         results = []
@@ -145,6 +154,9 @@ class MemoryGraph:
             if norm_q == 0 or norm_e == 0:
                 continue
             sim = float(np.dot(query_vec, emb) / (norm_q * norm_e))
+            if activation_weight > 0:
+                act = max(float(attrs.get("activation_score", 0.0)), 0.0)
+                sim = sim * (act ** activation_weight)
             results.append((nid, sim))
 
         results.sort(key=lambda x: x[1], reverse=True)
