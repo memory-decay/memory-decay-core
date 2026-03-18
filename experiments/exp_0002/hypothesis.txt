@@ -1,0 +1,7 @@
+Build on exp_0001's quadratic decay by adding an impact-based activation
+floor: floor = floor_weight * impact^2. High-impact memories asymptote to
+a nonzero activation (e.g., impact=0.8 -> floor=0.256), while low-impact
+ones still decay normally. This should increase activation spread between
+important and unimportant memories, improving correlation without hurting
+recall. The impact^2 ensures only truly high-impact items get meaningful
+floors, avoiding a flat activation landscape.

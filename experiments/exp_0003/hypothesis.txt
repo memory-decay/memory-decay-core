@@ -1,0 +1,8 @@
+Replace linear impact modifier (1+alpha*impact) with exponential
+exp(alpha*impact). With alpha=2.0, this gives combined factors from
+1.0 (impact=0) to 7.4 (impact=1.0), creating much wider activation
+spread at tick 200: ~0.18 (low impact) to ~0.40 (high impact).
+Slightly increased base lambdas (0.018/0.030 vs 0.012/0.022) so
+low-impact items fall below threshold while high-impact survive.
+Expected: improved correlation with maintained or better recall,
+since more items will be above threshold 0.3 and 0.4.
