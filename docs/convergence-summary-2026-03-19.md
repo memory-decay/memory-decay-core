@@ -13,6 +13,26 @@ Treat [`experiments/exp_0315`](../experiments/exp_0315/) as the best result insi
 
 This is the most robust result found within the allowed search surface in [`program.md`](../program.md).
 
+## Eval v2 Reranking Check
+
+The first Eval v2 reranking pass also keeps [`experiments/exp_0315`](../experiments/exp_0315/) in first place.
+
+Source: [`outputs/eval_v2_summary.json`](../outputs/eval_v2_summary.json)
+
+- `exp_0315`: `eval_v2_score=0.2653`
+- `exp_0338`: `eval_v2_score=0.1603`
+- `exp_0000`: `eval_v2_score=0.1199`
+
+This matters because it removes an important ambiguity:
+
+- Under Eval v1, `exp_0338` could still be described as a fixed-split challenger
+- Under the first Eval v2 pass, `exp_0315` remains clearly ahead on retention and selectivity
+
+So the current project position is now supported by both:
+
+- the original closed-loop CV logic
+- the first Eval v2 reranking pass
+
 ## Why `exp_0315` Is the Termination Point
 
 The late-stage search tested multiple structural alternatives after `exp_0315` and none beat it on Stage A:
