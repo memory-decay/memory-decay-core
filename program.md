@@ -14,27 +14,21 @@ The human defines the closed loop. The AI agent works only inside the allowed se
 
 ## Preflight (run once before the loop if missing)
 
-If `outputs/pre_program_pipeline/suite_summary.json` does not exist, run:
+If `cache/embeddings.pkl` does not exist or needs rebuilding, run:
 
-```bash
-PYTHONPATH=src uv run python scripts/run_pre_program_pipeline.py --embedding-backend local
-```
+1. Convert source data (if not done):
+   ```bash
+   PYTHONPATH=src:. uv run python scripts/convert_longmemeval.py
+   ```
 
-This bootstrap step does all required pre-program work:
+2. Build embedding cache:
+   ```bash
+   PYTHONPATH=src uv run python -m memory_decay.cache_builder \
+     --dataset data/longmemeval.jsonl --output cache --backend gemini
+   ```
 
-- human calibration on `data/human_reviews_smoke.jsonl`
-- baseline vs calibrated comparison on `data/memories_50.jsonl`
-- baseline vs calibrated comparison on `data/memories_500.jsonl`
-- artifact export under `outputs/pre_program_pipeline/`
-
-After it completes, read:
-
-- `outputs/pre_program_pipeline/suite_summary.json`
-- `outputs/pre_program_pipeline/memories_500/comparison_summary.json`
-
-Use the `memories_500` comparison as the canonical pre-loop reference point.
-
-Treat all files under `outputs/pre_program_pipeline/` as read-only reference artifacts during the loop.
+**Dataset**: LongMemEval (ICLR 2025), 500 questions, 5432 memory nodes, Gemini embeddings.
+**Baseline**: `experiments/exp_lme_0000` (default exponential decay, overall=0.0374).
 
 ## Protocol (each cycle)
 
