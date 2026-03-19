@@ -25,7 +25,7 @@ def run_multi_seed(
         individual.append(result)
 
     n = len(individual)
-    stats = {"n_seeds": n, "individual_scores": individual}
+    stats = {"n_seeds": n, "individual_scores": individual, "diagnostic_only": True}
 
     for agg_key in ("mean", "std", "ci_lower", "ci_upper"):
         stats[agg_key] = {}

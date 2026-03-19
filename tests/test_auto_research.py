@@ -1,6 +1,7 @@
 """Integration test for the full auto-research experiment loop."""
 
 import json
+import runpy
 
 import numpy as np
 import pytest
@@ -124,3 +125,31 @@ class TestAutoResearchLoop:
             lines = [json.loads(l) for l in f if l.strip()]
         assert len(lines) == 1
         assert lines[0]["exp"] == "exp_0000"
+
+
+def test_eval_v2_driver_writes_summary_json(tmp_path, monkeypatch):
+    output_path = tmp_path / "eval_v2_summary.json"
+
+    monkeypatch.setenv("EVAL_V2_OUTPUT", str(output_path))
+
+    def fake_run_kfold(*args, **kwargs):
+        return {
+            "mean": {
+                "eval_v2_score": 0.3,
+                "retention_auc": 0.35,
+                "selectivity_score": 0.25,
+            },
+            "std": {"eval_v2_score": 0.01},
+            "worst_fold": {"eval_v2_score": 0.28},
+            "fold_deltas": [0.01, 0.0, -0.01],
+        }
+
+    monkeypatch.setattr("memory_decay.cross_validator.run_kfold", fake_run_kfold)
+
+    runpy.run_path("scripts/run_eval_v2_baseline.py", run_name="__main__")
+
+    assert output_path.exists()
+    summary = json.loads(output_path.read_text())
+    assert "baseline" in summary
+    assert "jost_p4" in summary
+    assert "assoc_boost_best" in summary
