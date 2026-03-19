@@ -1,0 +1,18 @@
+Separated impact/stability roles in the decay formula.
+
+Currently (exp_0315): importance = (impact*α + stability*ρ)/(α+ρ) controls BOTH
+decay rate (via retention) AND floor position (via sigmoid). This means high-stability
+memories with low impact get low importance = low floor = vulnerable to erasure.
+
+Separated design:
+- Impact (alone) drives retention = decay rate
+- Stability (alone) drives sigmoid floor = protection level
+- High-stability/low-impact memories: slow decay + high floor = can accumulate
+  activation through reinforcement without being penalized by low impact
+
+This is mathematically different from reweighting α and ρ — the coupling is
+fundamentally broken. A low-impact memory that gets reinforced 10 times can now
+maintain high activation even though its impact is low.
+
+If this doesn't improve things, the coupling in the original formula was actually
+beneficial and there's no path within the current architecture.

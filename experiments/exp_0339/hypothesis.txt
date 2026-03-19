@@ -1,0 +1,13 @@
+Replace sigmoid floor with Gompertz function for importance-based floor.
+
+Gompertz: floor = floor_max * exp(-beta * exp(-gamma * importance))
+- Slower, asymmetric transition vs sigmoid's sharp switch
+- Hypothesis: gentler floor transition may stabilize activation-recall
+  correlation across CV folds (currently fold 3 has corr=0.125 vs fold 1's corr=0.424)
+- Gompertz gamma=8 gives similar steepness to sigmoid_k=20 but with broader transition
+- floor_min=0.02 prevents complete memory erasure
+- floor_max=0.55 (slightly lower than sigmoid's 0.60 to compensate for Gompertz shape)
+
+If Gompertz doesn't improve plausibility stability, the embedding ceiling at
+recall=0.402 may be the fundamental limitation, and the Jost+sigmoid formulation
+is near optimal for this class of models.
