@@ -170,6 +170,11 @@ Append one line to `experiments/history.jsonl`:
 ```
 Include `cv_mean` and `cv_std` when CV was run (Stage B). Omit them for rejected experiments (Stage A only).
 
+Operational note:
+- `experiments/history.jsonl` is append-only session history, not the canonical source for rerun state
+- Never rerun an existing `experiments/exp_NNNN/` directory in place, because that can overwrite `results.json` and make the directory disagree with prior history
+- If an experiment must be rerun intentionally, do it only with an explicit overwrite action and record that decision separately
+
 ### 8. Repeat or Stop
 Continue to next cycle unless:
 - 20 cycles completed this session

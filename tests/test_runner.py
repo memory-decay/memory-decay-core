@@ -204,3 +204,33 @@ class TestRunExperiment:
         results = json.loads((exp_dir / "results.json").read_text())
         assert results["status"] == "validation_failed"
         assert "error" in results
+
+    def test_existing_results_block_rerun_by_default(self, tmp_path):
+        cache_dir = tmp_path / "cache"
+        build_test_cache(cache_dir)
+
+        exp_dir = tmp_path / "exp_0002"
+        exp_dir.mkdir()
+        (exp_dir / "decay_fn.py").write_text(GOOD_DECAY_FN)
+        (exp_dir / "params.json").write_text(json.dumps(DEFAULT_PARAMS))
+        (exp_dir / "hypothesis.txt").write_text("rerun protection test")
+        (exp_dir / "results.json").write_text(json.dumps({"status": "completed", "overall_score": 0.5}))
+
+        with pytest.raises(FileExistsError, match="results.json"):
+            run_experiment(str(exp_dir), str(cache_dir))
+
+    def test_force_allows_rerun_with_existing_results(self, tmp_path):
+        cache_dir = tmp_path / "cache"
+        build_test_cache(cache_dir)
+
+        exp_dir = tmp_path / "exp_0003"
+        exp_dir.mkdir()
+        (exp_dir / "decay_fn.py").write_text(GOOD_DECAY_FN)
+        (exp_dir / "params.json").write_text(json.dumps(DEFAULT_PARAMS))
+        (exp_dir / "hypothesis.txt").write_text("forced rerun test")
+        (exp_dir / "results.json").write_text(json.dumps({"status": "completed", "overall_score": 0.5}))
+
+        result = run_experiment(str(exp_dir), str(cache_dir), force=True)
+
+        assert result["status"] == "completed"
+        assert result["overall_score"] != 0.5

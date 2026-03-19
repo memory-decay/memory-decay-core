@@ -119,10 +119,18 @@ def run_experiment(
     eval_interval: int = 20,
     reactivation_policy: str = "scheduled_query",
     seed: int = 42,
+    force: bool = False,
 ) -> dict:
     """Run a single experiment from an experiment directory."""
     exp_path = Path(experiment_dir)
     start_time = time.time()
+    results_path = exp_path / "results.json"
+
+    if results_path.exists() and not force:
+        raise FileExistsError(
+            f"{results_path} already exists; refusing to overwrite prior experiment results. "
+            "Use force=True or --force to rerun explicitly."
+        )
 
     with open(exp_path / "params.json", "r") as f:
         params = json.load(f)
@@ -136,7 +144,7 @@ def run_experiment(
             "error": error,
             "duration_seconds": round(time.time() - start_time, 2),
         }
-        with open(exp_path / "results.json", "w") as f:
+        with open(results_path, "w") as f:
             json.dump(result, f, indent=2)
         return result
 
@@ -167,7 +175,7 @@ def run_experiment(
         "duration_seconds": round(duration, 2),
     }
 
-    with open(exp_path / "results.json", "w", encoding="utf-8") as f:
+    with open(results_path, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
 
     return result
@@ -250,12 +258,13 @@ if __name__ == "__main__":
     parser.add_argument("--eval-interval", type=int, default=20)
     parser.add_argument("--policy", default="scheduled_query")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--force", action="store_true", help="Allow overwriting an existing results.json")
     args = parser.parse_args()
 
     result = run_experiment(
         args.experiment_dir, args.cache,
         total_ticks=args.ticks, eval_interval=args.eval_interval,
-        reactivation_policy=args.policy, seed=args.seed,
+        reactivation_policy=args.policy, seed=args.seed, force=args.force,
     )
 
     status = result["status"]
