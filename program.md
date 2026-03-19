@@ -60,7 +60,7 @@ Consider:
 - What do the self-criticism notes from recent rounds suggest as unexplored territory?
 
 ### 3. Write Experiment Files
-Create `experiments/exp_NNNN/` (next sequential number) with:
+Create `experiments/exp_lme_NNNN/` (next sequential number) with:
 
 **decay_fn.py** — Must follow this exact interface:
 ```python
@@ -101,11 +101,11 @@ def compute_decay(activation, impact, stability, mtype, params):
 
 ### 4. Run Experiment
 ```bash
-PYTHONPATH=src uv run python -m memory_decay.runner experiments/exp_NNNN --cache cache
+PYTHONPATH=src uv run python -m memory_decay.runner experiments/exp_lme_NNNN --cache cache
 ```
 
 ### 5. Read Results
-Read `experiments/exp_NNNN/results.json`. Key metrics:
+Read `experiments/exp_lme_NNNN/results.json`. Key metrics:
 - `overall_score`: main metric (retrieval_score * (0.85 + 0.15 * plausibility_score))
 - `retrieval_score`: 0.40 * recall_mean + 0.30 * mrr_mean + 0.30 * precision_lift
 - `plausibility_score`: 0.50 * correlation + 0.50 * smoothness (correlation allows negative)
@@ -129,7 +129,7 @@ Run 5-fold CV to confirm the improvement is robust, not overfitting to the fixed
 PYTHONPATH=src uv run python -c "
 from pathlib import Path
 from memory_decay.cross_validator import run_kfold
-r = run_kfold(Path('experiments/exp_NNNN'), k=5, cache_dir=Path('cache'))
+r = run_kfold(Path('experiments/exp_lme_NNNN'), k=5, cache_dir=Path('cache'))
 print(f'CV overall: {r[\"mean\"][\"overall_score\"]:.4f} +/- {r[\"std\"][\"overall_score\"]:.4f}')
 cv_pct = r['std']['overall_score'] / r['mean']['overall_score'] * 100
 print(f'CV%: {cv_pct:.1f}%')
@@ -152,14 +152,14 @@ PYTHONPATH=src uv run python -c "
 import json
 from pathlib import Path
 from memory_decay.cross_validator import run_kfold
-r = run_kfold(Path('experiments/exp_NNNN'), k=5, cache_dir=Path('cache'))
-Path('experiments/exp_NNNN/cv_results.json').write_text(json.dumps(r, indent=2))
+r = run_kfold(Path('experiments/exp_lme_NNNN'), k=5, cache_dir=Path('cache'))
+Path('experiments/exp_lme_NNNN/cv_results.json').write_text(json.dumps(r, indent=2))
 "
 ```
 
 **Git commit format (Lore)** — only on improvement:
 ```
-exp_NNNN: overall 0.24→0.31 (+0.07), CV 0.22→0.25 via <short description>
+exp_lme_NNNN: overall 0.24→0.31 (+0.07), CV 0.22→0.25 via <short description>
 
 <what changed in the decay function and why>
 
@@ -181,7 +181,7 @@ After judging, create a memory chain round file for M27-style cross-session lear
 ```markdown
 # Memory Chain — Round NNNN
 
-## Experiment: exp_XXXX
+## Experiment: exp_lme_XXXX
 **Date**: YYYY-MM-DD
 **Parent**: [round_PPPP.md](round_PPPP.md)
 
@@ -216,7 +216,7 @@ After judging, create a memory chain round file for M27-style cross-session lear
 
 **Append to `memory_chain/memory_index.jsonl`** (one line, no duplicates):
 ```json
-{"round": NNNN, "experiment": "exp_XXXX", "next_direction": "<short summary>", "timestamp": "<ISO 8601>"}
+{"round": NNNN, "experiment": "exp_lme_XXXX", "next_direction": "<short summary>", "timestamp": "<ISO 8601>"}
 ```
 
 **Important**: Do NOT re-append the entire history on session start. Only append the single new round entry.
@@ -229,13 +229,13 @@ After judging, create a memory chain round file for M27-style cross-session lear
 ### 8. Record
 Append one line to `experiments/history.jsonl`:
 ```json
-{"exp": "exp_NNNN", "overall": 0.74, "retrieval": 0.71, "plausibility": 0.81, "cv_mean": 0.68, "cv_std": 0.03, "status": "improved", "hypothesis": "short summary"}
+{"exp": "exp_lme_NNNN", "overall": 0.74, "retrieval": 0.71, "plausibility": 0.81, "cv_mean": 0.68, "cv_std": 0.03, "status": "improved", "hypothesis": "short summary"}
 ```
 Include `cv_mean` and `cv_std` when CV was run (Stage B). Omit them for rejected experiments (Stage A only).
 
 Operational note:
 - `experiments/history.jsonl` is append-only session history, not the canonical source for rerun state
-- Never rerun an existing `experiments/exp_NNNN/` directory in place, because that can overwrite `results.json` and make the directory disagree with prior history
+- Never rerun an existing `experiments/exp_lme_NNNN/` directory in place, because that can overwrite `results.json` and make the directory disagree with prior history
 - If an experiment must be rerun intentionally, do it only with an explicit overwrite action and record that decision separately
 
 ### 9. Repeat or Stop
@@ -246,7 +246,7 @@ Continue to next cycle unless:
 
 ## Baseline (first run only)
 If `experiments/best/` doesn't exist:
-1. Create `experiments/exp_0000/` with the default exponential decay
+1. Create `experiments/exp_lme_0000/` with the default exponential decay
 2. Run it as the baseline
 3. Set it as `experiments/best/`
 
@@ -255,7 +255,7 @@ If `experiments/best/` doesn't exist:
 - The simulation with `scheduled_query` reactivation policy is **fully deterministic** — changing `--seed` does not alter results. The seed only affects the `random` reactivation policy.
 - Therefore, **multi-seed runs are not meaningful** for statistical validation.
 - **K-fold cross-validation** (varying the train/test split) is the correct way to assess robustness. Use `memory_decay.cross_validator.run_kfold()`.
-- Prior finding: `assoc_boost=2.0` (exp_0338) showed CV=38% instability and scored 0.076 on CV vs 0.252 for `assoc_boost=0` (exp_0315, CV=4.8%). The fixed-split gain was overfitting.
+- Prior finding (memories_500 dataset, needs revalidation on LongMemEval): `assoc_boost=2.0` (exp_0338) showed CV=38% instability and scored 0.076 on CV vs 0.252 for `assoc_boost=0` (exp_0315, CV=4.8%). The fixed-split gain was overfitting.
 
 ## Rules
 - NEVER modify evaluator.py, graph.py, or runner.py
@@ -271,9 +271,9 @@ If `experiments/best/` doesn't exist:
 
 The agent is allowed to change only these experiment-local files:
 
-- `experiments/exp_NNNN/decay_fn.py`
-- `experiments/exp_NNNN/params.json`
-- `experiments/exp_NNNN/hypothesis.txt`
+- `experiments/exp_lme_NNNN/decay_fn.py`
+- `experiments/exp_lme_NNNN/params.json`
+- `experiments/exp_lme_NNNN/hypothesis.txt`
 
 Interpretation:
 
