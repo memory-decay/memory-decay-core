@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from .cache_builder import load_cache
+from .cache_builder import load_cache, load_cached_embedder
 from .main import build_graph_from_dataset, run_simulation
 from .decay import DecayEngine
 from .evaluator import Evaluator
@@ -171,6 +171,73 @@ def run_experiment(
         json.dump(result, f, ensure_ascii=False, indent=2)
 
     return result
+
+
+def run_experiment_with_split(
+    experiment_dir: str,
+    train_items: list[dict],
+    test_items: list[dict],
+    cache_dir: str = "cache",
+    total_ticks: int = 200,
+    eval_interval: int = 20,
+    reactivation_policy: str = "scheduled_query",
+    seed: int = 42,
+) -> dict:
+    """Run an experiment with a pre-determined train/test split.
+
+    Instead of loading the fixed split from cache, this accepts explicit
+    train/test item lists.  Used by k-fold cross-validation.
+
+    Returns the score_summary dict (same shape as the final summary from
+    ``run_experiment``).
+    """
+    exp_path = Path(experiment_dir)
+
+    with open(exp_path / "params.json", "r") as f:
+        params = json.load(f)
+
+    fn_path = str(exp_path / "decay_fn.py")
+
+    ok, error = validate_decay_fn(fn_path, params)
+    if not ok:
+        return {"status": "validation_failed", "error": error, "overall_score": 0.0}
+
+    # Load cached embedder (no dataset/split — we supply our own)
+    cached_embedder = load_cached_embedder(cache_dir)
+
+    # Build graph from ALL items (train + test) — the graph must contain
+    # every memory so that associations and similarity search work correctly.
+    all_items = train_items + test_items
+    graph = build_graph_from_dataset(all_items, embedder=cached_embedder)
+
+    # Derive test_queries and rehearsal_targets from the provided splits
+    test_queries = [
+        (item["recall_query"], item["id"])
+        for item in test_items
+        if "recall_query" in item
+    ]
+    rehearsal_targets = [item["id"] for item in train_items]
+
+    decay_fn = _load_decay_fn(fn_path)
+    engine = DecayEngine(graph, custom_decay_fn=decay_fn, params=params)
+    activation_weight = params.get("activation_weight", 0.5)
+    assoc_boost = params.get("assoc_boost", 0.0)
+    evaluator = Evaluator(
+        graph, engine,
+        activation_weight=activation_weight,
+        assoc_boost=assoc_boost,
+    )
+
+    run_simulation(
+        graph, engine, evaluator, test_queries,
+        total_ticks=total_ticks,
+        eval_interval=eval_interval,
+        reactivation_policy=reactivation_policy,
+        rehearsal_targets=rehearsal_targets,
+        seed=seed,
+    )
+
+    return evaluator.score_summary(test_queries)
 
 
 if __name__ == "__main__":

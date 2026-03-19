@@ -111,6 +111,31 @@ def load_cache(cache_dir: str) -> tuple[Callable, list[dict], list[tuple[str, st
     return cached_embedder, dataset, test_queries, rehearsal_targets
 
 
+def load_raw_dataset(path: Path) -> list[dict]:
+    """Load the raw dataset without train/test splitting."""
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def load_cached_embedder(cache_dir: str) -> Callable:
+    """Load only the cached embedder function from the cache directory.
+
+    Note: Uses pickle for numpy array deserialization. The cache is always
+    self-generated from the local dataset — never loaded from untrusted sources.
+    """
+    cache_path = Path(cache_dir)
+
+    with open(cache_path / "embeddings.pkl", "rb") as f:
+        embeddings: dict[str, np.ndarray] = pickle.load(f)  # noqa: S301
+
+    def cached_embedder(text: str) -> np.ndarray:
+        if text not in embeddings:
+            raise KeyError(f"Text not in embedding cache: {text[:80]}...")
+        return embeddings[text].copy()
+
+    return cached_embedder
+
+
 if __name__ == "__main__":
     import argparse
 

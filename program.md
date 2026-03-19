@@ -110,29 +110,65 @@ Read `experiments/exp_NNNN/results.json`. Key metrics:
 - `status`: "completed" or "validation_failed"
 
 ### 6. Judge
+
+**Stage A — Quick screen** (single fixed split):
 Compare `overall_score` with `experiments/best/results.json`:
-- **Improved**: update `experiments/best/` symlink, git commit (Lore format)
-- **No gain**: record in history, move on
-- **Validation failed**: record error, adjust next hypothesis
+- If score is **not higher**: record in history, move on (skip Stage B)
+- If **validation failed**: record error, adjust next hypothesis
+
+**Stage B — Cross-validation gate** (only if Stage A passed):
+Run 5-fold CV to confirm the improvement is robust, not overfitting to the fixed test split:
+```bash
+PYTHONPATH=src uv run python -c "
+from pathlib import Path
+from memory_decay.cross_validator import run_kfold
+r = run_kfold(Path('experiments/exp_NNNN'), k=5, cache_dir=Path('cache'))
+print(f'CV overall: {r[\"mean\"][\"overall_score\"]:.4f} +/- {r[\"std\"][\"overall_score\"]:.4f}')
+cv_pct = r['std']['overall_score'] / r['mean']['overall_score'] * 100
+print(f'CV%: {cv_pct:.1f}%')
+for i, f in enumerate(r['fold_scores']):
+    print(f'  fold {i}: {f[\"overall_score\"]:.4f}')
+"
+```
+
+Compare CV mean with current best's CV mean (stored in `experiments/best/cv_results.json`).
+
+**Decision rules:**
+- CV mean improved AND CV% < 30%: **accept** — update symlink, commit
+- CV mean improved but CV% >= 30%: **unstable** — record but do not update best
+- CV mean not improved: **reject** — the fixed-split gain was overfitting
+
+On accept, save CV results alongside the experiment:
+```bash
+# Save CV results for future comparison
+PYTHONPATH=src uv run python -c "
+import json
+from pathlib import Path
+from memory_decay.cross_validator import run_kfold
+r = run_kfold(Path('experiments/exp_NNNN'), k=5, cache_dir=Path('cache'))
+Path('experiments/exp_NNNN/cv_results.json').write_text(json.dumps(r, indent=2))
+"
+```
 
 **Git commit format (Lore)** — only on improvement:
 ```
-exp_NNNN: overall 0.24→0.31 (+0.07) via <short description>
+exp_NNNN: overall 0.24→0.31 (+0.07), CV 0.22→0.25 via <short description>
 
 <what changed in the decay function and why>
 
 Rejected: <alternative tried earlier> | <why it didn't work>
 Confidence: <high | medium | low>
 Scope-risk: narrow
-Tested: 200-tick simulation, threshold sweep [0.2,0.3,0.4,0.5]
+Tested: 200-tick simulation, threshold sweep [0.2,0.3,0.4,0.5], 5-fold CV
 Directive: <any warning for future experiments>
 ```
 
 ### 7. Record
 Append one line to `experiments/history.jsonl`:
 ```json
-{"exp": "exp_NNNN", "overall": 0.74, "retrieval": 0.71, "plausibility": 0.81, "status": "improved", "hypothesis": "short summary"}
+{"exp": "exp_NNNN", "overall": 0.74, "retrieval": 0.71, "plausibility": 0.81, "cv_mean": 0.68, "cv_std": 0.03, "status": "improved", "hypothesis": "short summary"}
 ```
+Include `cv_mean` and `cv_std` when CV was run (Stage B). Omit them for rejected experiments (Stage A only).
 
 ### 8. Repeat or Stop
 Continue to next cycle unless:
@@ -145,6 +181,13 @@ If `experiments/best/` doesn't exist:
 1. Create `experiments/exp_0000/` with the default exponential decay
 2. Run it as the baseline
 3. Set it as `experiments/best/`
+
+## Important: Simulation Characteristics
+
+- The simulation with `scheduled_query` reactivation policy is **fully deterministic** — changing `--seed` does not alter results. The seed only affects the `random` reactivation policy.
+- Therefore, **multi-seed runs are not meaningful** for statistical validation.
+- **K-fold cross-validation** (varying the train/test split) is the correct way to assess robustness. Use `memory_decay.cross_validator.run_kfold()`.
+- Prior finding: `assoc_boost=2.0` (exp_0338) showed CV=38% instability and scored 0.076 on CV vs 0.252 for `assoc_boost=0` (exp_0315, CV=4.8%). The fixed-split gain was overfitting.
 
 ## Rules
 - NEVER modify evaluator.py, graph.py, or runner.py
