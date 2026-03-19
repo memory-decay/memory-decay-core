@@ -1,0 +1,23 @@
+New mechanism: activation-adaptive sigmoid steepness.
+
+The sigmoid floor's steepness (k) now scales with current activation level:
+- High activation (1.0): effective_k = 20 (standard, no change)
+- Low activation (0.5): effective_k = 30 (50% steeper)
+- Very low (0.3): effective_k = 36 (80% steeper)
+
+This creates a "clutch" effect: memories approaching their floor get steeper
+floor response, making it HARDER to slip below the floor. Memories well above
+their floor decay at standard rate.
+
+This is fundamentally different from all prior approaches:
+- Prior "activation-boosted floor" (exp_0346 attempt 2): blended activation INTO floor value → destroyed recall
+- This approach: makes floor RESPOND to activation level via steepness, not value
+
+Hypothesis: The "clutch" should prevent the recall plateaus observed in all
+prior experiments. Instead of decaying to ~0.40 and staying there, the
+near-floor memories should get extra protection, pushing recall higher.
+
+Contrast with exp_0338's assoc_boost=2.0 which boosted recall to 0.4146 but
+destroyed correlation. The adaptive steepness approach should boost recall
+WITHOUT correlation cost because it's modifying the floor physics, not
+manipulating retrieval rankings.

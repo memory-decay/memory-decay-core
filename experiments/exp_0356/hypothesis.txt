@@ -1,0 +1,11 @@
+Test assoc_boost=1.5 with the best decay function (identical to exp_0338 except assoc_boost 1.5 vs 2.0).
+
+exp_0338 with assoc_boost=2.0 achieved the highest recall ever (0.4146) using the same
+best decay function. But it had no CV results (possibly didn't pass Stage B).
+
+Hypothesis: assoc_boost=1.5 captures most of the spreading activation recall benefit
+while being more stable than 2.0. If recall reaches ~0.41 with acceptable plausibility,
+this could beat the best.
+
+exp_0354 with assoc_boost=1.0 got recall=0.3821 (below best). So the dose-response
+might be nonlinear: 1.0 is too weak, 2.0 is unstable, 1.5 might be the sweet spot.

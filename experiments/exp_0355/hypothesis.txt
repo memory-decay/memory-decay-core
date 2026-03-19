@@ -1,0 +1,12 @@
+Test stability_decay=0.004 (finer search between 0.003 and 0.005).
+
+Exp_0351 with stability_decay=0.003 gave first positive precision_lift (0.0024) but
+recall dropped to 0.3821. The best (0.005) has precision_lift=0.0 and recall=0.4024.
+
+Hypothesis: 0.004 is the midpoint that gives modest precision_lift without the full
+recall penalty of 0.003. Specifically:
+- precision_lift should be between 0.001 and 0.002 (positive but not full effect)
+- recall should be between 0.3821 and 0.4024
+
+Net effect on overall depends on the retrieval formula: 0.40*recall + 0.30*mrr + 0.30*pl.
+If mrr stays at ~0.247 and pl stays positive, this could beat 0.2228.

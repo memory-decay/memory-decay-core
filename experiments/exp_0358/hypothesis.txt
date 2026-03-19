@@ -1,0 +1,19 @@
+New mechanism: activation-adaptive retention bonus.
+
+Standard retention = 1 + alpha*impact + rho*stability (same regardless of activation level).
+This variant adds: retention *= (1 + bonus * excess_ratio) where excess_ratio = excess/activation.
+
+Effect: Memories well above their floor get additional retention boost:
+- activation=0.8, floor=0.4 → excess_ratio=0.5 → retention multiplier=1.25
+- activation=0.9, floor=0.3 → excess_ratio=0.67 → retention multiplier=1.33
+- activation near floor → multiplier≈1.0 (standard)
+
+This creates a "buffer" that helps strong memories stay strong, without modifying
+the floor itself or the sigmoid parameters. It's orthogonal to all prior changes.
+
+Key difference from jost_power: jost_power=4 controls HOW FAST you approach the floor
+(excess^jost). This controls HOW MUCH retention you have as a function of WHERE you
+are relative to the floor. Together they give two independent control knobs.
+
+Hypothesis: The retention bonus should improve recall by keeping strong memories
+stronger, without the precision cost seen with assoc_boost or stability_decay changes.

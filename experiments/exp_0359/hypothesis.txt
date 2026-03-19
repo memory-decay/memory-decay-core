@@ -1,0 +1,8 @@
+Gentle activation-adaptive steepness (k_factor=0.3) + lower lambda_fact=0.007.
+
+exp_0357 with k_factor=1.0 was too aggressive and hurt recall (0.3808).
+k_factor=0.3 is much gentler — only 21% steeper at activation=0.3 vs 80% at k_factor=1.0.
+lambda_fact=0.007 (vs best's 0.008) compensates for any near-floor protection effect.
+
+This combination tests whether a very mild "clutch" effect can preserve recall
+while potentially improving correlation through smoother floor dynamics.

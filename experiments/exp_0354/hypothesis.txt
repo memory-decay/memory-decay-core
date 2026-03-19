@@ -1,0 +1,14 @@
+Test assoc_boost=1.0 (middle ground between failed 0.3 and unstable 2.0).
+
+History:
+- assoc_boost=0.3 (exp_0336): overall=0.2184, marginal
+- assoc_boost=2.0 (exp_0338): overall=0.2259, BEST fixed-split but CV% 38% (unstable)
+- assoc_boost=0.5 (exp_0333): overall=0.2129, below best
+
+assoc_boost=1.0 is untested in this gap. The spreading activation at 2.0 achieved
+the highest recall (0.4146) but destroyed correlation (0.302 vs 0.397) and CV stability.
+The intermediate value 1.0 may capture most of the recall/ranking benefit while
+staying within CV% < 30% stability.
+
+Hypothesis: assoc_boost=1.0 will improve recall over best (0.4024) with acceptable
+correlation cost, achieving higher overall than best.
