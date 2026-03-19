@@ -44,13 +44,26 @@ Treat all files under `outputs/pre_program_pipeline/` as read-only reference art
 - Read `experiments/best/results.json` for the current best scores
 - If no `experiments/` directory exists, create it and run the baseline first
 
+**Memory chain** (M27-style cross-session learning):
+- Read `memory_chain/failure_patterns.md` for accumulated failure analysis and convergence diagnosis
+- Read the last 5 `memory_chain/round_NNNN.md` files (by number) for recent self-criticism and next-step directions
+- Use these to avoid repeating failed approaches and to inform the current hypothesis
+
 ### 2. Analyze & Hypothesize
-Based on previous results, form a hypothesis for improvement. Consider:
+Based on previous results **and memory chain feedback**, form a hypothesis for improvement.
+
+**Memory chain check** (mandatory before hypothesizing):
+- Does `failure_patterns.md` already list this approach as non-viable?
+- Do recent round files show self-criticism that warns against this direction?
+- If yes to either: choose a different direction. Do not repeat known failures.
+
+Consider:
 - Which thresholds have low recall? Can a different curve shape help?
 - Is the decay too fast or too slow for facts vs episodes?
 - Could a different mathematical form (hyperbolic, stretched exponential,
   logarithmic saturation) perform better?
 - Are impact and stability modifiers being used effectively?
+- What do the self-criticism notes from recent rounds suggest as unexplored territory?
 
 ### 3. Write Experiment Files
 Create `experiments/exp_NNNN/` (next sequential number) with:
@@ -163,7 +176,63 @@ Tested: 200-tick simulation, threshold sweep [0.2,0.3,0.4,0.5], 5-fold CV
 Directive: <any warning for future experiments>
 ```
 
-### 7. Record
+### 7. Write Memory Chain Round
+
+After judging, create a memory chain round file for M27-style cross-session learning.
+
+**Determine the round number**: read `memory_chain/memory_index.jsonl`, find the highest `round` value, and use `round + 1`. If the file doesn't exist, start at round 0.
+
+**Create `memory_chain/round_NNNN.md`** with this template:
+
+```markdown
+# Memory Chain — Round NNNN
+
+## Experiment: exp_XXXX
+**Date**: YYYY-MM-DD
+**Parent**: [round_PPPP.md](round_PPPP.md)
+
+## Scores
+| Metric | Value |
+|--------|-------|
+| overall_score | X.XXXX |
+| retrieval_score | X.XXXX |
+| plausibility_score | X.XXXX |
+| recall_mean | X.XXX |
+| mrr_mean | X.XXX |
+| precision_lift | X.XXX |
+
+## Hypothesis
+<what was tried and why — copy from hypothesis.txt>
+
+## Self-Criticism
+<M27 core: analyze WHY this experiment succeeded or failed>
+- What specific mechanism caused the score change?
+- Did the hypothesis hold? If not, what was the actual failure mode?
+- What does this reveal about the search surface structure?
+
+## Decisions Made
+- <concrete decision: e.g., "Jost power=4.0 is near-optimal, further increases not viable">
+
+## What To Avoid
+- <specific approaches that this experiment proves should NOT be retried>
+
+## Next Step Direction
+<concrete direction for the next experiment, informed by self-criticism>
+```
+
+**Append to `memory_chain/memory_index.jsonl`** (one line, no duplicates):
+```json
+{"round": NNNN, "experiment": "exp_XXXX", "next_direction": "<short summary>", "timestamp": "<ISO 8601>"}
+```
+
+**Important**: Do NOT re-append the entire history on session start. Only append the single new round entry.
+
+**Update `memory_chain/failure_patterns.md`** if a new failure pattern is discovered:
+- Add the pattern to the relevant section
+- Update the convergence diagnosis if the failure changes the structural understanding
+- This file is cumulative — append new insights, don't rewrite existing analysis
+
+### 8. Record
 Append one line to `experiments/history.jsonl`:
 ```json
 {"exp": "exp_NNNN", "overall": 0.74, "retrieval": 0.71, "plausibility": 0.81, "cv_mean": 0.68, "cv_std": 0.03, "status": "improved", "hypothesis": "short summary"}
@@ -175,7 +244,7 @@ Operational note:
 - Never rerun an existing `experiments/exp_NNNN/` directory in place, because that can overwrite `results.json` and make the directory disagree with prior history
 - If an experiment must be rerun intentionally, do it only with an explicit overwrite action and record that decision separately
 
-### 8. Repeat or Stop
+### 9. Repeat or Stop
 Continue to next cycle unless:
 - 20 cycles completed this session
 - 20+ consecutive experiments with no improvement (convergence)
