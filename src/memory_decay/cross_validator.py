@@ -14,6 +14,10 @@ METRICS = [
     "recall_mean",
     "mrr_mean",
     "corr_score",
+    "retention_auc",
+    "selectivity_score",
+    "robustness_score",
+    "eval_v2_score",
 ]
 
 
@@ -71,5 +75,17 @@ def run_kfold(
         vals = [f.get(m, 0.0) for f in fold_scores]
         stats["mean"][m] = float(np.mean(vals))
         stats["std"][m] = float(np.std(vals, ddof=1)) if len(vals) > 1 else 0.0
+
+    key_metric = "eval_v2_score" if any("eval_v2_score" in f for f in fold_scores) else "overall_score"
+    stats["worst_fold"] = min(
+        fold_scores,
+        key=lambda fold: fold.get(key_metric, 0.0),
+    ) if fold_scores else {}
+
+    mean_score = stats["mean"].get(key_metric, 0.0)
+    stats["fold_deltas"] = [
+        float(fold.get(key_metric, 0.0) - mean_score)
+        for fold in fold_scores
+    ]
 
     return stats
