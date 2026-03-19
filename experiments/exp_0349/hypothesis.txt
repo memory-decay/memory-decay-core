@@ -1,0 +1,18 @@
+Replace linear importance (weighted average) with power-mean importance.
+
+The current linear importance = (imp*α + stab*ρ)/(α+ρ) is dominated by the higher
+value. Power-mean with p=0.5 emphasizes the LOWER of (impact, stability) — a
+memory must have BOTH high impact AND high stability to get a high floor.
+
+This creates stronger selectivity: (impact=0.9, stability=0.1) gets importance 0.40
+(vs 0.62 with linear), meaning "flash-in-the-pan" high-impact memories get lower
+floor protection. (impact=0.5, stability=0.5) gets 0.50 (same as arithmetic mean).
+
+Hypothesis: this bottleneck principle should improve correlation by making the floor
+better track "genuinely important" memories, potentially improving both retrieval
+and plausibility scores.
+
+assoc_boost=0.20 for conservative spreading activation.
+
+Rejected: sqrt retention (exp_0347), tanh-sq decay (exp_0348), sigmoid_k/mid
+variations, log decay, hyperbolic decay, all failed to beat exp_0315.

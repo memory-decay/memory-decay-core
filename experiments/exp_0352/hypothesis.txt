@@ -1,0 +1,12 @@
+Combine stability_decay=0.003 (from exp_0351) with lambda_fact=0.0095 (higher base decay).
+
+Exp_0351 showed that stability_decay=0.003 gives positive precision_lift (0.0024) but
+reduced recall (0.382 vs 0.402). The hypothesis: the slower stability decay kept too
+many weak memories alive, crowding out correct ones in top-k.
+
+This experiment compensates by raising lambda_fact from 0.008 to 0.0095 (+19%), which
+should restore recall to ~0.40 while preserving the precision_lift benefit from
+slower stability decay. The net effect should be positive.
+
+Key insight: precision_lift > 0 is achievable (first time in many experiments).
+The challenge is getting it without sacrificing recall.

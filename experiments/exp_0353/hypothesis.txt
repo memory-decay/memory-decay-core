@@ -1,0 +1,16 @@
+Combine stability_decay=0.003 (precision_lift benefit from exp_0351) with stability_weight=1.0→0.8.
+
+Exp_0351 showed stability_decay=0.003 gives first positive precision_lift (0.0024) but
+recall dropped from 0.402 to 0.382. Root cause: slower stability decay keeps weak
+memories alive longer, crowding top-k.
+
+Solution: reduce stability_weight from 1.0 to 0.8, which gives stability 20% less
+influence on both the importance floor signal AND the retention formula. This directly
+reduces the "weak memories staying alive" problem while preserving the precision_lift
+benefit from slower stability fade.
+
+Hypothesis: stability_weight=0.8 + stability_decay=0.003 gives precision_lift without
+the recall penalty.
+
+Rejected: exp_0352 (stability_decay=0.003 + lambda_fact=0.0095) still gave recall=0.381.
+Floor_max reduction alone not the right lever; reducing stability influence is.

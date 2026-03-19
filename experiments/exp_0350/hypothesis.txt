@@ -1,0 +1,16 @@
+Replace linear importance with power-mean (p=2.0 / quadratic mean).
+
+This is the opposite of the failed p=0.5 bottleneck attempt. With p=2.0:
+- (impact=0.9, stability=0.1) → importance ≈ 0.64 (vs 0.70 linear, vs 0.40 bottleneck p=0.5)
+- (impact=0.5, stability=0.5) → importance = 0.50 (vs 0.575 linear)
+- (impact=0.9, stability=0.9) → importance = 0.90 (same as linear)
+
+The main effect: memories with one-sided (impact OR stability) get LOWER importance
+than linear, pushing them toward lower floors and faster decay. This tests whether
+"cleaning up" one-sided memories helps precision without catastrophic recall loss.
+
+Hypothesis: The p=2 approach is closer to the best's linear blend (0.70 vs 0.64 for
+one-sided) than p=0.5 was (0.70 vs 0.40), so recall collapse should be avoided.
+
+Rejected: p=0.5 (bottleneck) collapsed recall to 0.253. Log decay, tanh-sq, sqrt
+retention, sigmoid_k/mid variations, all failed to beat exp_0315.

@@ -1,0 +1,15 @@
+Three targeted micro-adjustments from best (exp_0315):
+
+1. sigmoid_k 20 → 25: steeper importance discrimination curve. The best model's k=20
+   already gives a sharp transition, but k=25 would sharpen it further — making
+   high-importance memories get meaningfully higher floors than mid-importance ones.
+
+2. lambda_fact 0.008 → 0.007: slightly slower fact decay. Facts are the bulk of
+   test memories; preserving one more fact at tick 200 could shift recall from ~0.40.
+
+3. assoc_boost 0 → 0.2: very conservative spreading activation. The assoc_boost range
+   0.1-0.5 showed small improvements in exp_0333-0336 without destabilizing CV.
+   This is below that range, maximally conservative.
+
+Rejected: sigmoid_mid shift (0.25→0.28) collapsed MRR. Log decay collapsed recall.
+Activation-boosted floor hurt both retrieval and plausibility.

@@ -1,0 +1,9 @@
+Replace linear retention with concave (sqrt) retention: 1 + alpha*sqrt(impact) + rho*stability.
+
+Linear retention gives diminishing returns as impact grows (each 0.1 increase in impact adds the same retention). Sqrt retention gives stronger returns for high-impact memories while reducing retention for low-impact ones (compared to linear).
+
+Effect: low-importance distractors decay faster (good for precision), high-importance correct memories still well-protected (good for recall). Net effect on precision_lift is the key metric to watch.
+
+assoc_boost=0.20 (very conservative, below the 0.3 that gave modest gains in exp_0336) to avoid instability.
+
+Rejected by 30+ experiments: sigmoid_k variations, jost_power variations, lambda_fact tuning, sigmoid_mid shifts, activation-boosted floor, log decay, hyperbolic decay, assoc_boost > 1.0, reinforcement variations. The concave retention idea is the only untested mathematical transformation of the retention formula.

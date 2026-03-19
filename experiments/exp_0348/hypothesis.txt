@@ -1,0 +1,13 @@
+Replace power-law Jost decay (excess^jost_power) with tanh-based decay (tanh(excess/scale)).
+
+Power-law decay (jost_power=4) has very asymmetric behavior: negligible decay near floor,
+but extremely aggressive decay when far from floor. Tanh provides intermediate behavior:
+bounded decay rate (never exceeds lambda) while still being proportional to excess.
+This is more biologically plausible and may avoid the "cliff" behavior of power-law.
+
+Parameters: lambda_fact=0.005 (reduced from 0.008 to compensate for tanh's higher
+near-floor decay rate vs power^jost), tanh_scale=0.15 (transition point where
+tanh starts saturating).
+
+Rejected: log decay (recall collapsed), sqrt retention (hurt recall), sigmoid_k/mid variations,
+activation-boosted floor, all failed to beat best (exp_0315) after 12 consecutive attempts.

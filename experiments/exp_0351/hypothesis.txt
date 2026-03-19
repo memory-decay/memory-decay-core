@@ -1,0 +1,17 @@
+Slow down stability decay: stability_decay 0.005 → 0.003 (40% reduction).
+
+With lower stability_decay, memories that receive reinforcement maintain their stability
+longer, creating stronger long-term retention. This means:
+- Reinforced memories get a lasting boost to their decay resistance
+- The "dip and recover" pattern (tick 100→140) may shift upward
+- Late-tick recall (tick 200) may improve
+
+All other parameters stay identical to best (exp_0315) to isolate this effect.
+
+The stability_decay=0.005 baseline was never systematically varied in prior experiments
+(focused on decay_fn changes). This tests whether the reinforcement-stability
+loop is under-optimized.
+
+Rejected by 17+ experiments: floor/imporance/retention/decay form changes all
+converged to exp_0315 as local optimum. This is the first attempt to tune
+simulation-level reinforcement parameters.
