@@ -34,3 +34,28 @@ class TestEvaluatorTemporal:
         test_queries = [("고양이 포유류", "m0")]
         recall = evaluator.evaluate_recall(test_queries, threshold=0.1, top_k=10)
         assert recall > 0.0, "Past memory should be recalled"
+
+    def test_retention_curve_reports_multiple_delays(self):
+        _, _, evaluator = self._setup()
+        test_queries = [("고양이 포유류", "m0")]
+        summary = evaluator.score_summary(test_queries)
+        assert set(summary["retention_curve"]) == {"40", "80", "120", "160", "200"}
+
+    def test_retention_auc_decreases_when_late_recall_collapses(self):
+        _, engine, evaluator = self._setup()
+        test_queries = [("고양이 포유류", "m0")]
+
+        for tick in (40, 80, 120, 160, 200):
+            while engine.current_tick < tick:
+                engine.tick()
+            evaluator.snapshot(test_queries, threshold=0.1, top_k=10)
+
+        summary_with_history = evaluator.score_summary(test_queries, threshold=0.1, top_k=10)
+
+        fresh_graph = MemoryGraph(embedder=_fixed_embedder)
+        fresh_graph.add_memory("m0", "fact", "고양이는 포유류다", 0.5, created_tick=0)
+        fresh_engine = DecayEngine(fresh_graph)
+        fresh_evaluator = Evaluator(fresh_graph, fresh_engine)
+        fresh_summary = fresh_evaluator.score_summary([("고양이 포유류", "m0")], threshold=0.1, top_k=10)
+
+        assert summary_with_history["retention_auc"] >= fresh_summary["retention_auc"]

@@ -47,3 +47,17 @@ class TestPrecisionModes:
         summary = evaluator.score_summary(test_queries)
         assert "precision_strict" in summary
         assert "precision_associative" in summary
+
+    def test_threshold_summary_includes_auc_and_slope(self):
+        evaluator = self._setup()
+        test_queries = [("커피 원산지", "target")]
+        summary = evaluator.score_summary(test_queries)
+        threshold_summary = summary["threshold_summary"]
+        assert "threshold_auc" in threshold_summary
+        assert "slope" in threshold_summary
+
+    def test_threshold_auc_matches_recall_mean_when_curve_is_flat(self):
+        evaluator = self._setup()
+        test_queries = [("커피 원산지", "target")]
+        summary = evaluator.score_summary(test_queries)
+        assert summary["threshold_summary"]["threshold_auc"] == summary["recall_mean"]

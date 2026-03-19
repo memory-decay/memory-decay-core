@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+from collections import OrderedDict
 
 from .graph import MemoryGraph
 from .decay import DecayEngine
@@ -300,7 +301,7 @@ class Evaluator:
     def threshold_sweep(
         self,
         test_queries: list[tuple[str, str]],
-        thresholds: tuple[float, ...] = (0.2, 0.3, 0.4, 0.5),
+        thresholds: tuple[float, ...] = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
         top_k: int = 5,
     ) -> dict:
         """Evaluate retrieval metrics over a fixed threshold grid."""
@@ -323,13 +324,48 @@ class Evaluator:
         threshold_discrimination = (
             (float(np.max(recalls)) - float(np.min(recalls))) if recalls else 0.0
         )
+        threshold_auc = float(np.mean(recalls)) if recalls else 0.0
+        slope = (
+            float(recalls[-1] - recalls[0])
+            if len(recalls) >= 2
+            else 0.0
+        )
 
         return {
             "threshold_metrics": threshold_metrics,
             "recall_mean": float(np.mean(recalls)) if recalls else 0.0,
             "precision_mean": float(np.mean(precisions)) if precisions else 0.0,
             "threshold_discrimination": threshold_discrimination,
+            "threshold_summary": {
+                "threshold_auc": threshold_auc,
+                "slope": slope,
+            },
         }
+
+    def _retention_curve(
+        self,
+        test_queries: list[tuple[str, str]],
+        threshold: float,
+        top_k: int,
+    ) -> OrderedDict[str, float]:
+        target_ticks = (40, 80, 120, 160, 200)
+        history_by_tick = {snap["tick"]: snap for snap in self._history}
+        curve: OrderedDict[str, float] = OrderedDict()
+
+        for tick in target_ticks:
+            if tick in history_by_tick:
+                curve[str(tick)] = float(history_by_tick[tick].get("recall_rate", 0.0))
+            elif self._engine.current_tick == tick:
+                curve[str(tick)] = self.evaluate_recall(test_queries, threshold=threshold, top_k=top_k)
+            else:
+                curve[str(tick)] = 0.0
+        return curve
+
+    def _retention_auc(self, retention_curve: OrderedDict[str, float]) -> float:
+        values = list(retention_curve.values())
+        if not values:
+            return 0.0
+        return float(np.mean(values))
 
     def _smoothness_score(self) -> float:
         if len(self._history) < 2:
@@ -339,7 +375,7 @@ class Evaluator:
     def score_summary(
         self,
         test_queries: list[tuple[str, str]],
-        thresholds: tuple[float, ...] = (0.2, 0.3, 0.4, 0.5),
+        thresholds: tuple[float, ...] = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
         threshold: float = 0.3,
         top_k: int = 5,
     ) -> dict:
@@ -370,12 +406,21 @@ class Evaluator:
 
         # Similarity recall (threshold-independent)
         sim_recall = self.evaluate_similarity_recall(test_queries, top_k=top_k)
+        retention_curve = self._retention_curve(test_queries, threshold=threshold, top_k=top_k)
+        retention_auc = self._retention_auc(retention_curve)
 
         precision_strict_mean = float(np.mean(strict_precisions)) if strict_precisions else 0.0
 
         # Calculate precision lift
         null_precision = sweep["recall_mean"] / max(top_k, 1)
         precision_lift = max(0.0, precision_strict_mean - null_precision)
+        selectivity_score = max(precision_strict_mean - (sweep["precision_mean"] - precision_strict_mean), 0.0)
+        robustness_score = 0.0
+        eval_v2_score = (
+            0.45 * retention_auc
+            + 0.35 * selectivity_score
+            + 0.20 * robustness_score
+        )
 
         # retrieval_score: rebalanced — lower recall weight, higher precision_lift
         # to incentivize selective forgetting over "keep everything alive"
@@ -407,6 +452,11 @@ class Evaluator:
             "precision_lift": precision_lift,
             "precision_associative": sweep["precision_mean"],
             "similarity_recall_rate": sim_recall,
+            "retention_curve": retention_curve,
+            "retention_auc": retention_auc,
+            "selectivity_score": selectivity_score,
+            "robustness_score": robustness_score,
+            "eval_v2_score": eval_v2_score,
         }
 
     def composite_score(

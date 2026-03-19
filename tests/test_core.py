@@ -399,6 +399,10 @@ class TestEvaluator:
         assert "plausibility_score" in summary
         assert "overall_score" in summary
         assert "threshold_metrics" in summary
+        assert "retention_auc" in summary
+        assert "selectivity_score" in summary
+        assert "robustness_score" in summary
+        assert "eval_v2_score" in summary
         assert summary["composite_score"] == summary["overall_score"]
 
     def test_snapshot_records_history(self):
