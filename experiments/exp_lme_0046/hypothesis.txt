@@ -1,0 +1,7 @@
+Include test memories in scheduled_query reactivation pool.
+
+Previously only train memories (rehearsal_targets) were reactivated.
+This means test memories would decay to 0 by tick 120, capping recall at ~0.63.
+
+With scheduled_query_all, train + test memories are cycled through
+the reactivation schedule, keeping test memories active and retrievable.

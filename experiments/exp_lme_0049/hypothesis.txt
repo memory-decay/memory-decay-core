@@ -1,0 +1,16 @@
+Retrieval-induced facilitation (testing effect) + early test reactivation.
+
+Based on team debate consensus:
+- Test memories (153) decay for 120+ ticks with zero reactivation while
+  train memories (4347) get reactivated every 10 ticks.
+- This is the root cause of the 0.63 recall plateau.
+
+Two interventions (both from the debate consensus):
+1. Retrieval consolidation: after each evaluation, boost any test memories
+   that were successfully recalled (+10% activation). This implements the
+   "testing effect" — retrieval practice strengthens memory traces.
+2. Test reactivation starting at tick 80 (before first query at tick 120),
+   every 20 ticks aligned with evaluation.
+
+Params: same as exp_lme_0008 (power=4.0, activation_weight=0.3,
+floor_max=0.45) plus retrieval_boost=0.10

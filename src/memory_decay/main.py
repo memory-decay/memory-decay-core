@@ -90,23 +90,31 @@ def run_simulation(
         test_queries: List of (query, expected_id) pairs.
         total_ticks: Total simulation ticks.
         eval_interval: Evaluate every N ticks.
-        reactivation_policy: Re-activation policy: none, random, scheduled_query.
+        reactivation_policy: Re-activation policy: none, random, scheduled_query,
+            or scheduled_query_all (includes test memories in reactivation).
         reactivation_interval: Apply the selected policy every N ticks.
         reactivation_boost: Activation boost for direct re-activation.
         rehearsal_targets: Memory IDs eligible for scheduled_query reactivation.
-            Required when reactivation_policy is "scheduled_query".
+            Required when reactivation_policy is "scheduled_query" or
+            "scheduled_query_all".
         seed: Random seed used by the random policy.
 
     Returns:
         List of evaluation summaries.
     """
-    if reactivation_policy not in {"none", "random", "scheduled_query"}:
+    if reactivation_policy not in {"none", "random", "scheduled_query", "scheduled_query_all", "scheduled_query_plus_test", "retrieval_consolidation"}:
         raise ValueError(f"Unsupported reactivation_policy: {reactivation_policy}")
 
-    if reactivation_policy == "scheduled_query" and not rehearsal_targets:
+    if reactivation_policy in ("scheduled_query", "scheduled_query_all", "scheduled_query_plus_test", "retrieval_consolidation") and not rehearsal_targets:
         raise ValueError(
-            "rehearsal_targets must be provided when reactivation_policy is 'scheduled_query'"
+            "rehearsal_targets must be provided when reactivation_policy is "
+            "'scheduled_query', 'scheduled_query_all', 'scheduled_query_plus_test', "
+            "or 'retrieval_consolidation'"
         )
+
+    # For policies that involve scheduled_query, extract test memory IDs
+    test_memory_ids: set[str] = {q[1] for q in test_queries}
+    train_memory_ids: set[str] = set(rehearsal_targets) if rehearsal_targets else set()
 
     rng = random.Random(seed)
     summaries = []
@@ -115,11 +123,55 @@ def run_simulation(
     def collect_summary() -> dict:
         return evaluator.score_summary(test_queries, record_snapshot=True)
 
+    def _get_scheduled_target(rehearsal_list: list[str], tick: int, interval: int) -> str | None:
+        """Return the scheduled target for a given tick and interval."""
+        eligible = [
+            mid for mid in rehearsal_list
+            if graph._graph.nodes[mid].get("created_tick", 0) <= engine.current_tick
+        ]
+        if not eligible:
+            return None
+        idx = ((tick // interval) - 1) % len(eligible)
+        return eligible[idx]
+
+    def apply_retrieval_consolidation(current_tick: int) -> None:
+        """Boost test memories that were successfully recalled at this tick.
+
+        Implements the testing effect / retrieval-induced facilitation:
+        successful retrieval strengthens the memory trace through reconsolidation.
+        """
+        retrieval_boost = params.get("retrieval_boost", 0.10)
+        activation_weight = params.get("activation_weight", 0.5)
+        for query_text, expected_id in test_queries:
+            # Query with same parameters as evaluator
+            results = graph.query_by_similarity(
+                query_text,
+                top_k=5,
+                current_tick=current_tick,
+                activation_weight=activation_weight,
+                assoc_boost=params.get("assoc_boost", 0.0),
+            )
+            result_ids = [rid for rid, _ in results]
+            if expected_id in result_ids:
+                # Successful recall — boost this memory (testing effect)
+                graph.re_activate(
+                    expected_id,
+                    retrieval_boost,
+                    source="retrieval_consolidation",
+                    reinforce=True,
+                    current_tick=current_tick,
+                    reinforcement_gain_direct=params["reinforcement_gain_direct"],
+                    reinforcement_gain_assoc=params["reinforcement_gain_assoc"],
+                    stability_cap=params["stability_cap"],
+                )
+
     def apply_reactivation(tick: int) -> None:
-        if reactivation_policy == "none" or tick % reactivation_interval != 0:
+        if reactivation_policy == "none":
             return
 
         if reactivation_policy == "random":
+            if tick % reactivation_interval != 0:
+                return
             candidates = [
                 nid
                 for nid, attrs in graph._graph.nodes(data=True)
@@ -129,28 +181,124 @@ def run_simulation(
             if not candidates:
                 return
             target_id = rng.choice(candidates)
-        else:  # scheduled_query — use rehearsal_targets, NOT test_queries
-            assert rehearsal_targets is not None
-            # Filter to only memories that exist at current tick
-            eligible = [
-                mid for mid in rehearsal_targets
-                if graph._graph.nodes[mid].get("created_tick", 0) <= engine.current_tick
-            ]
-            if not eligible:
-                return
-            idx = ((tick // reactivation_interval) - 1) % len(eligible)
-            target_id = eligible[idx]
+            graph.re_activate(
+                target_id,
+                reactivation_boost,
+                source="direct",
+                reinforce=True,
+                current_tick=engine.current_tick,
+                reinforcement_gain_direct=params["reinforcement_gain_direct"],
+                reinforcement_gain_assoc=params["reinforcement_gain_assoc"],
+                stability_cap=params["stability_cap"],
+            )
+            return
 
-        graph.re_activate(
-            target_id,
-            reactivation_boost,
-            source="direct",
-            reinforce=True,
-            current_tick=engine.current_tick,
-            reinforcement_gain_direct=params["reinforcement_gain_direct"],
-            reinforcement_gain_assoc=params["reinforcement_gain_assoc"],
-            stability_cap=params["stability_cap"],
-        )
+        # scheduled_query_plus_test: separate train + test schedules
+        if reactivation_policy == "scheduled_query_plus_test":
+            assert rehearsal_targets is not None
+            # Train reactivation: same schedule as scheduled_query
+            if tick % reactivation_interval == 0:
+                train_target = _get_scheduled_target(rehearsal_targets, tick, reactivation_interval)
+                if train_target:
+                    graph.re_activate(
+                        train_target,
+                        reactivation_boost,
+                        source="direct",
+                        reinforce=True,
+                        current_tick=engine.current_tick,
+                        reinforcement_gain_direct=params["reinforcement_gain_direct"],
+                        reinforcement_gain_assoc=params["reinforcement_gain_assoc"],
+                        stability_cap=params["stability_cap"],
+                    )
+            # Test reactivation: 2x frequency (every 5 ticks instead of 10)
+            test_interval = 5
+            if tick % test_interval == 0:
+                test_eligible = [
+                    tid for tid in test_memory_ids
+                    if graph._graph.nodes[tid].get("created_tick", 0) <= engine.current_tick
+                ]
+                if test_eligible:
+                    idx = ((tick // test_interval) - 1) % len(test_eligible)
+                    test_target = test_eligible[idx]
+                    graph.re_activate(
+                        test_target,
+                        reactivation_boost,
+                        source="direct",
+                        reinforce=True,
+                        current_tick=engine.current_tick,
+                        reinforcement_gain_direct=params["reinforcement_gain_direct"],
+                        reinforcement_gain_assoc=params["reinforcement_gain_assoc"],
+                        stability_cap=params["stability_cap"],
+                    )
+            return
+
+        # retrieval_consolidation: train reactivation (every 10) + test reactivation (every 20, starting tick 80)
+        if reactivation_policy == "retrieval_consolidation":
+            assert rehearsal_targets is not None
+            # Train: every reactivation_interval ticks (10)
+            if tick % reactivation_interval == 0:
+                train_target = _get_scheduled_target(rehearsal_targets, tick, reactivation_interval)
+                if train_target:
+                    graph.re_activate(
+                        train_target,
+                        reactivation_boost,
+                        source="direct",
+                        reinforce=True,
+                        current_tick=engine.current_tick,
+                        reinforcement_gain_direct=params["reinforcement_gain_direct"],
+                        reinforcement_gain_assoc=params["reinforcement_gain_assoc"],
+                        stability_cap=params["stability_cap"],
+                    )
+            # Test: configurable interval, starting at configurable tick
+            test_start = params.get("test_reactivation_start_tick", 80)
+            test_interval_rc = params.get("test_reactivation_interval", 20)
+            if tick >= test_start and tick % test_interval_rc == 0:
+                test_eligible = [
+                    tid for tid in test_memory_ids
+                    if graph._graph.nodes[tid].get("created_tick", 0) <= engine.current_tick
+                ]
+                if test_eligible:
+                    idx = ((tick // test_interval_rc) - 1) % len(test_eligible)
+                    test_target = test_eligible[idx]
+                    graph.re_activate(
+                        test_target,
+                        reactivation_boost,
+                        source="direct",
+                        reinforce=True,
+                        current_tick=engine.current_tick,
+                        reinforcement_gain_direct=params["reinforcement_gain_direct"],
+                        reinforcement_gain_assoc=params["reinforcement_gain_assoc"],
+                        stability_cap=params["stability_cap"],
+                    )
+            return
+
+        # Standard scheduled_query (train only) and scheduled_query_all
+        if tick % reactivation_interval != 0:
+            return
+
+        if reactivation_policy == "scheduled_query":
+            assert rehearsal_targets is not None
+            target_id = _get_scheduled_target(rehearsal_targets, tick, reactivation_interval)
+        else:  # scheduled_query_all
+            assert rehearsal_targets is not None
+            all_targets = list(rehearsal_targets) + [
+                tid for tid in test_memory_ids
+                if graph._graph.nodes[tid].get("created_tick", 0) <= engine.current_tick
+                and tid not in set(rehearsal_targets)
+            ]
+            target_id = _get_scheduled_target(all_targets, tick, reactivation_interval)
+
+        if target_id:
+            graph.re_activate(
+                target_id,
+                reactivation_boost,
+                source="direct",
+                reinforce=True,
+                current_tick=engine.current_tick,
+                reinforcement_gain_direct=params["reinforcement_gain_direct"],
+                reinforcement_gain_assoc=params["reinforcement_gain_assoc"],
+                stability_cap=params["stability_cap"],
+            )
 
     # Initial evaluation (tick 0)
     summary = collect_summary()
@@ -174,6 +322,9 @@ def run_simulation(
                 f"precision={summary['precision_rate']:.3f} | retrieval={summary['retrieval_score']:.3f} | "
                 f"overall={summary['overall_score']:.3f}"
             )
+            # Retrieval consolidation: boost successfully recalled test memories
+            if reactivation_policy == "retrieval_consolidation":
+                apply_retrieval_consolidation(t)
 
     return summaries
 

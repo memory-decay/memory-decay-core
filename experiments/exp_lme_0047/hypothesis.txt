@@ -1,0 +1,11 @@
+Lower Jost power to break the 0.63 recall plateau.
+
+With power=4.0, excess^4 means decay accelerates quickly - memories hit
+floor by tick 40 and reactivation can't rescue them before tick 120 query.
+
+With power=2.0, decay is much slower:
+- excess^2 decays more gently
+- Each reactivation has MORE lasting effect
+- Memories stay higher longer between reactivation events
+
+Params: power=2.0, lambda_fact=0.006, floor_max=0.40, activation_weight=0.3
