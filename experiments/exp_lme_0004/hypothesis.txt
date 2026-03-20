@@ -1,0 +1,9 @@
+Push reactivation gains higher to improve recall.
+
+exp_lme_0003 showed that adjusting floor/lambda parameters didn't improve recall beyond 0.62. The problem seems to be that memories aren't being sufficiently reactivated when retrieved.
+
+Changes from exp_lme_0003:
+- reinforcement_gain_direct: 0.40 -> 0.55 (stronger boost when directly retrieved)
+- reinforcement_gain_assoc: 0.30 -> 0.45 (stronger associative boost)
+
+Higher reactivation gains should help memories that are successfully retrieved recover more activation, making them more likely to be retrieved again in future queries.

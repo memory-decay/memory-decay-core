@@ -1,0 +1,12 @@
+Change stability from importance averaging to floor multiplier.
+
+Previously: stability and impact were averaged into `importance = (impact*α + stability*ρ)/(α+ρ)`, then passed through sigmoid.
+
+Now: Impact determines base sigmoid floor, stability acts as multiplicative boost:
+  floor = floor_max * sigmoid(k * (impact - mid)) * (1 + stability_weight * stability)
+
+This separates the two mechanisms:
+- Impact → base floor threshold (sharp discrimination)
+- Stability → floor multiplier (additional protection for reinforced memories)
+
+This should better utilize stability - a highly reinforced memory can reach higher floor even if its initial impact was modest.

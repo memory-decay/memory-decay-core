@@ -21,6 +21,36 @@ class Evaluator:
         self._history: list[dict] = []
         self._activation_weight = activation_weight
         self._assoc_boost = assoc_boost
+        self._query_result_cache: dict[tuple, list[tuple[str, float]]] = {}
+
+    def _get_query_results(
+        self,
+        query_text: str,
+        *,
+        top_k: int,
+        current_tick: int | None,
+    ) -> list[tuple[str, float]]:
+        """Return similarity results, reusing work within the same tick."""
+        cache_key = (
+            current_tick,
+            query_text,
+            top_k,
+            self._activation_weight,
+            self._assoc_boost,
+        )
+        cached = self._query_result_cache.get(cache_key)
+        if cached is not None:
+            return list(cached)
+
+        results = self._graph.query_by_similarity(
+            query_text,
+            top_k=top_k,
+            current_tick=current_tick,
+            activation_weight=self._activation_weight,
+            assoc_boost=self._assoc_boost,
+        )
+        self._query_result_cache[cache_key] = list(results)
+        return list(results)
 
     def evaluate_recall(
         self,
@@ -59,7 +89,7 @@ class Evaluator:
                 continue
 
             # Condition 2: appears in similarity results
-            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight, assoc_boost=self._assoc_boost)
+            results = self._get_query_results(query, top_k=top_k, current_tick=current_tick)
             result_ids = [rid for rid, _ in results]
 
             if expected_id in result_ids:
@@ -92,7 +122,7 @@ class Evaluator:
             if not node or node.get("created_tick", 0) > current_tick:
                 continue
 
-            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight, assoc_boost=self._assoc_boost)
+            results = self._get_query_results(query, top_k=top_k, current_tick=current_tick)
 
             if mode == "strict":
                 relevant_ids = {expected_id}
@@ -145,7 +175,7 @@ class Evaluator:
                 continue
 
             act = node["activation_score"]
-            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight, assoc_boost=self._assoc_boost)
+            results = self._get_query_results(query, top_k=top_k, current_tick=current_tick)
             result_ids = [rid for rid, _ in results]
             recalled = 1.0 if expected_id in result_ids else 0.0
 
@@ -189,7 +219,7 @@ class Evaluator:
             if not node or node.get("created_tick", 0) > current_tick:
                 continue
 
-            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight, assoc_boost=self._assoc_boost)
+            results = self._get_query_results(query, top_k=top_k, current_tick=current_tick)
 
             # Filter by activation threshold and find rank of expected_id
             rank = 0
@@ -223,7 +253,7 @@ class Evaluator:
             if not node or node.get("created_tick", 0) > current_tick:
                 continue
             total += 1
-            results = self._graph.query_by_similarity(query, top_k=top_k, current_tick=current_tick, activation_weight=self._activation_weight, assoc_boost=self._assoc_boost)
+            results = self._get_query_results(query, top_k=top_k, current_tick=current_tick)
             if expected_id in [rid for rid, _ in results]:
                 recalled += 1
         return recalled / max(total, 1)
@@ -378,9 +408,20 @@ class Evaluator:
         thresholds: tuple[float, ...] = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
         threshold: float = 0.3,
         top_k: int = 5,
+        record_snapshot: bool = False,
     ) -> dict:
         """Balanced summary split into retrieval and plausibility sub-scores."""
-        snap = self.snapshot(test_queries, threshold=threshold, top_k=top_k, record=False)
+        snap = self.snapshot(
+            test_queries,
+            threshold=threshold,
+            top_k=top_k,
+            record=record_snapshot,
+        )
+        if record_snapshot:
+            snap = {
+                **snap,
+                "forgetting_curve_smoothness": self.forgetting_curve_smoothness(),
+            }
         sweep = self.threshold_sweep(test_queries, thresholds=thresholds, top_k=top_k)
         correlations = [
             self.activation_recall_correlation(test_queries, threshold=t, top_k=top_k)

@@ -1,0 +1,6 @@
+Additive stability boost on floor instead of multiplicative.
+
+Instead of: floor = floor_max * sigmoid * (1 + rho * stability)
+Try: floor = floor_max * sigmoid + stability_boost * stability
+
+This decouples stability's effect from floor_max entirely.

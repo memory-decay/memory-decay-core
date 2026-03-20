@@ -1,0 +1,11 @@
+Aggressively slow decay to push recall toward 0.8.
+
+Previous experiments showed recall stuck at 0.62 regardless of floor/lambda tweaks. This experiment makes more aggressive changes:
+
+- lambda_fact: 0.008 -> 0.005 (40% slower)
+- lambda_episode: 0.035 -> 0.020 (43% slower)
+- jost_power: 4.0 -> 2.5 (slower decay at high activations)
+- sigmoid_mid: 0.25 -> 0.20 (floor engages at lower importance)
+- sigmoid_k: 20.0 -> 15.0 (softer transition)
+
+The goal is to slow forgetting substantially while still maintaining the Jost+sigmoid structure.

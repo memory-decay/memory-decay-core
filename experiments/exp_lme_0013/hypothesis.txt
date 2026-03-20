@@ -1,0 +1,9 @@
+Remove stability from retention, keep only as floor multiplier.
+
+Previously both floor and retention used stability, causing potential double-counting.
+
+Changes from exp_lme_0012:
+- retention = max(1 + alpha*impact, 1) — NO stability
+- floor = floor_max * sigmoid(k*(impact-mid)) * (1 + rho*stability) — YES stability
+
+This cleaner separation: stability only protects via floor, not via slowing decay rate. High-stability memories get floor boost but decay at same rate as low-stability with same impact.

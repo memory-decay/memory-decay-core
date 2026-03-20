@@ -1,0 +1,9 @@
+Lower sigmoid floor to allow more forgetting per reviewer feedback.
+
+Reviewer noted that exp_lme_0001's floor_max=0.60 was too protective - even highly important memories were locked at 60% activation, which doesn't match human forgetting curves where important memories do decay substantially.
+
+Changes:
+- floor_max: 0.60 -> 0.45 (allow important memories to decay to 45% max, not 60%)
+- sigmoid_mid: 0.25 -> 0.30 (require higher importance threshold before floor engages)
+
+This should produce a more realistic forgetting pattern where importance still protects memories but not as aggressively.

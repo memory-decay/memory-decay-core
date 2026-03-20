@@ -1,1 +1,8 @@
 {"round": 0, "experiment": "exp_lme_0000", "next_direction": "Run old best (Jost+sigmoid) on new dataset", "timestamp": "2026-03-20T02:54:40.831610"}
+{"round": 1, "experiment": "exp_lme_0002", "next_direction": "Lower floor_max to 0.45 and sigmoid_mid to 0.30 improved overall 0.037->0.336; next explore lower floor_max or adjust sigmoid_k", "timestamp": "2026-03-20T10:30:00.000000"}
+{"round": 2, "experiment": "exp_lme_0007", "next_direction": "Lowering floor_max to 0.40 improved discrimination but hurt recall too much; keep floor_max=0.45 and tune sigmoid_k next", "timestamp": "2026-03-20T19:59:00.000000"}
+{"round": 3, "experiment": "exp_lme_0008", "next_direction": "Sharpening sigmoid_k to 30 improved fixed-split and passed CV; keep floor_max=0.45 and tune sigmoid_mid next", "timestamp": "2026-03-20T22:05:00.000000"}
+{"round": 4, "experiment": "exp_lme_0009", "next_direction": "sigmoid_mid=0.32 recovered plausibility but lost too much retrieval; keep exp_lme_0008 as best and try smaller local moves", "timestamp": "2026-03-20T22:20:00.000000"}
+{"round": 5, "experiment": "exp_lme_0010", "next_direction": "sigmoid_mid=0.31 also failed to beat exp_lme_0008; stop midpoint-up micro-tuning and try a different local axis", "timestamp": "2026-03-20T22:28:00.000000"}
+{"round": 6, "experiment": "exp_lme_0011", "next_direction": "sigmoid_k=25 also failed to beat exp_lme_0008; local floor-shape tuning looks exhausted, so change mechanism next", "timestamp": "2026-03-20T22:36:00.000000"}
+{"round": 7, "experiment": "exp_lme_0045", "next_direction": "45 experiments run, search converged. Best exp_lme_0008 CV=0.3466. Escalation: need to change outside allowed surface", "timestamp": "2026-03-20T23:15:00.000000"}

@@ -1,0 +1,5 @@
+Add assoc_boost=0.5 to exp_lme_0008's params.
+
+exp_lme_0008 didn't specify assoc_boost, so it used default 0. This enables spreading activation during retrieval, which may help recall without changing the decay function itself.
+
+assoc_boost makes retrieved memories' neighbors get a small activation boost, potentially helping related test memories get retrieved indirectly.

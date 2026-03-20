@@ -1,0 +1,5 @@
+Logarithmic saturation floor instead of sigmoid.
+
+floor = floor_max * log(1 + k*importance) / log(1 + k)
+
+This saturates more gradually than sigmoid, giving more distinct floors at lower importance levels.

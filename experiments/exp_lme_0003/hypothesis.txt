@@ -1,0 +1,12 @@
+Target recall > 0.8 by slowing decay rate.
+
+exp_lme_0002 achieved overall=0.336 but recall only 0.62. To push recall higher while still respecting reviewer feedback:
+
+Changes from exp_lme_0002:
+- floor_max: 0.45 -> 0.50 (slightly more protection, still below original 0.60)
+- sigmoid_mid: 0.30 -> 0.25 (floor engages at lower importance threshold)
+- jost_power: 4.0 -> 3.0 (less aggressive decay at high activations)
+- lambda_fact: 0.008 -> 0.006 (slower base decay)
+- lambda_episode: 0.035 -> 0.025 (slower base decay)
+
+This should preserve more memories over the 200-tick simulation while keeping meaningful forgetting.

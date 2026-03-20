@@ -1,1 +1,45 @@
 {"exp": "exp_lme_0000", "overall": 0.0374, "retrieval": 0.0401, "plausibility": 0.5589, "status": "baseline", "hypothesis": "LongMemEval baseline with default exponential decay + Gemini embeddings"}
+{"exp": "exp_lme_0002", "overall": 0.3360, "retrieval": 0.3589, "plausibility": 0.5745, "status": "improved", "hypothesis": "Lower sigmoid floor per reviewer feedback: floor_max 0.60->0.45, sigmoid_mid 0.25->0.30"}
+{"exp": "exp_lme_0007", "overall": 0.3177, "retrieval": 0.3388, "plausibility": 0.5837, "status": "rejected", "hypothesis": "Lower floor_max from 0.45 to 0.40 while keeping the exp_lme_0002 Jost+sigmoid structure fixed"}
+{"exp": "exp_lme_0003", "overall": 0.3349, "retrieval": 0.3579, "plausibility": 0.5702, "status": "not_improved", "hypothesis": "Slower decay with floor_max=0.50, sigmoid_mid=0.25, jost_power=3.0, lower lambda"}
+{"exp": "exp_lme_0004", "overall": 0.3349, "retrieval": 0.3579, "plausibility": 0.5702, "status": "not_improved", "hypothesis": "Higher reactivation gains: direct=0.55, assoc=0.45"}
+{"exp": "exp_lme_0005", "overall": 0.2707, "retrieval": 0.3139, "plausibility": 0.0822, "status": "not_improved", "hypothesis": "Random reactivation policy + higher assoc_boost - recall=0.536 but overall worse"}
+{"exp": "exp_lme_0006", "overall": 0.3123, "retrieval": 0.3357, "plausibility": 0.5363, "status": "not_improved", "hypothesis": "Aggressively slower decay: lambda_fact=0.005, lambda_episode=0.020, jost_power=2.5"}
+{"exp": "exp_lme_0008", "overall": 0.3415, "retrieval": 0.3656, "plausibility": 0.5605, "status": "accepted_cv", "hypothesis": "Sharpen sigmoid transition only: floor_max=0.45 fixed, sigmoid_k 20->30", "cv_overall": 0.3466, "cv_std": 0.0296, "cv_pct": 8.5}
+{"exp": "exp_lme_0009", "overall": 0.3396, "retrieval": 0.3628, "plausibility": 0.5737, "status": "not_improved", "hypothesis": "Keep sigmoid_k=30 and raise sigmoid_mid from 0.30 to 0.32 to recover plausibility"}
+{"exp": "exp_lme_0010", "overall": 0.3395, "retrieval": 0.3627, "plausibility": 0.5737, "status": "not_improved", "hypothesis": "Keep sigmoid_k=30 and raise sigmoid_mid from 0.30 to 0.31 as a smaller local move"}
+{"exp": "exp_lme_0011", "overall": 0.3394, "retrieval": 0.3627, "plausibility": 0.5729, "status": "not_improved", "hypothesis": "Keep sigmoid_mid=0.30 and soften sigmoid_k from 30 to 25 to recover plausibility"}
+{"exp": "exp_lme_0012", "overall": 0.3111, "retrieval": 0.3319, "plausibility": 0.5816, "status": "not_improved", "hypothesis": "Stability as floor multiplier"}
+{"exp": "exp_lme_0013", "overall": 0.3111, "retrieval": 0.3319, "plausibility": 0.5816, "status": "not_improved", "hypothesis": "Stability only on floor (no double counting)"}
+{"exp": "exp_lme_0014", "overall": 0.2854, "retrieval": 0.3056, "plausibility": 0.5589, "status": "not_improved", "hypothesis": "assoc_boost=0.5"}
+{"exp": "exp_lme_0015", "overall": 0.3261, "retrieval": 0.3462, "plausibility": 0.6136, "status": "not_improved", "hypothesis": "assoc_boost=0.1"}
+{"exp": "exp_lme_0016", "overall": 0.3425, "retrieval": 0.3664, "plausibility": 0.5655, "status": "not_improved", "hypothesis": "activation_weight=0.3"}
+{"exp": "exp_lme_0017", "overall": 0.3349, "retrieval": 0.3575, "plausibility": 0.5793, "status": "not_improved", "hypothesis": "activation_weight=0.7"}
+{"exp": "exp_lme_0018", "overall": 0.1519, "retrieval": 0.1567, "plausibility": 0.7974, "status": "not_improved", "hypothesis": "Hyperbolic decay"}
+{"exp": "exp_lme_0019", "overall": 0.3296, "retrieval": 0.3565, "plausibility": 0.4984, "status": "not_improved", "hypothesis": "activation_weight=0.2"}
+{"exp": "exp_lme_0020", "overall": 0.3335, "retrieval": 0.3610, "plausibility": 0.4934, "status": "not_improved", "hypothesis": "activation_weight=0.25"}
+{"exp": "exp_lme_0021", "overall": 0.3155, "retrieval": 0.3433, "plausibility": 0.4602, "status": "not_improved", "hypothesis": "activation_weight=0.15"}
+{"exp": "exp_lme_0022", "overall": 0.3426, "retrieval": 0.3666, "plausibility": 0.5648, "status": "not_improved", "hypothesis": "activation_weight=0.3 + sigmoid_k=35"}
+{"exp": "exp_lme_0023", "overall": 0.3427, "retrieval": 0.3666, "plausibility": 0.5648, "status": "not_improved", "hypothesis": "activation_weight=0.3 + sigmoid_k=40"}
+{"exp": "exp_lme_0024", "overall": 0.3428, "retrieval": 0.3667, "plausibility": 0.5657, "status": "not_improved", "hypothesis": "activation_weight=0.3 + floor_max=0.43"}
+{"exp": "exp_lme_0025", "overall": 0.3397, "retrieval": 0.3646, "plausibility": 0.5454, "status": "not_improved", "hypothesis": "activation_weight=0.3 + floor_max=0.47"}
+{"exp": "exp_lme_0026", "overall": 0.3402, "retrieval": 0.3639, "plausibility": 0.5669, "status": "not_improved", "hypothesis": "activation_weight=0.3 + floor_max=0.41"}
+{"exp": "exp_lme_0027", "overall": 0.3417, "retrieval": 0.3654, "plausibility": 0.5663, "status": "not_improved", "hypothesis": "activation_weight=0.3 + floor_max=0.42"}
+{"exp": "exp_lme_0028", "overall": 0.3428, "retrieval": 0.3667, "plausibility": 0.5657, "status": "not_improved", "hypothesis": "activation_weight=0.3 + floor_max=0.43 + sigmoid_k=40"}
+{"exp": "exp_lme_0029", "overall": 0.3333, "retrieval": 0.3565, "plausibility": 0.5660, "status": "not_improved", "hypothesis": "activation_weight=0.3 + jost_power=3.5"}
+{"exp": "exp_lme_0030", "overall": 0.3395, "retrieval": 0.3643, "plausibility": 0.5467, "status": "not_improved", "hypothesis": "activation_weight=0.3 + jost_power=4.5"}
+{"exp": "exp_lme_0031", "overall": 0.3387, "retrieval": 0.3634, "plausibility": 0.5472, "status": "not_improved", "hypothesis": "activation_weight=0.3 + lambda=0.007/0.030"}
+{"exp": "exp_lme_0032", "overall": 0.3431, "retrieval": 0.3668, "plausibility": 0.5686, "status": "rejected_cv", "hypothesis": "activation_weight=0.3 + lambda=0.009/0.040", "cv_overall": 0.3442, "cv_std": 0.0304, "cv_pct": 8.8}
+{"exp": "exp_lme_0033", "overall": 0.3388, "retrieval": 0.3620, "plausibility": 0.5724, "status": "not_improved", "hypothesis": "activation_weight=0.3 + lambda=0.010/0.045"}
+{"exp": "exp_lme_0034", "overall": 0.3430, "retrieval": 0.3667, "plausibility": 0.5686, "status": "not_improved", "hypothesis": "activation_weight=0.3 + sigmoid_mid=0.28"}
+{"exp": "exp_lme_0035", "overall": 0.3430, "retrieval": 0.3667, "plausibility": 0.5686, "status": "not_improved", "hypothesis": "activation_weight=0.3 + sigmoid_mid=0.32"}
+{"exp": "exp_lme_0036", "overall": 0.3431, "retrieval": 0.3669, "plausibility": 0.5686, "status": "not_improved", "hypothesis": "activation_weight=0.3 + sigmoid_k=38"}
+{"exp": "exp_lme_0037", "overall": 0.3431, "retrieval": 0.3668, "plausibility": 0.5686, "status": "not_improved", "hypothesis": "activation_weight=0.3 + reinforcement_gain=0.50/0.40"}
+{"exp": "exp_lme_0038", "overall": 0.3431, "retrieval": 0.3668, "plausibility": 0.5686, "status": "not_improved", "hypothesis": "activation_weight=0.3 + reinforcement_gain=0.30/0.20"}
+{"exp": "exp_lme_0039", "overall": 0.3431, "retrieval": 0.3668, "plausibility": 0.5686, "status": "not_improved", "hypothesis": "Additive stability boost on floor"}
+{"exp": "exp_lme_0040", "overall": 0.1802, "retrieval": 0.1899, "plausibility": 0.6609, "status": "not_improved", "hypothesis": "Stretched exponential decay"}
+{"exp": "exp_lme_0041", "overall": 0.2690, "retrieval": 0.2874, "plausibility": 0.5744, "status": "not_improved", "hypothesis": "Logarithmic floor"}
+{"exp": "exp_lme_0042", "overall": 0.3328, "retrieval": 0.3557, "plausibility": 0.5701, "status": "not_improved", "hypothesis": "alpha=1.0"}
+{"exp": "exp_lme_0043", "overall": 0.3423, "retrieval": 0.3662, "plausibility": 0.5657, "status": "not_improved", "hypothesis": "alpha=2.0"}
+{"exp": "exp_lme_0044", "overall": 0.2975, "retrieval": 0.3224, "plausibility": 0.4853, "status": "not_improved", "hypothesis": "Impact-only floor"}
+{"exp": "exp_lme_0045", "overall": 0.2208, "retrieval": 0.2332, "plausibility": 0.6454, "status": "not_improved", "hypothesis": "Quadratic floor"}

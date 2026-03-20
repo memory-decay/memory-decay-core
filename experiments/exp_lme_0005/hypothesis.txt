@@ -1,0 +1,10 @@
+Use random reactivation policy and higher assoc_boost to improve recall.
+
+Previous experiments showed recall stuck at 0.62 because test memories are never directly reactivated - only train memories get scheduled reactivation. Test memories depend entirely on associative spreading.
+
+This experiment:
+1. Use random reactivation policy (reactivates ANY memory including test memories)
+2. Increase assoc_boost to 0.5 (stronger spreading activation)
+3. Slightly higher floor_max (0.55) for more baseline protection
+
+The random policy means test memories can be directly reactivated, which should help maintain their activation over time.

@@ -1,0 +1,11 @@
+Hyperbolic decay instead of Jost power law.
+
+Instead of: da/dt = -lambda * (a - floor)^jost_power
+Use: da/dt = -lambda * (a - floor) / ((a - floor) + hyperbolic_k)
+
+This hyperbolic form has different properties:
+- At high excess: approaches linear decay like Jost with power=1
+- At low excess: much slower decay than power law
+- More gradual approach to floor
+
+May produce smoother forgetting curves.

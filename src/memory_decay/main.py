@@ -113,10 +113,7 @@ def run_simulation(
     params = engine.get_params()
 
     def collect_summary() -> dict:
-        snap = evaluator.snapshot(test_queries)
-        summary = evaluator.score_summary(test_queries)
-        summary["tick"] = snap["tick"]
-        return summary
+        return evaluator.score_summary(test_queries, record_snapshot=True)
 
     def apply_reactivation(tick: int) -> None:
         if reactivation_policy == "none" or tick % reactivation_interval != 0:
