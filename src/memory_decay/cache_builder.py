@@ -22,9 +22,11 @@ def build_cache(
     dataset_path: str,
     cache_dir: str,
     embedder: Optional[Callable] = None,
+    batch_embedder: Optional[Callable] = None,
     embedding_backend: str = "auto",
     test_ratio: float = 0.2,
     seed: int = 42,
+    batch_size: int = 100,
 ) -> None:
     cache_path = Path(cache_dir)
     cache_path.mkdir(parents=True, exist_ok=True)
@@ -40,6 +42,8 @@ def build_cache(
         from .graph import MemoryGraph
         graph = MemoryGraph(embedding_backend=embedding_backend)
         embedder = graph._embed_text
+        if batch_embedder is None:
+            batch_embedder = graph._gemini_embed_batch
 
     embeddings: dict[str, np.ndarray] = {}
     texts = set()
@@ -49,11 +53,22 @@ def build_cache(
         if "recall_query" in item:
             texts.add(item["recall_query"])
 
-    for i, text in enumerate(sorted(texts)):
-        emb = np.array(embedder(text), dtype=np.float32)
-        embeddings[text] = emb
-        if (i + 1) % 50 == 0:
-            print(f"  Embedded {i + 1}/{len(texts)} texts")
+    sorted_texts = sorted(texts)
+
+    if batch_embedder is not None:
+        for batch_start in range(0, len(sorted_texts), batch_size):
+            batch = sorted_texts[batch_start:batch_start + batch_size]
+            batch_embeddings = batch_embedder(batch)
+            for text, emb in zip(batch, batch_embeddings):
+                embeddings[text] = np.array(emb, dtype=np.float32)
+            processed = min(batch_start + batch_size, len(sorted_texts))
+            print(f"  Embedded {processed}/{len(sorted_texts)} texts")
+    else:
+        for i, text in enumerate(sorted_texts):
+            emb = np.array(embedder(text), dtype=np.float32)
+            embeddings[text] = emb
+            if (i + 1) % 50 == 0:
+                print(f"  Embedded {i + 1}/{len(sorted_texts)} texts")
 
     print(f"  Cached {len(embeddings)} embeddings")
 
@@ -145,7 +160,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--backend", choices=["auto", "local", "gemini"], default="auto"
     )
+    parser.add_argument(
+        "--batch-size", type=int, default=100, help="Texts per batch API call (default: 100)"
+    )
     args = parser.parse_args()
 
-    build_cache(args.dataset, args.output, embedding_backend=args.backend)
+    build_cache(args.dataset, args.output, embedding_backend=args.backend, batch_size=args.batch_size)
     print(f"Cache saved to {args.output}/")

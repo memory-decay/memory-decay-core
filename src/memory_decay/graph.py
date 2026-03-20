@@ -71,11 +71,32 @@ class MemoryGraph:
             self._gemini_client = genai.Client(api_key=api_key)
             self._embedding_dim = 768
 
+        model_name = os.environ.get("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
         result = self._gemini_client.models.embed_content(
-            model="gemini-embedding-001",
+            model=model_name,
             contents=text,
         )
         return np.array(result.embeddings[0].values, dtype=np.float32)
+
+    def _gemini_embed_batch(self, texts: list[str]) -> list[np.ndarray]:
+        """Batch Gemini API embedding via google-genai SDK."""
+        if self._gemini_client is None:
+            from google import genai
+            api_key = os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                raise ValueError("GEMINI_API_KEY is required for Gemini embeddings.")
+            self._gemini_client = genai.Client(api_key=api_key)
+            self._embedding_dim = 768
+
+        model_name = os.environ.get("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
+        result = self._gemini_client.models.embed_content(
+            model=model_name,
+            contents=texts,  # type: ignore[reportArgumentType]
+        )
+        embeddings = [np.array(emb.values, dtype=np.float32) for emb in result.embeddings]  # type: ignore[reportOptionalIterable]
+        if embeddings:
+            self._embedding_dim = embeddings[0].shape[0]
+        return embeddings
 
     def add_memory(
         self,
