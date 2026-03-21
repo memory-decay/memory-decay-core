@@ -10,6 +10,7 @@ from pathlib import Path
 METRICS = [
     "overall_score",
     "retrieval_score",
+    "forgetting_score",
     "plausibility_score",
     "recall_mean",
     "mrr_mean",
@@ -17,7 +18,6 @@ METRICS = [
     "retention_auc",
     "selectivity_score",
     "robustness_score",
-    "eval_v2_score",
 ]
 
 

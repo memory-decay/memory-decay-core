@@ -23,6 +23,18 @@ class Evaluator:
         self._assoc_boost = assoc_boost
         self._query_result_cache: dict[tuple, list[tuple[str, float]]] = {}
 
+    @staticmethod
+    def _storage_score(node: dict | None) -> float:
+        if not node:
+            return 0.0
+        return float(node.get("storage_score", node.get("activation_score", 0.0)))
+
+    @staticmethod
+    def _retrieval_score(node: dict | None) -> float:
+        if not node:
+            return 0.0
+        return float(node.get("retrieval_score", node.get("activation_score", 0.0)))
+
     def _get_query_results(
         self,
         query_text: str,
@@ -52,6 +64,53 @@ class Evaluator:
         self._query_result_cache[cache_key] = list(results)
         return list(results)
 
+    def _candidate_pool_limit(self, current_tick: int | None) -> int:
+        """Return the maximum relevant candidate count for a query."""
+        count = 0
+        for _, attrs in self._graph._graph.nodes(data=True):
+            if attrs.get("type") in ("unknown", None):
+                continue
+            if current_tick is not None and attrs.get("created_tick", 0) > current_tick:
+                continue
+            count += 1
+        return max(count, 1)
+
+    def _get_thresholded_results(
+        self,
+        query_text: str,
+        *,
+        threshold: float,
+        top_k: int,
+        current_tick: int | None,
+        threshold_field: str = "storage_score",
+    ) -> list[tuple[str, float]]:
+        """Filter the broader candidate pool by threshold before applying top_k."""
+        candidate_limit = max(top_k, self._candidate_pool_limit(current_tick))
+        results = self._get_query_results(
+            query_text,
+            top_k=candidate_limit,
+            current_tick=current_tick,
+        )
+
+        filtered: list[tuple[str, float]] = []
+        for rid, score in results:
+            node = self._graph.get_node(rid)
+            if not node or node.get("type") in ("unknown", None):
+                continue
+            if current_tick is not None and node.get("created_tick", 0) > current_tick:
+                continue
+            if threshold_field == "retrieval_score":
+                score_value = self._retrieval_score(node)
+            else:
+                score_value = self._storage_score(node)
+            if score_value < threshold:
+                continue
+            filtered.append((rid, score))
+            if len(filtered) >= top_k:
+                break
+
+        return filtered
+
     def evaluate_recall(
         self,
         test_queries: list[tuple[str, str]],
@@ -61,8 +120,8 @@ class Evaluator:
         """Fraction of memories successfully recalled.
 
         A memory is "recalled" if:
-        1. Its activation_score > threshold (it hasn't decayed beyond retrievability)
-        2. It appears in the top_k similarity search results
+        1. Its storage_score > threshold (it remains stored strongly enough)
+        2. It appears in the top_k retrieval-ranked similarity search results
 
         Both conditions must be met — this models the dual requirement that
         a memory must be both stored (activation) and retrievable (similarity).
@@ -84,12 +143,18 @@ class Evaluator:
 
             observable += 1
 
-            # Condition 1: activation above threshold
-            if node["activation_score"] < threshold:
+            # Condition 1: storage above threshold
+            if self._storage_score(node) < threshold:
                 continue
 
-            # Condition 2: appears in similarity results
-            results = self._get_query_results(query, top_k=top_k, current_tick=current_tick)
+            # Condition 2: appears in the top_k threshold-eligible similarity results
+            results = self._get_thresholded_results(
+                query,
+                threshold=threshold,
+                top_k=top_k,
+                current_tick=current_tick,
+                threshold_field="storage_score",
+            )
             result_ids = [rid for rid, _ in results]
 
             if expected_id in result_ids:
@@ -122,7 +187,13 @@ class Evaluator:
             if not node or node.get("created_tick", 0) > current_tick:
                 continue
 
-            results = self._get_query_results(query, top_k=top_k, current_tick=current_tick)
+            results = self._get_thresholded_results(
+                query,
+                threshold=threshold,
+                top_k=top_k,
+                current_tick=current_tick,
+                threshold_field="storage_score",
+            )
 
             if mode == "strict":
                 relevant_ids = {expected_id}
@@ -135,11 +206,6 @@ class Evaluator:
                 relevant_ids.add(expected_id)
 
             for rid, _ in results:
-                r_node = self._graph.get_node(rid)
-                if not r_node or r_node.get("type") in ("unknown", None):
-                    continue
-                if r_node["activation_score"] < threshold:
-                    continue
                 total_retrieved += 1
                 if rid in relevant_ids:
                     total_relevant += 1
@@ -154,9 +220,9 @@ class Evaluator:
         threshold: float = 0.3,
         top_k: int = 5,
     ) -> float:
-        """Pearson correlation between activation score and recall success.
+        """Pearson correlation between storage score and recall success.
 
-        Returns correlation in [-1, 1]. Higher = activation predicts recall well.
+        Returns correlation in [-1, 1]. Higher = storage predicts recall well.
         """
         if len(test_queries) < 3:
             return 0.0
@@ -174,8 +240,16 @@ class Evaluator:
             if node.get("created_tick", 0) > current_tick:
                 continue
 
-            act = node["activation_score"]
-            results = self._get_query_results(query, top_k=top_k, current_tick=current_tick)
+            act = self._storage_score(node)
+            if act < threshold:
+                continue
+            results = self._get_thresholded_results(
+                query,
+                threshold=threshold,
+                top_k=top_k,
+                current_tick=current_tick,
+                threshold_field="storage_score",
+            )
             result_ids = [rid for rid, _ in results]
             recalled = 1.0 if expected_id in result_ids else 0.0
 
@@ -219,17 +293,18 @@ class Evaluator:
             if not node or node.get("created_tick", 0) > current_tick:
                 continue
 
-            results = self._get_query_results(query, top_k=top_k, current_tick=current_tick)
+            results = self._get_thresholded_results(
+                query,
+                threshold=threshold,
+                top_k=top_k,
+                current_tick=current_tick,
+                threshold_field="storage_score",
+            )
 
             # Filter by activation threshold and find rank of expected_id
             rank = 0
             found = False
             for rid, _ in results:
-                r_node = self._graph.get_node(rid)
-                if not r_node or r_node.get("type") in ("unknown", None):
-                    continue
-                if r_node["activation_score"] < threshold:
-                    continue
                 rank += 1
                 if rid == expected_id:
                     found = True
@@ -402,6 +477,68 @@ class Evaluator:
             return 0.5
         return max(1.0 - self.forgetting_curve_smoothness() * 10, 0.0)
 
+    def _forgetting_score(self, test_queries: list[tuple[str, str]]) -> tuple[float, float]:
+        """Measure how well the system forgets non-target memories.
+
+        Returns (forgetting_score, non_target_mean_storage).
+        forgetting_score = max(0, 1 - mean(storage of non-targets)).
+        Higher = better selective forgetting.
+        """
+        target_ids = {expected_id for _, expected_id in test_queries}
+        current_tick = self._engine.current_tick
+
+        non_target_storage: list[float] = []
+        for node_id, attrs in self._graph._graph.nodes(data=True):
+            if attrs.get("type") in ("unknown", None):
+                continue
+            if current_tick is not None and attrs.get("created_tick", 0) > current_tick:
+                continue
+            if node_id in target_ids:
+                continue
+            storage = float(attrs.get("storage_score", attrs.get("activation_score", 0.0)))
+            non_target_storage.append(storage)
+
+        if not non_target_storage:
+            return 0.5, 0.5
+
+        mean_storage = float(np.mean(non_target_storage))
+        return max(0.0, 1.0 - mean_storage), mean_storage
+
+    def _score_spread(self, field: str, prefix: str) -> dict[str, float]:
+        """Measure distribution spread for a given node score field."""
+        activations = []
+        for _, attrs in self._graph._graph.nodes(data=True):
+            if attrs.get("type") in ("unknown", None):
+                continue
+            activations.append(float(attrs.get(field, attrs.get("activation_score", 0.0))))
+
+        if len(activations) < 2:
+            return {
+                f"{prefix}_std": 0.0,
+                f"{prefix}_iqr": 0.0,
+                f"{prefix}_gini": 0.0,
+            }
+
+        scores = np.array(activations, dtype=np.float64)
+        q1, q3 = np.percentile(scores, [25, 75])
+        sorted_scores = np.sort(scores)
+        total = float(np.sum(sorted_scores))
+        if total <= 0.0:
+            gini = 0.0
+        else:
+            n = len(sorted_scores)
+            index = np.arange(1, n + 1, dtype=np.float64)
+            gini = float(
+                (2.0 * np.sum(index * sorted_scores) - (n + 1) * total)
+                / (n * total)
+            )
+
+        return {
+            f"{prefix}_std": float(np.std(scores)),
+            f"{prefix}_iqr": float(q3 - q1),
+            f"{prefix}_gini": gini,
+        }
+
     def score_summary(
         self,
         test_queries: list[tuple[str, str]],
@@ -422,6 +559,8 @@ class Evaluator:
                 **snap,
                 "forgetting_curve_smoothness": self.forgetting_curve_smoothness(),
             }
+        storage_spread = self._score_spread("storage_score", "storage")
+        retrieval_spread = self._score_spread("retrieval_score", "retrieval")
         sweep = self.threshold_sweep(test_queries, thresholds=thresholds, top_k=top_k)
         correlations = [
             self.activation_recall_correlation(test_queries, threshold=t, top_k=top_k)
@@ -463,28 +602,37 @@ class Evaluator:
             + 0.20 * robustness_score
         )
 
-        # retrieval_score: rebalanced — lower recall weight, higher precision_lift
-        # to incentivize selective forgetting over "keep everything alive"
-        retrieval_score = (
-            0.40 * sweep["recall_mean"]
-            + 0.30 * mrr_mean
-            + 0.30 * precision_lift
+        # 3-Pillar scoring formula
+        # Pillar 1: Retrieval — recall + ranking quality
+        retrieval_score = 0.55 * sweep["recall_mean"] + 0.45 * mrr_mean
+
+        # Pillar 2: Forgetting — penalize keeping non-targets alive
+        forgetting_score, non_target_mean_storage = self._forgetting_score(test_queries)
+
+        # Pillar 3: Plausibility — correlation only (smoothness removed for fold stability)
+        plausibility_score = corr_score
+
+        # Overall: weighted sum of three pillars
+        overall_score = (
+            0.40 * retrieval_score
+            + 0.35 * forgetting_score
+            + 0.25 * plausibility_score
         )
-
-        # Plausibility: correlation now allows negative values (penalty),
-        # smoothness weight reduced as it has low discriminating power
-        plausibility_score = 0.50 * corr_score + 0.50 * smoothness_score
-
-        # Multiplicative gate: retrieval must support plausibility
-        overall_score = retrieval_score * (0.85 + 0.15 * plausibility_score)
 
         return {
             **snap,
+            **storage_spread,
+            **retrieval_spread,
+            "activation_std": storage_spread["storage_std"],
+            "activation_iqr": storage_spread["storage_iqr"],
+            "activation_gini": storage_spread["storage_gini"],
             **sweep,
             "corr_mean": corr_mean,
             "corr_score": corr_score,
             "smoothness_score": smoothness_score,
             "retrieval_score": retrieval_score,
+            "forgetting_score": forgetting_score,
+            "non_target_mean_storage": non_target_mean_storage,
             "plausibility_score": plausibility_score,
             "overall_score": overall_score,
             "composite_score": overall_score,
@@ -497,7 +645,6 @@ class Evaluator:
             "retention_auc": retention_auc,
             "selectivity_score": selectivity_score,
             "robustness_score": robustness_score,
-            "eval_v2_score": eval_v2_score,
         }
 
     def composite_score(

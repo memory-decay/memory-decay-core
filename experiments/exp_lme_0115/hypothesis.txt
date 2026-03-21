@@ -1,0 +1,4 @@
+Pure exponential half-life decay + retrieval_consolidation + additive:
+- Removes the sigmoid floor and Jost power-law entirely
+- half_life = base_half_life * (1 + importance_scale * importance)
+- Tests whether importance-scaled exponential decay creates meaningful threshold spread under the current retrieval policy

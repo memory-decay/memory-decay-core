@@ -1,7 +1,7 @@
-# Auto-Research Loop: Memory Decay Function Exploration
+# Auto-Research Loop: Dual-State Memory Decay Exploration
 
 ## Goal
-Discover better decay functions by iterating: hypothesize -> implement -> test -> judge.
+Discover better dual-state memory dynamics by iterating: hypothesize -> implement -> test -> judge.
 
 ## Operating Principle
 
@@ -9,8 +9,34 @@ The human defines the closed loop. The AI agent works only inside the allowed se
 
 - The loop itself is fixed by humans
 - Evaluation, datasets, bootstrap artifacts, and experiment protocol are fixed
-- The agent may explore only the allowed algorithm and weight space
+- The fixed protocol now includes the dual-state memory architecture
+- The agent may explore only the allowed algorithm and weight space inside that architecture
 - If an apparent improvement requires changing the loop, evaluator, or datasets, stop and report it instead of modifying them
+
+## Fixed Dual-State Architecture
+
+The current protocol uses two state variables per memory:
+
+- `storage_score`: decays over time and is used for threshold gating in evaluation
+- `retrieval_score`: decays over time and is used for similarity ranking and activation-weighted retrieval
+
+Compatibility note:
+
+- `activation_score` is retained as a compatibility alias of `retrieval_score`
+- Future experiments should reason in terms of `storage_score` and `retrieval_score`, not a single activation value
+
+Protocol semantics:
+
+- Threshold-dependent recall, precision, MRR, and correlation use `storage_score`
+- Similarity ranking uses `retrieval_score`
+- Standard scheduled reactivation policies (`random`, `scheduled_query`, `scheduled_query_all`, `scheduled_query_plus_test`) boost both states unless explicitly changed by humans
+- `retrieval_consolidation` behavior is controlled by `params.json` via `retrieval_consolidation_mode`
+
+Allowed retrieval consolidation modes:
+
+- `activation_and_stability`: boosts retrieval and reinforces stability
+- `retrieval_only`: boosts retrieval and reinforces stability without directly raising storage
+- `stability_only_direct`: reinforces stability only, without directly raising retrieval or storage
 
 ## Preflight (run once before the loop if missing)
 
@@ -52,8 +78,12 @@ Based on previous results **and memory chain feedback**, form a hypothesis for i
 - If yes to either: choose a different direction. Do not repeat known failures.
 
 Consider:
-- Which thresholds have low recall? Can a different curve shape help?
+- Which thresholds have low recall? Is storage decaying too aggressively or not selectively enough?
+- Is retrieval ranking strong enough even when storage becomes selective?
 - Is the decay too fast or too slow for facts vs episodes?
+- Is the gap between storage and retrieval state helping or hurting selectivity?
+- Would a different `retrieval_consolidation_mode` improve the storage/retrieval tradeoff?
+- Are `retrieval_boost`, `activation_weight`, and the importance-scaled boost parameters amplifying the right memories?
 - Could a different mathematical form (hyperbolic, stretched exponential,
   logarithmic saturation) perform better?
 - Are impact and stability modifiers being used effectively?
@@ -79,6 +109,11 @@ def compute_decay(activation, impact, stability, mtype, params):
     ...
 ```
 
+Interpretation:
+- The fixed engine applies this scalar decay function independently to `storage_score` and `retrieval_score`
+- Experiment-local `decay_fn.py` should not try to implement its own second state variable
+- The return value must remain monotone non-increasing for pure decay
+
 **params.json** — Parameters the function uses. Must include at minimum:
 ```json
 {
@@ -90,12 +125,27 @@ def compute_decay(activation, impact, stability, mtype, params):
   "reinforcement_gain_assoc": 0.05,
   "stability_cap": 1.0,
   "activation_weight": 0.5,
-  "assoc_boost": 0.0
+  "assoc_boost": 0.0,
+  "retrieval_boost": 0.10,
+  "retrieval_consolidation_mode": "activation_and_stability"
 }
 ```
 (reinforcement/stability params are used by the simulation loop, not the decay function)
-(`activation_weight` controls how strongly activation influences similarity ranking: score = cosine_sim * activation^weight)
+(`activation_weight` controls how strongly retrieval_score influences similarity ranking: score = cosine_sim * retrieval_score^weight)
 (`assoc_boost` enables spreading-activation retrieval: score *= (1 + assoc_boost * mean_neighbor_activation))
+(`retrieval_boost` controls the direct retrieval-state bump used by retrieval_consolidation modes that still boost retrieval)
+(`retrieval_consolidation_mode` selects how successful recall reinforces memory state)
+
+Common optional experiment-local params:
+```json
+{
+  "importance_scaled_boost": true,
+  "importance_boost_min_scale": 0.52,
+  "importance_boost_max_scale": 1.0,
+  "test_reactivation_start_tick": 40,
+  "test_reactivation_interval": 10
+}
+```
 
 **hypothesis.txt** — One paragraph explaining what you're trying and why.
 
@@ -106,15 +156,23 @@ PYTHONPATH=src uv run python -m memory_decay.runner experiments/exp_lme_NNNN --c
 
 ### 5. Read Results
 Read `experiments/exp_lme_NNNN/results.json`. Key metrics:
-- `overall_score`: main metric (retrieval_score * (0.85 + 0.15 * plausibility_score))
-- `retrieval_score`: 0.40 * recall_mean + 0.30 * mrr_mean + 0.30 * precision_lift
-- `plausibility_score`: 0.50 * correlation + 0.50 * smoothness (correlation allows negative)
-- `precision_lift`: how much the decay engine pruned distractors above the baseline (null_precision)
+- `overall_score`: main metric = 0.40 * retrieval_score + 0.35 * forgetting_score + 0.25 * plausibility_score
+- `retrieval_score`: 0.55 * recall_mean + 0.45 * mrr_mean — measures "do you remember what you should?"
+- `forgetting_score`: 1 - mean(storage_score of non-target memories) — measures "do you forget what you should?" Higher = better selective forgetting. Creates tension with retrieval: boosting all storage helps retrieval but hurts forgetting.
+- `plausibility_score`: correlation between activation scores and actual retrievability (allows negative)
+- `non_target_mean_storage`: raw mean storage of non-target memories; diagnostic for forgetting_score
 - `mrr_mean`: Mean Reciprocal Rank across thresholds
-- `precision_strict`: exact-match precision only; used to calculate precision_lift
+- `precision_strict`: exact-match precision only; diagnostic
+- `precision_lift`: diagnostic only (not used in overall_score)
 - `precision_associative`: diagnostic precision where associated neighbors also count
 - `similarity_recall_rate`: threshold-free similarity retrieval rate; diagnostic only
+- `threshold_discrimination`: spread of thresholded recall across the fixed threshold sweep; in the dual-state protocol this reflects storage-thresholded recall
+- `storage_std`, `storage_iqr`, `storage_gini`: spread of storage state at the final tick
+- `retrieval_std`, `retrieval_iqr`, `retrieval_gini`: spread of retrieval state at the final tick
+- `activation_std`, `activation_iqr`, `activation_gini`: backward-compatible aliases of the storage spread metrics
 - `status`: "completed" or "validation_failed"
+
+NOTE: Scores from experiments before exp_lme_0218 used a different formula and are not directly comparable.
 
 ### 6. Judge
 
@@ -258,13 +316,14 @@ If `experiments/best/` doesn't exist:
 - Prior finding (memories_500 dataset, needs revalidation on LongMemEval): `assoc_boost=2.0` (exp_0338) showed CV=38% instability and scored 0.076 on CV vs 0.252 for `assoc_boost=0` (exp_0315, CV=4.8%). The fixed-split gain was overfitting.
 
 ## Rules
-- NEVER modify evaluator.py, graph.py, or runner.py
+- During ordinary experiment loops, NEVER modify `src/memory_decay/evaluator.py`, `src/memory_decay/graph.py`, `src/memory_decay/decay.py`, `src/memory_decay/main.py`, or `src/memory_decay/runner.py`
+- These files define the fixed dual-state protocol
 - NEVER modify the dataset or cache
 - NEVER modify `main.py` benchmark protocol during the loop
 - NEVER modify files under `outputs/pre_program_pipeline/`
 - NEVER modify bootstrap scripts to improve scores mid-loop
 - Each experiment is independent — always start from fresh graph state
-- Be creative with decay formulas but respect the interface contract
+- Be creative with decay formulas and experiment-local params, but respect the interface contract
 - Track what you've tried to avoid repeating failed approaches
 
 ## Allowed Search Surface
@@ -277,8 +336,8 @@ The agent is allowed to change only these experiment-local files:
 
 Interpretation:
 
-- `decay_fn.py` = algorithm slot
-- `params.json` = weight/parameter slot
+- `decay_fn.py` = scalar decay-law slot applied to both storage and retrieval by the fixed engine
+- `params.json` = weight/parameter slot, including dual-state policy params such as `retrieval_consolidation_mode`
 - `hypothesis.txt` = rationale only
 
 Everything else is part of the closed loop and should be treated as fixed.
@@ -290,3 +349,10 @@ If the best next move appears to require changing any file outside the allowed s
 1. Do not make the change
 2. Record why the loop seems insufficient
 3. Stop and ask for a human decision on whether to widen the search space
+
+Examples that require escalation:
+
+- changing which state (`storage_score` vs `retrieval_score`) an evaluator metric reads
+- changing how `query_by_similarity()` scores candidates
+- introducing a third state variable or changing the fixed dual-state protocol
+- modifying scheduled reactivation behavior outside experiment-local params

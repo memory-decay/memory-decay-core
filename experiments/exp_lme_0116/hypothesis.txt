@@ -1,0 +1,4 @@
+exp_lme_0102 + importance-scaled retrieval_consolidation boost + additive:
+- Keep the current best decay surface and scale retrieval_boost by importance
+- boost_scale = 0.5 + 0.5 * clamp(importance, 0, 1)
+- Tests whether low-importance memories stop saturating without changing the decay function
