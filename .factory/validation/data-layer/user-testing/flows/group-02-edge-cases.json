@@ -1,0 +1,171 @@
+{
+  "groupId": "group-02-edge-cases",
+  "testedAt": "2026-03-21T12:30:00Z",
+  "isolation": {
+    "workingDirectory": "/home/roach/.openclaw/workspace/memory-decay",
+    "pythonVenv": "dashboard/.venv/bin/python",
+    "experimentsDirectory": "experiments/",
+    "importModule": "dashboard.data_loader"
+  },
+  "toolsUsed": ["python"],
+  "assertions": [
+    {
+      "id": "VAL-DATA-002",
+      "title": "Missing results.json Handled Gracefully",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Call load_all_experiments('experiments')",
+          "expected": "All experiments loaded including empty dirs, no crash",
+          "observed": "436 experiments loaded, no errors"
+        },
+        {
+          "action": "Find exp_0360 (empty directory)",
+          "expected": "status='no_results', overall_score=None",
+          "observed": "status='no_results', overall_score=None"
+        },
+        {
+          "action": "Find exp_lme_0001 (has params, no results.json)",
+          "expected": "status='no_results', has params loaded",
+          "observed": "status='no_results', params loaded with 12 keys"
+        },
+        {
+          "action": "Find exp_lme_0071 (partial, has params but no results)",
+          "expected": "status='no_results', overall_score=None",
+          "observed": "status='no_results', overall_score=None"
+        },
+        {
+          "action": "Check all no_results experiments",
+          "expected": "List of experiments with no results.json",
+          "observed": "4 experiments: exp_0360, exp_lme_0001, exp_lme_0071, exp_lme_0077"
+        }
+      ],
+      "evidence": {
+        "noResultsExperiments": ["exp_0360", "exp_lme_0001", "exp_lme_0071", "exp_lme_0077"],
+        "totalLoaded": 436,
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-DATA-003",
+      "title": "Missing params.json or hypothesis.txt Handled Gracefully",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Check exp_0360 (empty dir, no files)",
+          "expected": "params={}, hypothesis=''",
+          "observed": "params={}, hypothesis=''"
+        },
+        {
+          "action": "Check exp_lme_0071 (has params.json, no hypothesis.txt)",
+          "expected": "params is non-empty dict, hypothesis=''",
+          "observed": "params has 12 keys (lambda_fact, lambda_episode, etc.), hypothesis=''"
+        },
+        {
+          "action": "Check exp_lme_0001 (has both params.json and hypothesis.txt)",
+          "expected": "params non-empty, hypothesis non-empty",
+          "observed": "params has 12 keys, hypothesis length=98 chars"
+        }
+      ],
+      "evidence": {
+        "exp_0360_params": {},
+        "exp_0360_hypothesis": "",
+        "exp_lme_0071_params_keys": ["lambda_fact", "lambda_episode", "alpha", "stability_weight", "floor_max", "jost_power", "stability_decay", "reinforcement_gain_direct", "reinforcement_gain_assoc", "stability_cap", "activation_weight"],
+        "exp_lme_0071_hypothesis": "",
+        "exp_lme_0001_params_keys": ["lambda_fact", "lambda_episode", "alpha", "stability_weight", "floor_max", "sigmoid_k", "sigmoid_mid", "jost_power", "stability_decay", "reinforcement_gain_direct", "reinforcement_gain_assoc", "stability_cap"],
+        "exp_lme_0001_hypothesis_length": 98,
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-DATA-004",
+      "title": "Malformed JSON Handled Gracefully",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Create temp exp_9999 dir with malformed results.json",
+          "expected": "load_experiment returns parse_error status",
+          "observed": "status='parse_error', error='JSON parse error: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)'"
+        },
+        {
+          "action": "Create temp exp_9998 dir with valid results.json but malformed params.json",
+          "expected": "load_experiment returns parse_error status",
+          "observed": "status='parse_error', error='JSON parse error: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)'"
+        },
+        {
+          "action": "Create temp exp_lme_9999 dir with malformed results.json",
+          "expected": "load_experiment returns parse_error status, era=LongMemEval",
+          "observed": "status='parse_error', era='LongMemEval', error='JSON parse error: ...'"
+        },
+        {
+          "action": "Clean up all temp dirs",
+          "expected": "Temp dirs removed",
+          "observed": "Temp dirs removed successfully"
+        }
+      ],
+      "evidence": {
+        "malformedResultsStatus": "parse_error",
+        "malformedParamsStatus": "parse_error",
+        "malformedNewEraStatus": "parse_error",
+        "malformedNewEraEra": "LongMemEval",
+        "tempDirsCleaned": true,
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-DATA-005",
+      "title": "validation_failed Results Treated as Non-Numeric",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Load exp_lme_0063",
+          "expected": "status='validation_failed'",
+          "observed": "status='validation_failed'"
+        },
+        {
+          "action": "Check overall_score",
+          "expected": "None",
+          "observed": "None"
+        },
+        {
+          "action": "Check retrieval_score",
+          "expected": "None",
+          "observed": "None"
+        },
+        {
+          "action": "Check error field",
+          "expected": "Error string preserved, contains 'decay'",
+          "observed": "error='Insufficient decay: fact(impact=0.3) after 200 ticks = 0.4703 > 0.45. Moderate-impact items should show meaningful decay.'"
+        },
+        {
+          "action": "Check all other metric fields",
+          "expected": "All None",
+          "observed": "plausibility_score=None, recall_mean=None, precision_mean=None, mrr_mean=None, recall_rate=None, precision_rate=None, corr_score=None"
+        }
+      ],
+      "evidence": {
+        "exp_lme_0063_status": "validation_failed",
+        "exp_lme_0063_overall_score": null,
+        "exp_lme_0063_retrieval_score": null,
+        "exp_lme_0063_error": "Insufficient decay: fact(impact=0.3) after 200 ticks = 0.4703 > 0.45. Moderate-impact items should show meaningful decay.",
+        "allMetricsNull": true,
+        "errorContainsDecay": true,
+        "consoleErrors": "none"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "VAL-DATA-004 test initially used 'exp_test_9999' naming pattern which doesn't match the data_loader regex (only exp_NNNN and exp_lme_NNNN accepted). Had to use 'exp_9999' and 'exp_lme_9999' instead. This is by design — the loader enforces strict naming patterns.",
+      "resolved": true,
+      "resolution": "Used correct experiment naming patterns (exp_9999, exp_9998, exp_lme_9999) for temporary test directories.",
+      "affectedAssertions": ["VAL-DATA-004"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 4 assertions: all passed. VAL-DATA-002 (missing results.json): 4 experiments with no_results status correctly handled. VAL-DATA-003 (missing params/hypothesis): empty dict and empty string fallbacks work. VAL-DATA-004 (malformed JSON): parse_error status with error message preserved for both results.json and params.json. VAL-DATA-005 (validation_failed): all metrics null, error preserved with decay reference."
+}

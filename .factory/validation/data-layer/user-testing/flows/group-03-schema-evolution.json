@@ -1,0 +1,151 @@
+{
+  "groupId": "group-03-schema-evolution",
+  "testedAt": "2026-03-21T12:30:00Z",
+  "isolation": {
+    "workingDirectory": "/home/roach/.openclaw/workspace/memory-decay",
+    "pythonVenv": "dashboard/.venv/bin/python",
+    "experimentsDirectory": "experiments/"
+  },
+  "toolsUsed": ["python"],
+  "assertions": [
+    {
+      "id": "VAL-DATA-006",
+      "title": "Schema Evolution — Missing Fields Default to Null",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Load exp_0000 via data_loader and check 8 later-era fields",
+          "expected": "All 8 fields (strict_score, forgetting_depth, forgetting_score, eval_v2_score, retention_curve, selectivity_score, robustness_score, threshold_summary) are None",
+          "observed": "All 8 fields are None for exp_0000"
+        },
+        {
+          "action": "Load exp_lme_0059 via data_loader and check same 8 fields",
+          "expected": "All 8 fields are non-None with actual values",
+          "observed": "All 8 fields have non-None values: strict_score=0.458456, forgetting_depth=0.3675, forgetting_score=1.0, eval_v2_score=0.3455, retention_curve=dict, selectivity_score=0.0, robustness_score=0.0, threshold_summary=dict"
+        }
+      ],
+      "evidence": {
+        "exp_0000_null_fields": ["strict_score", "forgetting_depth", "forgetting_score", "eval_v2_score", "retention_curve", "selectivity_score", "robustness_score", "threshold_summary"],
+        "exp_lme_0059_non_null_fields": {
+          "strict_score": 0.458456,
+          "forgetting_depth": 0.3675,
+          "forgetting_score": 1.0,
+          "eval_v2_score": 0.34548262993882967,
+          "retention_curve": {"40": 1.0, "80": 1.0, "120": 0.6364, "160": 0.5683, "200": 0.6340},
+          "selectivity_score": 0.0,
+          "robustness_score": 0.0,
+          "threshold_summary": {"threshold_auc": 0.6325, "slope": -0.0131}
+        }
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-DATA-007",
+      "title": "Schema Evolution — Threshold Metrics Key Variation",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Check exp_0000 threshold_metrics keys",
+          "expected": "4 thresholds: [0.2, 0.3, 0.4, 0.5]",
+          "observed": "Keys: [0.2, 0.3, 0.4, 0.5] — exactly 4 thresholds"
+        },
+        {
+          "action": "Access missing thresholds '0.1' and '0.8' on exp_0000",
+          "expected": "Both return None",
+          "observed": "'0.1' → None, '0.8' → None"
+        },
+        {
+          "action": "Check exp_lme_0059 threshold_metrics keys",
+          "expected": "9 thresholds: [0.1, 0.2, ..., 0.9]",
+          "observed": "Keys: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9] — exactly 9 thresholds"
+        }
+      ],
+      "evidence": {
+        "exp_0000_threshold_count": 4,
+        "exp_0000_threshold_keys": ["0.2", "0.3", "0.4", "0.5"],
+        "exp_0000_missing_0_1": null,
+        "exp_0000_missing_0_8": null,
+        "exp_lme_0059_threshold_count": 9,
+        "exp_lme_0059_threshold_keys": ["0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9"]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-DATA-008",
+      "title": "Schema Evolution — params.json Field Variation",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Check exp_0000 params for beta_fact presence and floor_max absence",
+          "expected": "beta_fact present (non-null), floor_max absent (null)",
+          "observed": "beta_fact=0.08 present, floor_max=null absent"
+        },
+        {
+          "action": "Check exp_lme_0059 params for floor_max and no beta_fact",
+          "expected": "floor_max present, beta_fact absent",
+          "observed": "floor_max=0.45 present, beta_fact=null absent"
+        },
+        {
+          "action": "Check exp_lme_0000 params for assoc_boost and no beta_fact",
+          "expected": "assoc_boost present, beta_fact absent",
+          "observed": "assoc_boost=0.0 present, beta_fact not in keys"
+        }
+      ],
+      "evidence": {
+        "exp_0000_has_beta_fact": true,
+        "exp_0000_beta_fact_value": 0.08,
+        "exp_0000_no_floor_max": true,
+        "exp_lme_0059_has_floor_max": true,
+        "exp_lme_0059_floor_max_value": 0.45,
+        "exp_lme_0059_no_beta_fact": true,
+        "exp_lme_0000_has_assoc_boost": true,
+        "exp_lme_0000_assoc_boost_value": 0.0,
+        "exp_lme_0000_no_beta_fact": true
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-DATA-009",
+      "title": "Snapshots Array Structure",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Verify exp_0000 snapshots have ticks [0,20,...,200] (11 items)",
+          "expected": "11 snapshots with ticks [0,20,40,60,80,100,120,140,160,180,200]",
+          "observed": "11 snapshots, exact tick match"
+        },
+        {
+          "action": "Verify old-era snapshots have fewer keys (no retention_curve, threshold_summary, eval_v2_score, selectivity_score, robustness_score)",
+          "expected": "Old-era snapshots missing 5 newer keys",
+          "observed": "exp_0000 has 22 snapshot keys, missing all 5 newer keys"
+        },
+        {
+          "action": "Verify exp_lme_0059 snapshots have more keys (retention_curve, selectivity_score present)",
+          "expected": "New-era snapshots have retention_curve and selectivity_score",
+          "observed": "exp_lme_0059 has 28 snapshot keys including retention_curve and selectivity_score"
+        },
+        {
+          "action": "Verify experiments with no snapshots field default to empty list",
+          "expected": "11 experiments without snapshots field → empty list after loading",
+          "observed": "11 experiments (exp_0004, exp_0163, exp_0259, exp_lme_0032, exp_lme_0054, exp_lme_0056, exp_lme_0058, exp_lme_0063, exp_lme_0066, exp_lme_0067, exp_lme_0070) all have empty snapshots list"
+        }
+      ],
+      "evidence": {
+        "exp_0000_snapshot_count": 11,
+        "exp_0000_ticks": [0, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200],
+        "exp_0000_snapshot_key_count": 22,
+        "exp_0000_missing_new_keys": ["retention_curve", "threshold_summary", "eval_v2_score", "selectivity_score", "robustness_score"],
+        "exp_lme_0059_snapshot_count": 11,
+        "exp_lme_0059_ticks": [0, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200],
+        "exp_lme_0059_snapshot_key_count": 28,
+        "exp_lme_0059_new_keys_present": ["retention_curve", "selectivity_score"],
+        "no_field_experiments": ["exp_0004", "exp_0163", "exp_0259", "exp_lme_0032", "exp_lme_0054", "exp_lme_0056", "exp_lme_0058", "exp_lme_0063", "exp_lme_0066", "exp_lme_0067", "exp_lme_0070"],
+        "all_defaulted_to_empty_list": true
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 4 schema evolution assertions: all 4 passed. The data_loader correctly handles field defaults across eras — old experiments get null for newer fields, threshold key counts vary (4 vs 9) with missing keys returning None, params.json fields differ by era (beta_fact vs floor_max/assoc_boost), and snapshot arrays have consistent structure with 11 ticks and cross-era key differences handled gracefully."
+}

@@ -1,0 +1,122 @@
+{
+  "groupId": "group-04-phase-mapping",
+  "testedAt": "2026-03-21T00:00:00Z",
+  "isolation": {
+    "workingDirectory": "/home/roach/.openclaw/workspace/memory-decay",
+    "pythonVenv": "dashboard/.venv/bin/python",
+    "experimentsDirectory": "experiments/"
+  },
+  "toolsUsed": ["python"],
+  "assertions": [
+    {
+      "id": "VAL-DATA-011",
+      "title": "Phase Mapping — Experiments to Git Phases",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Load all experiments and check phase assignment",
+          "expected": "Every experiment has a non-None phase value",
+          "observed": "435 of 436 experiments have a phase; exp_0360 returns None"
+        },
+        {
+          "action": "Count experiments per phase, verify sum to total",
+          "expected": "Per-phase counts sum to total experiment count",
+          "observed": "Phase counts: {1:25, 2:25, 3:30, 4:214, 5:63, 7:1, 8:45, 9:32}. Sum=435 out of 436 (exp_0360 unphased)"
+        },
+        {
+          "action": "Spot check: exp_0010→phase 1",
+          "expected": "phase 1",
+          "observed": "phase 1 — PASS"
+        },
+        {
+          "action": "Spot check: exp_0051→phase 3",
+          "expected": "phase 3",
+          "observed": "phase 3 — PASS"
+        },
+        {
+          "action": "Spot check: exp_0200→phase 4",
+          "expected": "phase 4",
+          "observed": "phase 4 — PASS"
+        },
+        {
+          "action": "Spot check: exp_0300→phase 5",
+          "expected": "phase 5",
+          "observed": "phase 5 — PASS"
+        },
+        {
+          "action": "Spot check: exp_lme_0000→phase 7",
+          "expected": "phase 7",
+          "observed": "phase 7 — PASS"
+        },
+        {
+          "action": "Spot check: exp_lme_0046→phase 9",
+          "expected": "phase 9",
+          "observed": "phase 9 — PASS"
+        }
+      ],
+      "evidence": {
+        "totalExperiments": 436,
+        "experimentsWithPhase": 435,
+        "experimentsWithoutPhase": ["exp_0360"],
+        "phaseCounts": {"1": 25, "2": 25, "3": 30, "4": 214, "5": 63, "7": 1, "8": 45, "9": 32},
+        "spotChecks": {
+          "exp_0010": {"expected": 1, "actual": 1, "pass": true},
+          "exp_0051": {"expected": 3, "actual": 3, "pass": true},
+          "exp_0200": {"expected": 4, "actual": 4, "pass": true},
+          "exp_0300": {"expected": 5, "actual": 5, "pass": true},
+          "exp_lme_0000": {"expected": 7, "actual": 7, "pass": true},
+          "exp_lme_0046": {"expected": 9, "actual": 9, "pass": true}
+        },
+        "rootCause": "exp_0360 (ID number 360) falls outside phase 5 range (297-359). PHASE_RANGES has a gap: phase 4 ends at 296, phase 5 covers 297-359, and exp_0360=360 is uncovered. The directory exists on disk but is empty (no results.json)."
+      },
+      "issues": "exp_0360 maps to None phase because its ID (360) exceeds phase 5's max (359). PHASE_RANGES needs to extend phase 5 to cover 297-9999 for old-era, or exp_0360 needs a specific mapping."
+    },
+    {
+      "id": "VAL-DATA-012",
+      "title": "Phase Mapping — New-Era Not Confused with Old",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Get phase of exp_0030 and exp_lme_0030, verify different",
+          "expected": "Different phases",
+          "observed": "exp_0030=phase 2, exp_lme_0030=phase 8 — PASS"
+        },
+        {
+          "action": "Get phase of exp_0001 and exp_lme_0001, verify different",
+          "expected": "Different phases",
+          "observed": "exp_0001=phase 1, exp_lme_0001=phase 8 — PASS"
+        },
+        {
+          "action": "Get phase of exp_0050 and exp_lme_0050, verify different",
+          "expected": "Different phases",
+          "observed": "exp_0050=phase 2, exp_lme_0050=phase 9 — PASS"
+        },
+        {
+          "action": "Cross-check: no new-era experiments in old-era phases (1-5)",
+          "expected": "Zero",
+          "observed": "Zero — PASS"
+        },
+        {
+          "action": "Cross-check: no old-era experiments in new-era phases (7-9)",
+          "expected": "Zero",
+          "observed": "Zero — PASS"
+        }
+      ],
+      "evidence": {
+        "pairChecks": [
+          {"old": "exp_0030", "oldPhase": 2, "new": "exp_lme_0030", "newPhase": 8, "different": true},
+          {"old": "exp_0001", "oldPhase": 1, "new": "exp_lme_0001", "newPhase": 8, "different": true},
+          {"old": "exp_0050", "oldPhase": 2, "new": "exp_lme_0050", "newPhase": 9, "different": true}
+        ],
+        "newEraPhases": [7, 8, 9],
+        "oldEraPhases": [1, 2, 3, 4, 5],
+        "newEraInOldPhases": [],
+        "oldEraInNewPhases": []
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 2 assertions: VAL-DATA-011 FAIL (exp_0360 unmapped — ID 360 exceeds phase 5 max 359, PHASE_RANGES has a gap at 360+ for old-era), VAL-DATA-012 PASS (new-era experiments correctly separated into phases 7-9, old-era into phases 1-5, all checked pairs in different phases)"
+}

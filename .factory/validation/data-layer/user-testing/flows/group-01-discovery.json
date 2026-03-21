@@ -1,0 +1,100 @@
+{
+  "groupId": "group-01-discovery",
+  "testedAt": "2026-03-21T00:00:00Z",
+  "isolation": {
+    "workingDirectory": "/home/roach/.openclaw/workspace/memory-decay",
+    "pythonVenv": "dashboard/.venv/bin/python",
+    "experimentsDirectory": "experiments/",
+    "module": "dashboard.data_loader"
+  },
+  "toolsUsed": ["python"],
+  "assertions": {
+    "VAL-DATA-001": {
+      "status": "pass",
+      "title": "Complete Experiment Discovery",
+      "steps": [
+        {
+          "action": "Count top-level exp_* directories in experiments/",
+          "expected": "Loader count matches filesystem count (436)",
+          "observed": "Filesystem: 436 non-symlink exp_* dirs, Loader: 436 experiments — match"
+        },
+        {
+          "action": "Verify experiments/experiments/exp_0065..0068 are NOT loaded from nested dir",
+          "expected": "None loaded from nested dir",
+          "observed": "Zero experiments loaded from experiments/experiments/ — all exp_0065..0068 loaded from top-level dirs only"
+        },
+        {
+          "action": "Verify 'best' symlink target not double-counted",
+          "expected": "No double-counted IDs",
+          "observed": "best -> exp_lme_0008 symlink excluded by isdir() check. No IDs appear more than once in loader results."
+        },
+        {
+          "action": "Verify archive_memories500 NOT loaded",
+          "expected": "Excluded",
+          "observed": "archive_memories500 in _EXCLUDED_ENTRIES, not in loader results"
+        },
+        {
+          "action": "Verify non-exp entries excluded",
+          "expected": "history.jsonl, strict_eval.py, best not loaded",
+          "observed": "None of these entries appear in loader results"
+        }
+      ],
+      "evidence": {
+        "filesystemCount": 436,
+        "loaderCount": 436,
+        "countsMatch": true,
+        "nestedDirExcluded": true,
+        "nestedDirContents": ["exp_0065", "exp_0066", "exp_0067", "exp_0068"],
+        "bestSymlink": "best -> exp_lme_0008",
+        "bestNotLoaded": true,
+        "archiveNotLoaded": true,
+        "noDoubleCounting": true,
+        "nonExpExcluded": ["history.jsonl", "strict_eval.py", "best"]
+      },
+      "issues": null
+    },
+    "VAL-DATA-010": {
+      "status": "pass",
+      "title": "Era Classification",
+      "steps": [
+        {
+          "action": "Count old-era (memories_500) and new-era (LongMemEval) experiments",
+          "expected": "~358 old, ~76 new, total == loader count",
+          "observed": "memories_500: 358, LongMemEval: 78, total: 436 == loader count (436)"
+        },
+        {
+          "action": "Verify no experiment classified as both or neither",
+          "expected": "0 unclassified experiments",
+          "observed": "0 unclassified experiments — all 436 have exactly one era"
+        },
+        {
+          "action": "Verify each experiment has correct era string",
+          "expected": "All exp_NNNN -> memories_500, all exp_lme_NNNN -> LongMemEval",
+          "observed": "Zero era mismatches across all 436 experiments"
+        },
+        {
+          "action": "Spot-check classify_era() function directly",
+          "expected": "Correct classification for sample IDs",
+          "observed": "classify_era('exp_0000')='memories_500', classify_era('exp_lme_0000')='LongMemEval', classify_era('exp_lme_0046')='LongMemEval' — all correct"
+        }
+      ],
+      "evidence": {
+        "oldEraCount": 358,
+        "newEraCount": 78,
+        "totalClassified": 436,
+        "unclassifiedCount": 0,
+        "eraMismatches": 0,
+        "classifyEraChecks": [
+          {"input": "exp_0000", "result": "memories_500", "ok": true},
+          {"input": "exp_0359", "result": "memories_500", "ok": true},
+          {"input": "exp_lme_0000", "result": "LongMemEval", "ok": true},
+          {"input": "exp_lme_0046", "result": "LongMemEval", "ok": true}
+        ]
+      },
+      "issues": null
+    }
+  },
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 2 assertions: 2 passed. VAL-DATA-001: loader discovers all 436 experiments at maxdepth 1, correctly excludes nested experiments/experiments/, archive_memories500, best symlink, and non-exp entries. VAL-DATA-010: all experiments correctly classified as memories_500 (358) or LongMemEval (78), no unclassified or misclassified experiments."
+}

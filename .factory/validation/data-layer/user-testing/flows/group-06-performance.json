@@ -1,0 +1,74 @@
+{
+  "groupId": "group-06-performance",
+  "testedAt": "2026-03-21T03:19:16.254023+00:00",
+  "isolation": {
+    "workingDirectory": "/home/roach/.openclaw/workspace/memory-decay",
+    "pythonVenv": "dashboard/.venv/bin/python",
+    "experimentsDir": "experiments/",
+    "importModule": "dashboard.data_loader.load_all_experiments"
+  },
+  "toolsUsed": [
+    "python"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-DATA-018",
+      "title": "Cold Load Performance",
+      "status": "pass",
+      "evidence": "Loaded 436 experiments in 0.3474s (avg 0.7968ms/experiment). Threshold: < 5.0s. Result: PASS.",
+      "steps": [
+        {
+          "action": "Reload data_loader module to ensure cold state",
+          "expected": "Module reloaded successfully",
+          "observed": "Module reloaded successfully"
+        },
+        {
+          "action": "Start tracemalloc",
+          "expected": "Memory tracking started",
+          "observed": "Memory tracking started"
+        },
+        {
+          "action": "Call load_all_experiments() with time.perf_counter()",
+          "expected": "All experiments loaded",
+          "observed": "Loaded 436 experiments in 0.3474s"
+        },
+        {
+          "action": "Verify elapsed time < 5.0s",
+          "expected": "Time under 5s threshold",
+          "observed": "0.3474s < 5.0s"
+        }
+      ]
+    },
+    {
+      "id": "VAL-DATA-019",
+      "title": "Memory Efficiency",
+      "status": "pass",
+      "evidence": "Peak tracemalloc: 13.94 MB. Process max RSS: 382.88 MB. Current after load: 13.89 MB. Threshold: < 200 MB. Result: PASS.",
+      "steps": [
+        {
+          "action": "Start tracemalloc before loading",
+          "expected": "Memory tracking active",
+          "observed": "tracemalloc started before load_all_experiments"
+        },
+        {
+          "action": "Load all experiments",
+          "expected": "Data loaded into memory",
+          "observed": "436 experiments loaded"
+        },
+        {
+          "action": "Get peak memory from tracemalloc",
+          "expected": "Peak memory recorded",
+          "observed": "Peak: 13.94 MB, RSS: 382.88 MB"
+        },
+        {
+          "action": "Verify peak < 200 MB",
+          "expected": "Under 200 MB threshold",
+          "observed": "13.94 MB < 200 MB"
+        }
+      ]
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 2 assertions: 2 passed, 0 failed. VAL-DATA-018: 0.3474s cold load. VAL-DATA-019: 13.94 MB peak memory."
+}

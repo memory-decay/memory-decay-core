@@ -1,0 +1,303 @@
+{
+  "groupId": "group-05-precision-history",
+  "testedAt": "2026-03-21T03:21:47.622073+00:00",
+  "toolsUsed": [
+    "python"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-DATA-013",
+      "status": "PASS",
+      "evidence": "overall_score=0.03742635139982181 (float, matches raw), tick=200 (int)"
+    },
+    {
+      "id": "VAL-DATA-014",
+      "status": "PASS",
+      "evidence": "5 string, 59 numeric overall entries. 5 string strict_score entries. Mean(numeric)=0.3250"
+    },
+    {
+      "id": "VAL-DATA-015",
+      "status": "PASS",
+      "evidence": "Schema union has 15 fields. 11 fields are sparse. No KeyError on any .get() access."
+    },
+    {
+      "id": "VAL-DATA-016",
+      "status": "PASS",
+      "evidence": "3 duplicates found. After dedup: 64 unique entries. Last-occurrence-wins verified for exp_lme_0059."
+    },
+    {
+      "id": "VAL-DATA-017",
+      "status": "PASS",
+      "evidence": "Compared 58 experiments. 4 discrepancies flagged (history vs results.json differ > 0.0001 \u2014 likely re-scored after history written). 5 skipped (non-numeric history)."
+    },
+    {
+      "id": "VAL-DATA-020",
+      "status": "PASS",
+      "evidence": "Archive: 60 entries loaded. Keys normalized (experiment\u2192exp, overall_score\u2192overall). Merged with main: 124 total. No overlap."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 6 assertions: 6 passed, 0 failed",
+  "detailed_evidence": {
+    "VAL-DATA-013": {
+      "raw_overall_score": 0.03742635139982181,
+      "loaded_overall_score": 0.03742635139982181,
+      "scores_match": true,
+      "loaded_type": "float",
+      "raw_tick": 200,
+      "loaded_tick": 200,
+      "tick_is_int": true,
+      "tick_equals_200": true,
+      "last_snapshot_tick": 200,
+      "last_snapshot_tick_is_int": true,
+      "num_snapshots": 11
+    },
+    "VAL-DATA-014": {
+      "total_entries": 64,
+      "string_overall_count": 5,
+      "numeric_overall_count": 59,
+      "string_strict_count": 5,
+      "numeric_strict_count": 8,
+      "mean_of_numeric_only": 0.3250271186440678,
+      "strict_failed_values": [
+        "exp=exp_lme_0063: strict_score='validation_failed'",
+        "exp=exp_lme_0066: strict_score='validation_failed'",
+        "exp=exp_lme_0067: strict_score='validation_failed'",
+        "exp=exp_lme_0070: strict_score='validation_failed'",
+        "exp=exp_lme_0071: strict_score='validation_failed'"
+      ]
+    },
+    "VAL-DATA-015": {
+      "total_entries": 64,
+      "all_fields": [
+        "cache",
+        "cv_mean",
+        "cv_overall",
+        "cv_pct",
+        "cv_std",
+        "exp",
+        "hypothesis",
+        "note",
+        "overall",
+        "plausibility",
+        "policy",
+        "retrieval",
+        "status",
+        "strict_score",
+        "timestamp"
+      ],
+      "field_counts": {
+        "cache": {
+          "present": 19,
+          "missing": 45
+        },
+        "cv_mean": {
+          "present": 4,
+          "missing": 60
+        },
+        "cv_overall": {
+          "present": 2,
+          "missing": 62
+        },
+        "cv_pct": {
+          "present": 5,
+          "missing": 59
+        },
+        "cv_std": {
+          "present": 6,
+          "missing": 58
+        },
+        "exp": {
+          "present": 64,
+          "missing": 0
+        },
+        "hypothesis": {
+          "present": 64,
+          "missing": 0
+        },
+        "note": {
+          "present": 2,
+          "missing": 62
+        },
+        "overall": {
+          "present": 64,
+          "missing": 0
+        },
+        "plausibility": {
+          "present": 51,
+          "missing": 13
+        },
+        "policy": {
+          "present": 2,
+          "missing": 62
+        },
+        "retrieval": {
+          "present": 51,
+          "missing": 13
+        },
+        "status": {
+          "present": 64,
+          "missing": 0
+        },
+        "strict_score": {
+          "present": 13,
+          "missing": 51
+        },
+        "timestamp": {
+          "present": 19,
+          "missing": 45
+        }
+      },
+      "sparse_fields": {
+        "cache": {
+          "present": 19,
+          "missing": 45
+        },
+        "cv_mean": {
+          "present": 4,
+          "missing": 60
+        },
+        "cv_overall": {
+          "present": 2,
+          "missing": 62
+        },
+        "cv_pct": {
+          "present": 5,
+          "missing": 59
+        },
+        "cv_std": {
+          "present": 6,
+          "missing": 58
+        },
+        "note": {
+          "present": 2,
+          "missing": 62
+        },
+        "plausibility": {
+          "present": 51,
+          "missing": 13
+        },
+        "policy": {
+          "present": 2,
+          "missing": 62
+        },
+        "retrieval": {
+          "present": 51,
+          "missing": 13
+        },
+        "strict_score": {
+          "present": 13,
+          "missing": 51
+        },
+        "timestamp": {
+          "present": 19,
+          "missing": 45
+        }
+      },
+      "key_errors": [],
+      "all_access_safe": true
+    },
+    "VAL-DATA-016": {
+      "raw_entry_count": 67,
+      "unique_exp_count": 64,
+      "deduped_count": 64,
+      "count_matches": true,
+      "duplicates_found": {
+        "exp_lme_0059": [
+          46,
+          55
+        ],
+        "exp_lme_0060": [
+          47,
+          48
+        ],
+        "exp_lme_0063": [
+          51,
+          52
+        ]
+      },
+      "duplicate_count": 3,
+      "dup_in_deduped": [],
+      "exp_0059_raw_lines": [
+        46,
+        55
+      ],
+      "exp_0059_last_raw_overall": 0.3448,
+      "exp_0059_deduped_overall": 0.3448,
+      "last_wins_0059": true,
+      "exp_0059_deduped_has_cv_mean": true
+    },
+    "VAL-DATA-017": {
+      "total_experiments": 436,
+      "total_history_entries": 64,
+      "common_count": 64,
+      "compared_count": 58,
+      "discrepancies_count": 4,
+      "discrepancies": [
+        {
+          "exp": "exp_lme_0068",
+          "results_json": 0.4694345693915287,
+          "history": 0.3449,
+          "diff": 0.12453456939152874
+        },
+        {
+          "exp": "exp_lme_0073",
+          "results_json": 0.46302661106599285,
+          "history": 0.3454,
+          "diff": 0.11762661106599287
+        },
+        {
+          "exp": "exp_lme_0074",
+          "results_json": 0.39900019937052456,
+          "history": 0.2654,
+          "diff": 0.13360019937052453
+        },
+        {
+          "exp": "exp_lme_0075",
+          "results_json": 0.4694345693915287,
+          "history": 0.3449,
+          "diff": 0.12453456939152874
+        }
+      ],
+      "non_numeric_in_history": [
+        "exp_lme_0063",
+        "exp_lme_0066",
+        "exp_lme_0067",
+        "exp_lme_0070",
+        "exp_lme_0071"
+      ],
+      "no_results_on_disk": [
+        "exp_lme_0032"
+      ]
+    },
+    "VAL-DATA-020": {
+      "raw_entry_count": 60,
+      "loaded_archive_count": 60,
+      "raw_has_experiment_key": true,
+      "raw_has_overall_score_key": true,
+      "raw_has_exp_key": false,
+      "raw_has_overall_key": false,
+      "first_raw_keys": [
+        "experiment",
+        "overall_score",
+        "retrieval_score",
+        "plausibility_score",
+        "status",
+        "hypothesis"
+      ],
+      "all_normalized_have_exp": true,
+      "all_normalized_have_overall": true,
+      "none_have_original_experiment": true,
+      "none_have_original_overall_score": true,
+      "overlap_with_main": [],
+      "merged_total_count": 124,
+      "main_count": 64,
+      "archive_count": 60,
+      "sample_exp": "exp_0000",
+      "sample_overall": 0.021,
+      "sample_has_retrieval": true,
+      "sample_has_plausibility": true
+    }
+  }
+}
