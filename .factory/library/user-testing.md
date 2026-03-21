@@ -107,3 +107,35 @@ Testing surface, required tools, and resource cost classification.
 - Filter: ~350ms (< 1s threshold)
 - Detail view open: ~628ms (< 2s threshold)
 - Pagination uses 50 rows/page, ~200ms page change
+
+## Flow Validator Guidance: cross-area-integration
+
+**Surface**: Browser (agent-browser) at `http://localhost:8050`
+
+**Isolation rules**:
+- All cross-area validators share the same Dash app and browser session
+- Shared mutable state: era filter, phase filter, status filter, search text, active page tab, detail view overlay
+- Validators MUST restore state to default (era="All", no phase filter, no status filter, no search) after testing
+- Do NOT close the browser session when done — just navigate back to `http://localhost:8050` with default state
+
+**Dashboard navigation**:
+- Sidebar has era dropdown, status multi-select, text search, and page tabs
+- Pages/tabs: Leaderboard, Phase Timeline, Metric Progression, Threshold Heatmap, Retention Curves, Parameter Sweep, Snapshot Viewer, Forgetting Depth, CV Results, Phase Comparison
+- Detail view opens as same-page overlay — click "Back" button to close
+- Phase filter can be set via Phase Timeline click
+
+**Key constraints from prior milestones**:
+- Plotly charts intercept mouse events — cannot click phase timeline bars via browser automation (known limitation)
+- AG Grid row clicks sometimes toggle selection instead of opening detail view
+- URL state management may be broken (dcc.Location strips query params)
+- Status badges may not have colors (dash-ag-grid function-based cellStyle issue)
+- Best experiment row may not be highlighted (rowClassRules issue)
+
+**Testing strategy for cross-area**:
+- Use JavaScript evaluation to read Dash store/callback state where direct interaction fails
+- Use page.evaluate() to programmatically trigger callbacks (dcc.setDataValue, etc.)
+- For VAL-CROSS-002 (phase click): Use JavaScript to dispatch click event on phase bar, since Plotly overlay blocks native clicks
+- For VAL-CROSS-007 (phase comparison): Use JavaScript to interact with compare mode toggle
+- For VAL-CROSS-008 (param sweep round-trip): Navigate to Parameter Sweep tab, select experiment from dropdown, verify detail opens
+
+**Evidence collection**: Take screenshots at each significant step. Save evidence files to the designated directory.
