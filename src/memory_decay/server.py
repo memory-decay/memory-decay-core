@@ -5,6 +5,8 @@ Designed to be called by the openclaw-memory-decay TypeScript plugin.
 
 from __future__ import annotations
 
+import importlib.util
+import json
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -19,6 +21,37 @@ from .decay import DecayEngine
 from .embedding_provider import EmbeddingProvider, create_embedding_provider
 from .graph import MemoryGraph
 from .persistence import MemoryPersistence
+
+# ---------------------------------------------------------------------------
+# Best experiment loader
+# ---------------------------------------------------------------------------
+
+_PACKAGE_ROOT = Path(__file__).resolve().parent.parent.parent  # repo root
+
+
+def _load_best_experiment(experiment_dir: Path | None = None) -> tuple[dict, object | None]:
+    """Load best experiment params and custom decay function.
+
+    Returns (params_dict, decay_fn_or_None).
+    """
+    if experiment_dir is None:
+        experiment_dir = _PACKAGE_ROOT / "experiments" / "best"
+
+    params = {}
+    params_path = experiment_dir / "params.json"
+    if params_path.exists():
+        params = json.loads(params_path.read_text())
+
+    decay_fn = None
+    decay_fn_path = experiment_dir / "decay_fn.py"
+    if decay_fn_path.exists():
+        spec = importlib.util.spec_from_file_location("best_decay_fn", decay_fn_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        if hasattr(mod, "compute_decay"):
+            decay_fn = mod.compute_decay
+
+    return params, decay_fn
 
 # ---------------------------------------------------------------------------
 # Request / Response models
@@ -88,12 +121,14 @@ _state: ServerState | None = None
 def create_app(
     embedding_provider: EmbeddingProvider | None = None,
     persistence_dir: str | None = None,
-    decay_type: str = "exponential",
-    decay_params: dict | None = None,
     tick_interval_seconds: float = 3600.0,
+    experiment_dir: Path | str | None = None,
     _test_embedder=None,
 ) -> FastAPI:
-    """Create the FastAPI application."""
+    """Create the FastAPI application.
+
+    Automatically loads the best experiment's decay function and parameters.
+    """
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -106,7 +141,14 @@ def create_app(
         else:
             graph = MemoryGraph(embedding_backend="auto")
 
-        engine = DecayEngine(graph, decay_type=decay_type, params=decay_params)
+        # Load best experiment (decay function + tuned parameters)
+        exp_dir = Path(experiment_dir) if experiment_dir else None
+        best_params, best_decay_fn = _load_best_experiment(exp_dir)
+        engine = DecayEngine(
+            graph,
+            custom_decay_fn=best_decay_fn,
+            params=best_params,
+        )
 
         persistence = None
         state_tick = 0
@@ -259,7 +301,8 @@ def main():
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8100)
     parser.add_argument("--persistence-dir", default=None)
-    parser.add_argument("--decay-type", default="exponential")
+    parser.add_argument("--experiment-dir", default=None,
+                        help="Path to experiment dir (default: experiments/best)")
     parser.add_argument("--tick-interval", type=float, default=3600.0,
                         help="Real seconds per tick")
     parser.add_argument("--embedding-provider", default="gemini",
@@ -279,8 +322,8 @@ def main():
     app = create_app(
         embedding_provider=provider,
         persistence_dir=args.persistence_dir,
-        decay_type=args.decay_type,
         tick_interval_seconds=args.tick_interval,
+        experiment_dir=args.experiment_dir,
     )
 
     uvicorn.run(app, host=args.host, port=args.port)
