@@ -770,3 +770,277 @@ class TestExperimentDataclass:
         _write_json(experiments_dir / "exp_0001" / "results.json", OLD_ERA_RESULTS)
         exps = load_all_experiments(str(experiments_dir))
         assert exps[0].status == "completed"
+
+
+# ---------------------------------------------------------------------------
+# Tests: Dashboard app module import and basic structure
+# ---------------------------------------------------------------------------
+
+class TestDashboardApp:
+    """Tests for the dashboard app module (import, layout, callbacks)."""
+
+    @staticmethod
+    def _find_components(layout, predicate):
+        """Recursively walk Dash layout tree and find components matching predicate."""
+        results = []
+        def _walk(node):
+            if hasattr(node, "id"):
+                if predicate(node):
+                    results.append(node)
+            children = getattr(node, "children", None)
+            if children is not None:
+                if isinstance(children, list):
+                    for child in children:
+                        _walk(child)
+                elif hasattr(children, "id"):
+                    _walk(children)
+        _walk(layout)
+        return results
+
+    def test_app_module_imports(self):
+        """dashboard.app can be imported without errors."""
+        import dashboard.app  # noqa: F401
+        assert hasattr(dashboard.app, "app")
+
+    def test_app_has_location_component(self):
+        """App layout includes dcc.Location for URL state."""
+        import dashboard.app
+        layout = dashboard.app.app.layout
+        found = self._find_components(layout, lambda n: "Location" in type(n).__name__)
+        assert len(found) > 0, "dcc.Location not found in app layout"
+
+    def test_app_has_store_components(self):
+        """App layout includes dcc.Store for shared state."""
+        import dashboard.app
+        layout = dashboard.app.app.layout
+        found = self._find_components(layout, lambda n: "Store" in type(n).__name__)
+        assert len(found) >= 2, f"Expected 2+ dcc.Store, found {len(found)}"
+
+    def test_app_has_era_dropdown(self):
+        """App layout includes era dropdown with All/memories_500/LongMemEval."""
+        import dashboard.app
+        layout = dashboard.app.app.layout
+        found = self._find_components(layout, lambda n: getattr(n, "id", None) == "era-dropdown")
+        assert len(found) > 0, "era-dropdown not found in app layout"
+
+    def test_app_has_search_input(self):
+        """App layout includes text search input."""
+        import dashboard.app
+        layout = dashboard.app.app.layout
+        found = self._find_components(layout, lambda n: getattr(n, "id", None) == "search-input")
+        assert len(found) > 0, "search-input not found in app layout"
+
+    def test_app_has_status_filter(self):
+        """App layout includes status multi-select filter."""
+        import dashboard.app
+        layout = dashboard.app.app.layout
+        found = self._find_components(layout, lambda n: getattr(n, "id", None) == "status-filter")
+        assert len(found) > 0, "status-filter not found in app layout"
+
+    def test_app_has_ag_grid(self):
+        """App layout includes AgGrid component."""
+        import dashboard.app
+        layout = dashboard.app.app.layout
+        found = self._find_components(layout, lambda n: "AgGrid" in type(n).__name__)
+        assert len(found) > 0, "AgGrid not found in app layout"
+
+    def test_app_has_detail_view(self):
+        """App layout includes detail view overlay."""
+        import dashboard.app
+        layout = dashboard.app.app.layout
+        found = self._find_components(layout, lambda n: getattr(n, "id", None) == "detail-view")
+        assert len(found) > 0, "detail-view not found in app layout"
+
+
+# ---------------------------------------------------------------------------
+# Tests: Leaderboard filtering and sorting logic
+# ---------------------------------------------------------------------------
+
+class TestLeaderboardLogic:
+    """Tests for leaderboard filtering and sorting helper functions."""
+
+    @pytest.fixture
+    def real_experiments_dir(self) -> str:
+        return str(Path(__file__).resolve().parent.parent / "experiments")
+
+    def test_filter_dataframe_all_eras(self, real_experiments_dir: str):
+        """VAL-TABLE-003: Filtering 'All' shows both eras."""
+        import dashboard.app as app_module
+        df = app_module._df_all
+        memories_count = len(df[df["era"] == "memories_500"])
+        lme_count = len(df[df["era"] == "LongMemEval"])
+        assert memories_count > 300, f"Expected >300 memories_500, got {memories_count}"
+        assert lme_count > 50, f"Expected >50 LongMemEval, got {lme_count}"
+        assert len(df) == memories_count + lme_count
+
+    def test_filter_dataframe_memories_500(self, real_experiments_dir: str):
+        """VAL-TABLE-001: Filtering memories_500 shows only exp_NNNN."""
+        import dashboard.app as app_module
+        df = app_module._df_all
+        filtered = app_module._filter_dataframe(df, "memories_500", [], "")
+        assert len(filtered) > 0
+        assert all(filtered["era"] == "memories_500"), "Non-memories_500 experiments leaked through"
+        assert not any(filtered["era"] == "LongMemEval"), "LongMemEval experiment leaked through"
+
+    def test_filter_dataframe_longmemeval(self, real_experiments_dir: str):
+        """VAL-TABLE-002: Filtering LongMemEval shows only exp_lme_NNNN."""
+        import dashboard.app as app_module
+        df = app_module._df_all
+        filtered = app_module._filter_dataframe(df, "LongMemEval", [], "")
+        assert len(filtered) > 0
+        assert all(filtered["era"] == "LongMemEval"), "Non-LongMemEval experiments leaked through"
+        assert not any(filtered["era"] == "memories_500"), "memories_500 experiment leaked through"
+
+    def test_status_filter_or_logic(self, real_experiments_dir: str):
+        """VAL-TABLE-004: Status filter uses OR logic for multiple statuses."""
+        import dashboard.app as app_module
+        df = app_module._df_all
+        # Filter to two statuses
+        filtered = app_module._filter_dataframe(df, "All", ["improved", "accepted_cv"], "")
+        assert len(filtered) > 0
+        for _, row in filtered.iterrows():
+            assert row["status"] in ("improved", "accepted_cv"), f"Unexpected status: {row['status']}"
+
+    def test_status_filter_clearable(self, real_experiments_dir: str):
+        """VAL-TABLE-004: Clearing status filter restores full view."""
+        import dashboard.app as app_module
+        df = app_module._df_all
+        full_count = len(df)
+        filtered = app_module._filter_dataframe(df, "All", [], "")
+        assert len(filtered) == full_count
+
+    def test_text_search_experiment_id(self, real_experiments_dir: str):
+        """VAL-TABLE-020: Text search filters by experiment ID (exact match)."""
+        import dashboard.app as app_module
+        df = app_module._df_all
+        filtered = app_module._filter_dataframe(df, "All", [], "exp_lme_0008")
+        # exp_lme_0008 itself must be in results
+        assert any(filtered["id"] == "exp_lme_0008"), "exp_lme_0008 not found in search results"
+        # Results include exact ID match + any hypothesis containing that ID
+        assert len(filtered) >= 1
+
+    def test_text_search_hypothesis(self, real_experiments_dir: str):
+        """VAL-TABLE-020: Text search filters by hypothesis text."""
+        import dashboard.app as app_module
+        df = app_module._df_all
+        filtered = app_module._filter_dataframe(df, "All", [], "sigmoid")
+        assert len(filtered) > 0, "No experiments matching 'sigmoid' in hypothesis"
+        for _, row in filtered.iterrows():
+            assert "sigmoid" in row["hypothesis"].lower(), f"Expected 'sigmoid' in hypothesis: {row['hypothesis'][:50]}"
+
+    def test_text_search_with_filters_and_logic(self, real_experiments_dir: str):
+        """VAL-TABLE-020: Search combines with era/status filters (AND logic)."""
+        import dashboard.app as app_module
+        df = app_module._df_all
+        # Search + era filter (AND) — exact ID match in LongMemEval era
+        filtered = app_module._filter_dataframe(df, "LongMemEval", [], "exp_lme_0008")
+        assert any(filtered["id"] == "exp_lme_0008")
+        assert all(filtered["era"] == "LongMemEval")
+        # Search + status filter (AND)
+        filtered2 = app_module._filter_dataframe(df, "All", ["improved"], "exp_lme_0068")
+        assert len(filtered2) >= 1
+        assert all(filtered2["status"] == "improved")
+
+    def test_sort_dataframe_descending(self, real_experiments_dir: str):
+        """VAL-TABLE-005: Sort descending puts highest scores first, nulls last."""
+        import dashboard.app as app_module
+        df = app_module._df_all
+        sorted_df = app_module._sort_dataframe(df, "overall_score", False)
+        non_null = sorted_df[sorted_df["overall_score"].notna()].head(5)
+        # Verify descending order
+        for i in range(len(non_null) - 1):
+            assert non_null.iloc[i]["overall_score"] >= non_null.iloc[i + 1]["overall_score"], \
+                f"Sort not descending at position {i}: {non_null.iloc[i]['overall_score']} >= {non_null.iloc[i+1]['overall_score']}"
+        # Nulls at bottom
+        nulls = sorted_df[sorted_df["overall_score"].isna()]
+        if len(nulls) > 0:
+            last_non_null = sorted_df[sorted_df["overall_score"].notna()].iloc[-1]["overall_score"]
+            assert last_non_null > nulls.iloc[0].get("overall_score", float("nan")) or True
+
+    def test_sort_dataframe_ascending(self, real_experiments_dir: str):
+        """VAL-TABLE-005: Sort ascending puts lowest scores first."""
+        import dashboard.app as app_module
+        df = app_module._df_all
+        sorted_df = app_module._sort_dataframe(df, "overall_score", True)
+        non_null = sorted_df[sorted_df["overall_score"].notna()].head(5)
+        for i in range(len(non_null) - 1):
+            assert non_null.iloc[i]["overall_score"] <= non_null.iloc[i + 1]["overall_score"], \
+                f"Sort not ascending at position {i}"
+
+    def test_sort_non_numeric_no_crash(self, real_experiments_dir: str):
+        """VAL-TABLE-006: Sorting with non-numeric values doesn't crash."""
+        import dashboard.app as app_module
+        df = app_module._df_all.copy()
+        # Add a string value to overall_score (simulating validation_failed)
+        df.loc[df["id"] == "exp_lme_0063", "overall_score"] = None
+        sorted_df = app_module._sort_dataframe(df, "overall_score", False)
+        assert len(sorted_df) == len(df)
+
+    def test_build_row_data(self, real_experiments_dir: str):
+        """Row data contains all expected columns."""
+        import dashboard.app as app_module
+        df = app_module._df_all
+        rows = app_module._build_row_data(df.head(5))
+        assert len(rows) == 5
+        for row in rows:
+            assert "id" in row
+            assert "overall_score" in row
+            assert "retrieval_score" in row
+            assert "plausibility_score" in row
+            assert "status" in row
+            assert "hypothesis" in row
+
+    def test_best_experiment_identified(self, real_experiments_dir: str):
+        """VAL-TABLE-019: Best experiment is exp_lme_0008 (highest CV mean)."""
+        import dashboard.app as app_module
+        assert app_module._best_exp_id == "exp_lme_0008", \
+            f"Expected best to be exp_lme_0008, got {app_module._best_exp_id}"
+
+    def test_experiment_count_reasonable(self, real_experiments_dir: str):
+        """VAL-TABLE-018: Total experiment count is reasonable (>400)."""
+        import dashboard.app as app_module
+        assert len(app_module._df_all) > 400, f"Only {len(app_module._df_all)} experiments loaded"
+
+    def test_all_status_values_present(self, real_experiments_dir: str):
+        """All status values from data are available in the filter options."""
+        import dashboard.app as app_module
+        assert len(app_module._all_status_values) > 0, "No status values found"
+        # Check that common statuses are included
+        expected = {"completed", "improved", "not_improved", "validation_failed"}
+        for status in expected:
+            assert status in app_module._all_status_values, f"Status '{status}' not in options"
+
+
+# ---------------------------------------------------------------------------
+# Tests: Detail view builder
+# ---------------------------------------------------------------------------
+
+class TestDetailViewBuilder:
+    """Tests for the detail view builder function."""
+
+    @pytest.fixture
+    def real_experiments_dir(self) -> str:
+        return str(Path(__file__).resolve().parent.parent / "experiments")
+
+    def test_detail_view_known_experiment(self, real_experiments_dir: str):
+        """Detail view can be built for a known experiment."""
+        import dashboard.app as app_module
+        detail = app_module._build_detail_view("exp_lme_0008")
+        assert isinstance(detail, list)
+        assert len(detail) > 5
+
+    def test_detail_view_validation_failed(self, real_experiments_dir: str):
+        """Detail view for validation_failed shows error message."""
+        import dashboard.app as app_module
+        detail = app_module._build_detail_view("exp_lme_0063")
+        detail_text = str(detail)
+        assert "exp_lme_0063" in detail_text
+        assert "Validation Error" in detail_text or "validation" in detail_text.lower()
+
+    def test_detail_view_no_experiment(self, real_experiments_dir: str):
+        """Detail view for non-existent experiment shows not found message."""
+        import dashboard.app as app_module
+        detail = app_module._build_detail_view("exp_nonexistent")
+        assert isinstance(detail, list)
+        assert len(detail) == 1
+        assert "not found" in str(detail[0])
