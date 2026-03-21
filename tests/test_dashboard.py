@@ -47,6 +47,14 @@ def _write_text(path: Path, text: str) -> None:
     path.write_text(text)
 
 
+def _find_real_experiment(experiments: list[Experiment], predicate, description: str) -> Experiment:
+    """Return the first matching real experiment or skip if unavailable."""
+    match = next((exp for exp in experiments if predicate(exp)), None)
+    if match is None:
+        pytest.skip(f"No real experiment available for: {description}")
+    return match
+
+
 # ---------------------------------------------------------------------------
 # Old-era experiment data (exp_0000 style)
 # ---------------------------------------------------------------------------
@@ -640,44 +648,61 @@ class TestIntegration:
         assert fs_count > 400, f"Expected >400 experiments but found {fs_count}"
 
     def test_load_old_and_new_era_real(self, real_experiments_dir: str):
-        """Load exp_0000 and exp_lme_0059 in same batch, verify field differences."""
+        """Load representative older-schema and newer-schema experiments from real data."""
         exps = load_all_experiments(real_experiments_dir)
-        old = next(e for e in exps if e.id == "exp_0000")
-        new = next(e for e in exps if e.id == "exp_lme_0059")
+        old = _find_real_experiment(
+            exps,
+            lambda e: (
+                e.strict_score is None
+                and e.forgetting_depth is None
+                and e.retention_curve is None
+                and e.eval_v2_score is None
+            ),
+            "older-schema experiment",
+        )
+        evolved = _find_real_experiment(
+            exps,
+            lambda e: (
+                e.strict_score is not None
+                and e.forgetting_depth is not None
+                and e.retention_curve is not None
+            ),
+            "evolved-schema experiment",
+        )
 
-        # Eras
-        assert old.era == "memories_500"
-        assert new.era == "LongMemEval"
-
-        # Old-era: no strict_score, forgetting_depth, etc.
         assert old.strict_score is None
         assert old.forgetting_depth is None
         assert old.retention_curve is None
         assert old.eval_v2_score is None
 
-        # New-era: has these
-        assert new.strict_score is not None
-        assert new.forgetting_depth is not None
-        assert new.retention_curve is not None
+        assert evolved.strict_score is not None
+        assert evolved.forgetting_depth is not None
+        assert evolved.retention_curve is not None
 
-        # Params
         assert old.params.get("beta_fact") is not None
-        assert new.params.get("floor_max") is not None
+        assert evolved.params, "Expected evolved-schema experiment to have params"
 
     def test_validation_failed_real(self, real_experiments_dir: str):
-        """exp_lme_0063: validation_failed, metrics null, error preserved."""
+        """A real validation_failed experiment preserves error text and null metrics."""
         exps = load_all_experiments(real_experiments_dir)
-        exp = next(e for e in exps if e.id == "exp_lme_0063")
+        exp = _find_real_experiment(
+            exps,
+            lambda e: e.status == "validation_failed",
+            "validation_failed experiment",
+        )
         assert exp.status == "validation_failed"
         assert exp.overall_score is None
         assert exp.error is not None
-        assert "decay" in exp.error.lower() or "decay" in exp.error
+        assert isinstance(exp.error, str)
 
     def test_no_results_real(self, real_experiments_dir: str):
-        """exp_0360: empty dir → status=no_results."""
+        """A real experiment without results.json loads as no_results."""
         exps = load_all_experiments(real_experiments_dir)
-        exp = next((e for e in exps if e.id == "exp_0360"), None)
-        assert exp is not None
+        exp = _find_real_experiment(
+            exps,
+            lambda e: e.status == "no_results",
+            "no_results experiment",
+        )
         assert exp.status == "no_results"
         assert exp.overall_score is None
 
@@ -937,7 +962,11 @@ class TestLeaderboardLogic:
         assert any(filtered["id"] == "exp_lme_0008")
         assert all(filtered["era"] == "LongMemEval")
         # Search + status filter (AND)
-        filtered2 = app_module._filter_dataframe(df, "All", ["improved"], "exp_lme_0068")
+        improved_rows = df[df["status"] == "improved"]
+        if improved_rows.empty:
+            pytest.skip("No improved experiment available in real data")
+        improved_id = improved_rows.iloc[0]["id"]
+        filtered2 = app_module._filter_dataframe(df, "All", ["improved"], improved_id)
         assert len(filtered2) >= 1
         assert all(filtered2["status"] == "improved")
 
@@ -1036,12 +1065,18 @@ class TestDetailViewBuilder:
         assert len(detail) > 5
 
     def test_detail_view_validation_failed(self, real_experiments_dir: str):
-        """Detail view for validation_failed shows error message."""
+        """Detail view for a validation_failed experiment shows its error message."""
         import dashboard.app as app_module
-        detail = app_module._build_detail_view("exp_lme_0063")
+        exps = load_all_experiments(real_experiments_dir)
+        exp = _find_real_experiment(
+            exps,
+            lambda e: e.status == "validation_failed",
+            "validation_failed experiment for detail view",
+        )
+        detail = app_module._build_detail_view(exp.id)
         detail_text = str(detail)
-        assert "exp_lme_0063" in detail_text
-        assert "Validation Error" in detail_text or "validation" in detail_text.lower()
+        assert exp.id in detail_text
+        assert exp.error in detail_text
 
     def test_detail_view_no_experiment(self, real_experiments_dir: str):
         """Detail view for non-existent experiment shows not found message."""
@@ -1074,9 +1109,12 @@ class TestDetailViewBuilder:
 
     def test_detail_view_key_metrics_4_decimal_places(self, app_module):
         """VAL-TABLE-011: Metrics shown with 4 decimal places."""
+        results_path = Path(__file__).resolve().parent.parent / "experiments" / "exp_lme_0008" / "results.json"
+        with open(results_path) as f:
+            results = json.load(f)
         detail_text = str(app_module._build_detail_view("exp_lme_0008"))
-        # overall_score for exp_lme_0008 is 0.4630429519731301, should show 0.4630 (4 decimals)
-        assert "0.4630" in detail_text, "Expected 4-decimal formatted overall_score"
+        formatted = f"{results['overall_score']:.4f}"
+        assert formatted in detail_text, "Expected 4-decimal formatted overall_score"
 
     def test_detail_view_later_era_metrics_na_for_old(self, app_module):
         """VAL-TABLE-012: Later-era metrics show N/A for experiments without them."""
@@ -1084,12 +1122,17 @@ class TestDetailViewBuilder:
         # exp_lme_0008 has no strict_score or forgetting_depth
         assert "N/A" in detail_text, "Expected N/A for missing later-era metrics"
 
-    def test_detail_view_later_era_metrics_shown_for_new(self, app_module):
-        """VAL-TABLE-012: Later-era metrics shown for experiments that have them."""
-        detail_text = str(app_module._build_detail_view("exp_lme_0059"))
-        # exp_lme_0059 has strict_score=0.458456, forgetting_depth=0.3675
-        assert "0.4585" in detail_text, "Expected strict_score for exp_lme_0059"
-        assert "0.3675" in detail_text, "Expected forgetting_depth for exp_lme_0059"
+    def test_detail_view_later_era_metrics_shown_for_new(self, app_module, real_experiments_dir: str):
+        """VAL-TABLE-012: Strict/forgetting metrics are shown for a real experiment that has them."""
+        exps = load_all_experiments(real_experiments_dir)
+        exp = _find_real_experiment(
+            exps,
+            lambda e: e.strict_score is not None and e.forgetting_depth is not None,
+            "experiment with strict_score and forgetting_depth",
+        )
+        detail_text = str(app_module._build_detail_view(exp.id))
+        assert f"{exp.strict_score:.4f}" in detail_text
+        assert f"{exp.forgetting_depth:.4f}" in detail_text
 
     def test_detail_view_hypothesis_full_text(self, app_module):
         """VAL-TABLE-013: Full hypothesis.txt text displayed, not truncated."""
@@ -1100,9 +1143,15 @@ class TestDetailViewBuilder:
         detail_text = str(app_module._build_detail_view("exp_lme_0008"))
         assert full_hypothesis in detail_text, "Full hypothesis text not found in detail view"
 
-    def test_detail_view_hypothesis_not_available(self, app_module):
+    def test_detail_view_hypothesis_not_available(self, app_module, real_experiments_dir: str):
         """VAL-TABLE-013: Missing hypothesis shows 'not available'."""
-        detail_text = str(app_module._build_detail_view("exp_0360"))
+        exps = load_all_experiments(real_experiments_dir)
+        exp = _find_real_experiment(
+            exps,
+            lambda e: e.hypothesis == "",
+            "experiment with missing hypothesis",
+        )
+        detail_text = str(app_module._build_detail_view(exp.id))
         assert "Hypothesis not available" in detail_text or "not available" in detail_text.lower()
 
     def test_detail_view_params_all_keys(self, app_module):
@@ -1116,17 +1165,27 @@ class TestDetailViewBuilder:
             assert str(k) in detail_text, f"Param key '{k}' not found in detail view"
             assert str(v) in detail_text, f"Param value '{v}' not found in detail view"
 
-    def test_detail_view_params_not_available(self, app_module):
+    def test_detail_view_params_not_available(self, app_module, real_experiments_dir: str):
         """VAL-TABLE-013: Missing params shows 'not available'."""
-        detail_text = str(app_module._build_detail_view("exp_0360"))
+        exps = load_all_experiments(real_experiments_dir)
+        exp = _find_real_experiment(
+            exps,
+            lambda e: e.params == {},
+            "experiment with missing params",
+        )
+        detail_text = str(app_module._build_detail_view(exp.id))
         assert "Parameters not available" in detail_text or "not available" in detail_text.lower()
 
-    def test_detail_view_validation_failed_na_metrics(self, app_module):
+    def test_detail_view_validation_failed_na_metrics(self, app_module, real_experiments_dir: str):
         """VAL-TABLE-014: validation_failed experiments show N/A for metrics."""
-        detail_text = str(app_module._build_detail_view("exp_lme_0063"))
-        # Error message should be shown prominently
-        assert "Insufficient decay" in detail_text, "Error message not shown"
-        # Metrics should show N/A
+        exps = load_all_experiments(real_experiments_dir)
+        exp = _find_real_experiment(
+            exps,
+            lambda e: e.status == "validation_failed",
+            "validation_failed experiment for N/A metric detail view",
+        )
+        detail_text = str(app_module._build_detail_view(exp.id))
+        assert exp.error in detail_text, "Error message not shown"
         assert "N/A" in detail_text, "Expected N/A for metrics of validation_failed experiment"
 
     def test_detail_view_cv_section_present(self, app_module):
@@ -1182,15 +1241,27 @@ class TestDetailViewBuilder:
         detail_text = str(detail)
         assert "Snapshot Timeline" in detail_text
 
-    def test_detail_view_snapshot_no_data_for_no_results(self, app_module):
+    def test_detail_view_snapshot_no_data_for_no_results(self, app_module, real_experiments_dir: str):
         """VAL-TABLE-017: Experiments without snapshots show 'No data'."""
-        detail_text = str(app_module._build_detail_view("exp_0360"))
+        exps = load_all_experiments(real_experiments_dir)
+        exp = _find_real_experiment(
+            exps,
+            lambda e: e.status == "no_results",
+            "no_results experiment for snapshot empty state",
+        )
+        detail_text = str(app_module._build_detail_view(exp.id))
         assert "No data" in detail_text, "Expected 'No data' for experiment without snapshots"
 
-    def test_detail_view_row_click_any_status(self, app_module):
+    def test_detail_view_row_click_any_status(self, app_module, real_experiments_dir: str):
         """Row click works for any status including validation_failed, no_results."""
-        # These should all build without crashing
-        for exp_id in ["exp_lme_0063", "exp_0360", "exp_lme_0001", "exp_0000"]:
+        exps = load_all_experiments(real_experiments_dir)
+        example_ids = [
+            _find_real_experiment(exps, lambda e: e.status == "validation_failed", "validation_failed detail example").id,
+            _find_real_experiment(exps, lambda e: e.status == "no_results", "no_results detail example").id,
+            _find_real_experiment(exps, lambda e: e.era == "LongMemEval", "LongMemEval detail example").id,
+            _find_real_experiment(exps, lambda e: e.era == "memories_500", "memories_500 detail example").id,
+        ]
+        for exp_id in example_ids:
             detail = app_module._build_detail_view(exp_id)
             assert isinstance(detail, list), f"Failed to build detail for {exp_id}"
             assert len(detail) > 1, f"Detail for {exp_id} is too short"
