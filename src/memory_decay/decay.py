@@ -5,6 +5,8 @@ from __future__ import annotations
 import math
 from typing import Literal
 
+import numpy as np
+
 from .graph import MemoryGraph
 
 
@@ -103,6 +105,15 @@ class DecayEngine:
         }
         if params:
             self._params.update(params)
+        # Pre-extracted node arrays for fast tick() — built lazily
+        self._tick_arrays_built = False
+        self._tick_nids: list[str] = []
+        self._tick_retrieval: np.ndarray | None = None
+        self._tick_storage: np.ndarray | None = None
+        self._tick_stability: np.ndarray | None = None
+        self._tick_impact: np.ndarray | None = None
+        self._tick_created: np.ndarray | None = None
+        self._tick_is_fact: np.ndarray | None = None
 
     def get_params(self) -> dict:
         return dict(self._params)
@@ -155,34 +166,119 @@ class DecayEngine:
 
         return min(max(decayed, 0.0), 1.0)
 
-    def tick(self) -> None:
-        """Advance time by 1 step.
-
-        Activation decays every tick once a memory has been created.
-        Stability also decays slowly so reinforcement has a long but finite effect.
-        """
-        self.current_tick += 1
+    def _build_tick_arrays(self) -> None:
+        """Pre-extract node data into parallel arrays for fast tick()."""
+        nids = []
+        retrieval = []
+        storage = []
+        stability = []
+        impact = []
+        created = []
+        is_fact = []
 
         for nid, attrs in self._graph._graph.nodes(data=True):
             if attrs.get("type") in ("unknown", None):
                 continue
+            nids.append(nid)
+            retrieval.append(float(
+                attrs.get("retrieval_score", attrs.get("activation_score", 0.0))
+            ))
+            storage.append(float(
+                attrs.get("storage_score", attrs.get("activation_score", 0.0))
+            ))
+            stability.append(float(attrs.get("stability_score", 0.0)))
+            impact.append(float(attrs.get("impact", 0.0)))
+            created.append(int(attrs.get("created_tick", 0)))
+            is_fact.append(attrs.get("type") == "fact")
 
-            if self.current_tick < attrs.get("created_tick", 0):
+        self._tick_nids = nids
+        self._tick_retrieval = np.array(retrieval, dtype=np.float64)
+        self._tick_storage = np.array(storage, dtype=np.float64)
+        self._tick_stability = np.array(stability, dtype=np.float64)
+        self._tick_impact = np.array(impact, dtype=np.float64)
+        self._tick_created = np.array(created, dtype=np.int64)
+        self._tick_is_fact = np.array(is_fact, dtype=np.bool_)
+        self._tick_arrays_built = True
+
+    def _sync_tick_arrays_from_graph(self) -> None:
+        """Re-read mutable scores from graph into arrays (after re_activate)."""
+        nodes = self._graph._graph.nodes
+        for i, nid in enumerate(self._tick_nids):
+            attrs = nodes[nid]
+            self._tick_retrieval[i] = float(
+                attrs.get("retrieval_score", attrs.get("activation_score", 0.0))
+            )
+            self._tick_storage[i] = float(
+                attrs.get("storage_score", attrs.get("activation_score", 0.0))
+            )
+            self._tick_stability[i] = float(attrs.get("stability_score", 0.0))
+
+    def tick(self) -> None:
+        """Advance time by 1 step.
+
+        Storage and retrieval scores decay every tick once a memory has been created.
+        Stability also decays slowly so reinforcement has a long but finite effect.
+        """
+        self.current_tick += 1
+
+        if not self._tick_arrays_built:
+            self._build_tick_arrays()
+        else:
+            self._sync_tick_arrays_from_graph()
+
+        n = len(self._tick_nids)
+        if n == 0:
+            return
+
+        # Mask: only process nodes created at or before current tick
+        active = self._tick_created <= self.current_tick
+
+        # Stability decay: vectorized (doesn't depend on custom_decay_fn)
+        stability_decay = self._params["stability_decay"]
+        stability_cap = self._params["stability_cap"]
+        new_stability = np.where(
+            active,
+            np.minimum(self._tick_stability * (1.0 - stability_decay), stability_cap),
+            self._tick_stability,
+        )
+
+        # Decay scores: must use per-element custom_decay_fn
+        new_retrieval = self._tick_retrieval.copy()
+        new_storage = self._tick_storage.copy()
+
+        compute = self._compute_decay
+        retrieval_arr = self._tick_retrieval
+        storage_arr = self._tick_storage
+        impact_arr = self._tick_impact
+        stability_arr = self._tick_stability
+        is_fact_arr = self._tick_is_fact
+
+        for i in range(n):
+            if not active[i]:
                 continue
-
-            initial_activation = float(attrs["activation_score"])
-            mtype = attrs["type"]
-            impact = float(attrs["impact"])
-            stability = float(attrs.get("stability_score", 0.0))
-
-            new_activation = self._compute_decay(
-                initial_activation, impact, stability, mtype
+            mtype = "fact" if is_fact_arr[i] else "episode"
+            new_retrieval[i] = compute(
+                retrieval_arr[i], impact_arr[i], stability_arr[i], mtype,
             )
-            new_stability = max(
-                0.0, stability * (1.0 - self._params["stability_decay"])
+            new_storage[i] = compute(
+                storage_arr[i], impact_arr[i], stability_arr[i], mtype,
             )
 
-            self._graph._graph.nodes[nid]["activation_score"] = new_activation
-            self._graph._graph.nodes[nid]["stability_score"] = min(
-                new_stability, self._params["stability_cap"]
-            )
+        # Write back to graph in bulk
+        nodes = self._graph._graph.nodes
+        emb_nid_to_idx = self._graph._emb_nid_to_idx
+        emb_scores = self._graph._emb_retrieval_scores
+
+        for i in range(n):
+            if not active[i]:
+                continue
+            nid = self._tick_nids[i]
+            nr = new_retrieval[i]
+            nodes[nid]["retrieval_score"] = nr
+            nodes[nid]["activation_score"] = nr
+            nodes[nid]["storage_score"] = new_storage[i]
+            nodes[nid]["stability_score"] = new_stability[i]
+            if emb_scores is not None:
+                idx = emb_nid_to_idx.get(nid)
+                if idx is not None:
+                    emb_scores[idx] = max(nr, 0.0)

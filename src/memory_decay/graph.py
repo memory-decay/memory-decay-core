@@ -31,7 +31,9 @@ class MemoryGraph:
         # Precomputed embedding matrix for vectorized similarity search
         self._emb_matrix: np.ndarray | None = None
         self._emb_nids: list[str] = []
+        self._emb_nid_to_idx: dict[str, int] = {}
         self._emb_created_ticks: np.ndarray | None = None
+        self._emb_retrieval_scores: np.ndarray | None = None
         self._emb_node_count: int = 0  # tracks when matrix needs rebuild
 
     def _get_embedder(self) -> Callable:
@@ -186,11 +188,22 @@ class MemoryGraph:
             norms[norms == 0] = 1.0  # avoid division by zero
             self._emb_matrix = matrix / norms
             self._emb_nids = nids
+            self._emb_nid_to_idx = {nid: i for i, nid in enumerate(nids)}
             self._emb_created_ticks = np.array(created_ticks, dtype=np.int64)
+            # Pre-populate retrieval scores array
+            self._emb_retrieval_scores = np.array([
+                max(float(self._graph.nodes[nid].get(
+                    "retrieval_score",
+                    self._graph.nodes[nid].get("activation_score", 0.0),
+                )), 0.0)
+                for nid in nids
+            ], dtype=np.float64)
         else:
             self._emb_matrix = None
             self._emb_nids = []
+            self._emb_nid_to_idx = {}
             self._emb_created_ticks = None
+            self._emb_retrieval_scores = None
 
         self._emb_node_count = current_count
 
@@ -236,16 +249,9 @@ class MemoryGraph:
             mask = self._emb_created_ticks <= current_tick
             similarities = np.where(mask, similarities, -np.inf)
 
-        # Apply activation weighting
-        if activation_weight > 0:
-            activations = np.array([
-                max(float(self._graph.nodes[nid].get(
-                    "retrieval_score",
-                    self._graph.nodes[nid].get("activation_score", 0.0),
-                )), 0.0)
-                for nid in self._emb_nids
-            ], dtype=np.float64)
-            similarities = similarities * (activations ** activation_weight)
+        # Apply activation weighting via cached score array
+        if activation_weight > 0 and self._emb_retrieval_scores is not None:
+            similarities = similarities * (self._emb_retrieval_scores ** activation_weight)
 
         # Get top_k indices
         if len(self._emb_nids) <= top_k:
@@ -341,6 +347,9 @@ class MemoryGraph:
             attrs["retrieval_score"] = retrieval_score
             attrs["activation_score"] = retrieval_score
             attrs["last_activated_tick"] = effective_tick
+            idx = self._emb_nid_to_idx.get(node_id)
+            if idx is not None and self._emb_retrieval_scores is not None:
+                self._emb_retrieval_scores[idx] = max(retrieval_score, 0.0)
 
         if score_mode in ("both", "storage_only"):
             storage_score = min(
@@ -455,6 +464,9 @@ class MemoryGraph:
         if self._graph.has_node(node_id):
             self._graph.nodes[node_id]["retrieval_score"] = score
             self._graph.nodes[node_id]["activation_score"] = score
+            idx = self._emb_nid_to_idx.get(node_id)
+            if idx is not None and self._emb_retrieval_scores is not None:
+                self._emb_retrieval_scores[idx] = max(score, 0.0)
 
     def set_storage_score(self, node_id: str, score: float) -> None:
         if self._graph.has_node(node_id):

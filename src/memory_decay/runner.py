@@ -255,6 +255,7 @@ def run_experiment_with_split(
         reactivation_policy=reactivation_policy,
         rehearsal_targets=rehearsal_targets,
         seed=seed,
+        fast_eval=True,
     )
 
     return evaluator.score_summary(test_queries)

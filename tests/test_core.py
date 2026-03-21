@@ -88,6 +88,8 @@ class TestMemoryGraph:
         assert node is not None
         assert node["type"] == "fact"
         assert node["impact"] == 0.8
+        assert node["storage_score"] == 1.0
+        assert node["retrieval_score"] == 1.0
         assert node["activation_score"] == 1.0
         assert node["stability_score"] == 0.0
         assert node["retrieval_count"] == 0
@@ -151,6 +153,15 @@ class TestMemoryGraph:
         assert g.get_node("mem_001")["stability_score"] > g.get_node("mem_002")["stability_score"]
         assert g.get_node("mem_001")["retrieval_count"] == 1
 
+    def test_set_activation_keeps_retrieval_alias_in_sync(self):
+        g = make_graph()
+        g.add_memory("mem_001", "fact", "서울은 수도다", 0.8, 0)
+
+        g.set_activation("mem_001", 0.4)
+        node = g.get_node("mem_001")
+        assert node["retrieval_score"] == 0.4
+        assert node["activation_score"] == 0.4
+
     def test_direct_reactivation_increases_stability_and_count(self):
         g = make_graph()
         g.add_memory("mem_001", "fact", "중요한 기억", 0.9, 0)
@@ -162,6 +173,44 @@ class TestMemoryGraph:
         assert after["stability_score"] > before["stability_score"]
         assert after["retrieval_count"] == before["retrieval_count"] + 1
         assert after["last_reinforced_tick"] >= before["last_reinforced_tick"]
+
+    def test_reinforce_memory_increases_stability_without_activation_or_cascade(self):
+        g = make_graph()
+        g.add_memory("mem_001", "fact", "서울은 수도다", 0.8, 0, [("mem_002", 0.8)])
+        g.add_memory("mem_002", "episode", "서울에 여행갔다", 0.6, 1)
+        g.set_activation("mem_001", 0.4)
+        g.set_activation("mem_002", 0.3)
+
+        before_target = g.get_node("mem_001")
+        before_neighbor = g.get_node("mem_002")
+
+        g.reinforce_memory(
+            "mem_001",
+            reinforcement_gain=0.2,
+            stability_cap=1.0,
+            current_tick=5,
+        )
+
+        after_target = g.get_node("mem_001")
+        after_neighbor = g.get_node("mem_002")
+
+        assert after_target["activation_score"] == before_target["activation_score"]
+        assert after_target["stability_score"] > before_target["stability_score"]
+        assert after_target["retrieval_count"] == before_target["retrieval_count"] + 1
+        assert after_neighbor["activation_score"] == before_neighbor["activation_score"]
+        assert after_neighbor["stability_score"] == before_neighbor["stability_score"]
+
+    def test_re_activate_retrieval_only_leaves_storage_unchanged(self):
+        g = make_graph()
+        g.add_memory("mem_001", "fact", "서울은 수도다", 0.8, 0)
+        g.set_activation("mem_001", 0.4)
+        g.set_storage_score("mem_001", 0.3)
+
+        g.re_activate("mem_001", 0.2, score_mode="retrieval_only")
+        node = g.get_node("mem_001")
+        assert node["retrieval_score"] == pytest.approx(0.6)
+        assert node["activation_score"] == pytest.approx(0.6)
+        assert node["storage_score"] == pytest.approx(0.3)
 
     def test_cascade_reactivation_is_weaker_than_direct(self):
         g = make_graph()
@@ -209,6 +258,19 @@ class TestDecayEngine:
         # With high impact (0.8) and alpha=0.5: impact_mod = 1.4
         # Should still decay from initial since e^(-0.05) < 1 but impact_mod > 1
         assert isinstance(after, float)
+
+    def test_decay_engine_updates_storage_and_retrieval_independently(self):
+        g = make_graph()
+        g.add_memory("mem_001", "fact", "test", 0.8, 0)
+        g.set_activation("mem_001", 0.8)
+        g.set_storage_score("mem_001", 0.4)
+        engine = make_exponential_engine(g)
+
+        engine.tick()
+        node = g.get_node("mem_001")
+        assert node["retrieval_score"] < 0.8
+        assert node["activation_score"] == pytest.approx(node["retrieval_score"])
+        assert node["storage_score"] < 0.4
 
     def test_power_law_decay_decreases(self):
         g = make_graph()

@@ -83,6 +83,7 @@ def run_simulation(
     reactivation_boost: float = 0.3,
     rehearsal_targets: list[str] | None = None,
     seed: Optional[int] = None,
+    fast_eval: bool = False,
 ) -> list[dict]:
     """Run a simulation and return evaluation snapshots.
 
@@ -125,6 +126,10 @@ def run_simulation(
 
     def collect_summary() -> dict:
         return evaluator.score_summary(test_queries, record_snapshot=True)
+
+    def collect_snapshot() -> dict:
+        """Lightweight snapshot: only recall/precision for history tracking."""
+        return evaluator.snapshot(test_queries, record=True)
 
     def _get_scheduled_target(rehearsal_list: list[str], tick: int, interval: int) -> str | None:
         """Return the scheduled target for a given tick and interval."""
@@ -568,13 +573,21 @@ def run_simulation(
             )
 
     # Initial evaluation (tick 0)
-    summary = collect_summary()
-    summaries.append(summary)
-    print(
-        f"  Tick {summary['tick']:>4d} | recall={summary['recall_rate']:.3f} | "
-        f"precision={summary['precision_rate']:.3f} | retrieval={summary['retrieval_score']:.3f} | "
-        f"overall={summary['overall_score']:.3f}"
-    )
+    if fast_eval:
+        summary = collect_snapshot()
+        summaries.append(summary)
+        print(
+            f"  Tick {summary['tick']:>4d} | recall={summary['recall_rate']:.3f} | "
+            f"precision={summary['precision_rate']:.3f}"
+        )
+    else:
+        summary = collect_summary()
+        summaries.append(summary)
+        print(
+            f"  Tick {summary['tick']:>4d} | recall={summary['recall_rate']:.3f} | "
+            f"precision={summary['precision_rate']:.3f} | retrieval={summary['retrieval_score']:.3f} | "
+            f"overall={summary['overall_score']:.3f}"
+        )
 
     for t in range(1, total_ticks + 1):
         apply_reactivation(t)
@@ -582,13 +595,21 @@ def run_simulation(
         engine.tick()
 
         if t % eval_interval == 0:
-            summary = collect_summary()
-            summaries.append(summary)
-            print(
-                f"  Tick {summary['tick']:>4d} | recall={summary['recall_rate']:.3f} | "
-                f"precision={summary['precision_rate']:.3f} | retrieval={summary['retrieval_score']:.3f} | "
-                f"overall={summary['overall_score']:.3f}"
-            )
+            if fast_eval:
+                summary = collect_snapshot()
+                summaries.append(summary)
+                print(
+                    f"  Tick {summary['tick']:>4d} | recall={summary['recall_rate']:.3f} | "
+                    f"precision={summary['precision_rate']:.3f}"
+                )
+            else:
+                summary = collect_summary()
+                summaries.append(summary)
+                print(
+                    f"  Tick {summary['tick']:>4d} | recall={summary['recall_rate']:.3f} | "
+                    f"precision={summary['precision_rate']:.3f} | retrieval={summary['retrieval_score']:.3f} | "
+                    f"overall={summary['overall_score']:.3f}"
+                )
             # Retrieval consolidation: boost successfully recalled test memories
             if reactivation_policy == "retrieval_consolidation":
                 apply_retrieval_consolidation(t)
