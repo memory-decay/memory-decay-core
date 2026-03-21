@@ -5,12 +5,18 @@ Provides Plotly figure builders for:
 - Metric progression (line charts with phase shading)
 - Threshold heatmap (recall/precision at thresholds 0.1-0.9)
 - Retention curve overlay (multi-experiment comparison)
+- Parameter sweep (parallel coordinates colored by overall_score)
+- Snapshot viewer (expanded multi-metric tick view)
+- Forgetting depth analysis (distribution with pass/fail)
+- CV results (fold scores, fold deltas, worst-fold)
+- Phase comparison (side-by-side statistics)
 
 All charts support era filtering, phase highlighting, and follow the
 conventions defined in the mission specification.
 """
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any, Optional
 
 import plotly.graph_objects as go
@@ -800,3 +806,826 @@ def check_retention_warnings(
             warnings.append(f"{exp_id}: no retention data available")
 
     return warnings
+
+
+# ---------------------------------------------------------------------------
+# Parameter Sweep — Parallel Coordinates
+# ---------------------------------------------------------------------------
+
+# Parameters that appear frequently enough across eras to be useful dimensions
+_COMMON_PARAMS: list[str] = [
+    "lambda_fact", "lambda_episode", "alpha", "stability_weight",
+    "stability_decay", "reinforcement_gain_direct", "reinforcement_gain_assoc",
+    "stability_cap", "floor_max", "sigmoid_k", "sigmoid_mid",
+    "jost_power", "activation_weight",
+]
+
+# Extra params specific to old era (beta_*)
+_OLD_ERA_EXTRA: list[str] = [
+    "beta_fact", "beta_episode", "floor_min", "floor_power",
+    "consolidation_threshold", "sigmoid_steepness",
+]
+
+
+def get_param_sweep_dimensions(
+    experiments: list[Experiment],
+    era: str = "All",
+    enabled_params: list[str] | None = None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Determine parallel coordinates dimensions based on era and param coverage.
+
+    Returns:
+        (dimensions, available_params) where dimensions is a list of
+        Plotly Parcoords dimension dicts, and available_params is the
+        full list of eligible param names for the toggle selector.
+    """
+    filtered = experiments
+    if era != "All":
+        filtered = [e for e in experiments if e.era == era]
+
+    # Only consider experiments with params
+    with_params = [e for e in filtered if e.params]
+
+    if not with_params:
+        return [], []
+
+    # Count param frequency
+    param_count: Counter[str] = Counter()
+    param_values: dict[str, list] = {}
+    for e in with_params:
+        for k, v in e.params.items():
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                param_count[k] += 1
+                param_values.setdefault(k, []).append(v)
+
+    total = len(with_params)
+
+    # Select candidate params: those with >= 10% coverage
+    candidates = [
+        k for k, c in param_count.most_common()
+        if c / total >= 0.10 and len(param_values[k]) > 1  # >1 unique values needed
+    ]
+
+    # If era is specific, use its param set; if "All", hide params with >50% null
+    if era == "All":
+        candidates = [k for k in candidates if param_count[k] / total > 0.50]
+
+    # Build dimension dicts
+    dimensions = []
+    available = list(candidates)  # for toggle selector
+
+    # If user selected specific params, filter
+    if enabled_params is not None:
+        candidates = [k for k in candidates if k in enabled_params]
+
+    for param in candidates:
+        vals = param_values.get(param, [])
+        if not vals:
+            continue
+        # Filter out None/NaN
+        clean_vals = [v for v in vals if v is not None]
+        if not clean_vals:
+            continue
+        vmin = min(clean_vals)
+        vmax = max(clean_vals)
+        # Add 5% padding
+        pad = (vmax - vmin) * 0.05 if vmax != vmin else 0.01
+        dimensions.append({
+            "label": param,
+            "values": [e.params.get(param) for e in with_params],
+            "range": [vmin - pad, vmax + pad],
+        })
+
+    return dimensions, available
+
+
+def build_parameter_sweep(
+    experiments: list[Experiment],
+    era: str = "All",
+    enabled_params: list[str] | None = None,
+) -> go.Figure:
+    """Build parallel coordinates plot colored by overall_score.
+
+    Features:
+    - Era-specific parameter dimensions
+    - 'All' era hides params with >50% null
+    - Parameter toggle selector (enabled_params)
+    - Color scale maps to overall_score
+    - Hover shows param values and score
+    - Click navigates to experiment detail
+
+    Args:
+        experiments: All loaded experiments.
+        era: Current era filter.
+        enabled_params: List of param names to show as dimensions.
+
+    Returns:
+        Plotly Figure with parallel coordinates.
+    """
+    filtered = experiments
+    if era != "All":
+        filtered = [e for e in experiments if e.era == era]
+
+    # Only experiments with params AND overall_score
+    scored = [e for e in filtered if e.params and e.overall_score is not None]
+
+    if not scored:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No experiments with parameter data and scores in current view",
+            xref="paper", yref="paper", x=0.5, y=0.5,
+            showarrow=False, font={"size": 14, "color": "#9E9E9E"},
+        )
+        fig.update_layout(template="plotly_white")
+        return fig
+
+    dimensions, available = get_param_sweep_dimensions(experiments, era, enabled_params)
+
+    if not dimensions:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No parameter dimensions available with sufficient coverage",
+            xref="paper", yref="paper", x=0.5, y=0.5,
+            showarrow=False, font={"size": 14, "color": "#9E9E9E"},
+        )
+        fig.update_layout(template="plotly_white")
+        return fig
+
+    # Color line by overall_score
+    line_color = [e.overall_score for e in scored]
+
+    # Custom data for hover: experiment IDs
+    custom_data = [e.id for e in scored]
+
+    fig = go.Figure(go.Parcoords(
+        line=dict(
+            color=line_color,
+            colorscale="Viridis",
+            showscale=True,
+            colorbar=dict(title="Overall Score"),
+            cmin=0,
+            cmax=1,
+        ),
+        dimensions=dimensions,
+        customdata=custom_data,
+        labelangle=-30,
+    ))
+
+    # Note: go.Parcoords doesn't directly support clickData like scatter.
+    # Navigation to detail will be handled via the experiment dropdown
+    # in the parameter sweep view.
+
+    era_label = era if era != "All" else "both eras"
+    fig.update_layout(
+        title=f"Parameter Sweep ({era_label})",
+        height=500,
+        margin={"l": 80, "r": 40, "t": 50, "b": 60},
+        template="plotly_white",
+        font={"size": 11},
+    )
+
+    return fig
+
+
+def get_param_sweep_available_params(
+    experiments: list[Experiment],
+    era: str = "All",
+) -> list[str]:
+    """Get list of parameter names eligible for the toggle selector."""
+    _, available = get_param_sweep_dimensions(experiments, era)
+    return available
+
+
+# ---------------------------------------------------------------------------
+# Snapshot Viewer — Expanded Multi-Metric View
+# ---------------------------------------------------------------------------
+
+# Snapshot metric traces to display
+_SNAPSHOT_METRICS: list[tuple[str, str, str]] = [
+    ("overall_score", "Overall Score", "#1565C0"),
+    ("recall_mean", "Recall Mean", "#2E7D32"),
+    ("precision_mean", "Precision Mean", "#E65100"),
+    ("plausibility_score", "Plausibility Score", "#6A1B9A"),
+    ("mrr_mean", "MRR Mean", "#C62828"),
+]
+
+
+def build_snapshot_viewer(
+    experiments: list[Experiment],
+    exp_id: str,
+    current_tick: int | None = None,
+) -> go.Figure:
+    """Build expanded snapshot viewer chart with multiple metric traces.
+
+    Features:
+    - Shows overall, recall, precision, plausibility, mrr over 11 ticks
+    - Stepping controls (highlight current tick)
+    - Animation mode (visual indicator)
+    - Distinct from detail view mini-charts
+
+    Args:
+        experiments: All loaded experiments.
+        exp_id: Selected experiment ID.
+        current_tick: Currently highlighted tick (for stepping).
+
+    Returns:
+        Plotly Figure with multi-metric snapshot view.
+    """
+    exp = next((e for e in experiments if e.id == exp_id), None)
+
+    fig = go.Figure()
+
+    if exp is None or not exp.snapshots:
+        fig.add_annotation(
+            text="No snapshot data available for this experiment",
+            xref="paper", yref="paper", x=0.5, y=0.5,
+            showarrow=False, font={"size": 14, "color": "#9E9E9E"},
+        )
+        fig.update_layout(template="plotly_white")
+        return fig
+
+    ticks = [s.get("tick", i * 20) for i, s in enumerate(exp.snapshots)]
+    has_any_trace = False
+
+    for key, label, color in _SNAPSHOT_METRICS:
+        values = []
+        t_vals = []
+        for s in exp.snapshots:
+            val = s.get(key)
+            if val is not None:
+                t_vals.append(s.get("tick", 0))
+                values.append(float(val))
+
+        if values:
+            has_any_trace = True
+            fig.add_trace(go.Scatter(
+                x=t_vals, y=values,
+                mode="lines+markers",
+                name=label,
+                line={"color": color, "width": 2.5},
+                marker={"size": 6},
+                hovertemplate=(
+                    f"{exp_id}<br>"
+                    f"{label}: %{{y:.4f}}<br>"
+                    "Tick: %{x}<extra></extra>"
+                ),
+            ))
+
+    if not has_any_trace:
+        fig.add_annotation(
+            text="No metric data in snapshots",
+            xref="paper", yref="paper", x=0.5, y=0.5,
+            showarrow=False, font={"size": 14, "color": "#9E9E9E"},
+        )
+        fig.update_layout(template="plotly_white")
+        return fig
+
+    # Add vertical line for current tick (stepping indicator)
+    if current_tick is not None:
+        fig.add_vline(
+            x=current_tick,
+            line_dash="dash", line_color="#D32F2F", line_width=2,
+            annotation_text=f"Tick {current_tick}",
+            annotation_position="top left",
+            annotation_font={"size": 10, "color": "#D32F2F"},
+        )
+
+    fig.update_layout(
+        title=f"Snapshot Viewer — {exp_id}",
+        xaxis_title="Simulation Tick",
+        yaxis_title="Score",
+        yaxis={"range": [0, 1]},
+        xaxis={"tickvals": list(range(0, 201, 20))},
+        height=450,
+        margin={"l": 50, "r": 20, "t": 50, "b": 40},
+        template="plotly_white",
+        font={"size": 12},
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+        ),
+    )
+
+    return fig
+
+
+def get_snapshot_tick_data(
+    experiments: list[Experiment],
+    exp_id: str,
+    tick: int,
+) -> dict[str, float | None]:
+    """Get all metric values for a specific tick in an experiment's snapshots."""
+    exp = next((e for e in experiments if e.id == exp_id), None)
+    if exp is None or not exp.snapshots:
+        return {}
+
+    snapshot = next((s for s in exp.snapshots if s.get("tick") == tick), None)
+    if snapshot is None:
+        return {}
+
+    result: dict[str, float | None] = {}
+    for key, label, _ in _SNAPSHOT_METRICS:
+        val = snapshot.get(key)
+        result[key] = float(val) if val is not None else None
+        result[f"{key}_label"] = label
+
+    # Also include eval_v2, strict, selectivity if available
+    for extra_key in ["eval_v2_score", "selectivity_score", "robustness_score"]:
+        val = snapshot.get(extra_key)
+        if val is not None:
+            result[extra_key] = float(val)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Forgetting Depth & Strict Validation Analysis
+# ---------------------------------------------------------------------------
+
+def build_forgetting_depth_chart(
+    experiments: list[Experiment],
+    era: str = "All",
+) -> go.Figure:
+    """Build forgetting depth distribution chart with pass/fail classification.
+
+    Features:
+    - Only experiments with forgetting_depth data shown
+    - Pass/fail classification (strict_score thresholds or status)
+    - Distribution bar chart
+
+    Args:
+        experiments: All loaded experiments.
+        era: Current era filter.
+
+    Returns:
+        Plotly Figure with forgetting depth distribution.
+    """
+    filtered = experiments
+    if era != "All":
+        filtered = [e for e in experiments if e.era == era]
+
+    # Only experiments with forgetting_depth
+    with_data = [e for e in filtered if e.forgetting_depth is not None]
+
+    if not with_data:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No experiments with forgetting_depth data in current view",
+            xref="paper", yref="paper", x=0.5, y=0.5,
+            showarrow=False, font={"size": 14, "color": "#9E9E9E"},
+        )
+        fig.update_layout(template="plotly_white")
+        return fig
+
+    # Classify pass/fail based on strict_score
+    passed: list[Experiment] = []
+    failed: list[Experiment] = []
+    no_strict: list[Experiment] = []
+
+    for e in with_data:
+        if e.strict_score is not None:
+            if e.status == "validation_failed":
+                failed.append(e)
+            elif e.strict_score >= 0.4:
+                passed.append(e)
+            else:
+                failed.append(e)
+        else:
+            no_strict.append(e)
+
+    fig = go.Figure()
+
+    # Passed experiments (green)
+    if passed:
+        fig.add_trace(go.Bar(
+            x=[e.id for e in passed],
+            y=[e.forgetting_depth for e in passed],
+            name="Passed",
+            marker_color="#4CAF50",
+            text=[f"{e.forgetting_depth:.4f}" for e in passed],
+            textposition="auto",
+            hovertemplate=(
+                "%{x}<br>"
+                "Forgetting Depth: %{y:.4f}<br>"
+                "Strict Score: %{customdata:.4f}<extra></extra>"
+            ),
+            customdata=[e.strict_score for e in passed],
+        ))
+
+    # Failed experiments (red)
+    if failed:
+        fig.add_trace(go.Bar(
+            x=[e.id for e in failed],
+            y=[e.forgetting_depth for e in failed],
+            name="Failed",
+            marker_color="#EF5350",
+            text=[f"{e.forgetting_depth:.4f}" for e in failed],
+            textposition="auto",
+            hovertemplate=(
+                "%{x}<br>"
+                "Forgetting Depth: %{y:.4f}<br>"
+                "Status: %{customdata}<extra></extra>"
+            ),
+            customdata=[e.status for e in failed],
+        ))
+
+    # No strict score (gray)
+    if no_strict:
+        fig.add_trace(go.Bar(
+            x=[e.id for e in no_strict],
+            y=[e.forgetting_depth for e in no_strict],
+            name="No Strict Score",
+            marker_color="#BDBDBD",
+            text=[f"{e.forgetting_depth:.4f}" for e in no_strict],
+            textposition="auto",
+            hovertemplate="%{x}<br>Forgetting Depth: %{y:.4f}<extra></extra>",
+        ))
+
+    fig.update_layout(
+        title="Forgetting Depth Distribution (Pass/Fail Classification)",
+        xaxis_title="Experiment",
+        yaxis_title="Forgetting Depth",
+        barmode="group",
+        height=400,
+        margin={"l": 60, "r": 20, "t": 50, "b": 100},
+        template="plotly_white",
+        font={"size": 11},
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        xaxis={"tickangle": -45},
+    )
+
+    return fig
+
+
+def build_strict_score_chart(
+    experiments: list[Experiment],
+    era: str = "All",
+) -> go.Figure:
+    """Build strict_score distribution chart alongside forgetting_depth.
+
+    Args:
+        experiments: All loaded experiments.
+        era: Current era filter.
+
+    Returns:
+        Plotly Figure with strict_score distribution.
+    """
+    filtered = experiments
+    if era != "All":
+        filtered = [e for e in experiments if e.era == era]
+
+    with_data = [e for e in filtered if e.strict_score is not None]
+
+    if not with_data:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No experiments with strict_score data in current view",
+            xref="paper", yref="paper", x=0.5, y=0.5,
+            showarrow=False, font={"size": 14, "color": "#9E9E9E"},
+        )
+        fig.update_layout(template="plotly_white")
+        return fig
+
+    # Classify
+    passed_ids = []
+    passed_scores = []
+    failed_ids = []
+    failed_scores = []
+
+    for e in with_data:
+        if e.status == "validation_failed":
+            failed_ids.append(e.id)
+            failed_scores.append(e.strict_score)
+        elif e.strict_score >= 0.4:
+            passed_ids.append(e.id)
+            passed_scores.append(e.strict_score)
+        else:
+            failed_ids.append(e.id)
+            failed_scores.append(e.strict_score)
+
+    fig = go.Figure()
+
+    if passed_ids:
+        fig.add_trace(go.Bar(
+            x=passed_ids, y=passed_scores,
+            name="Passed (≥0.4)", marker_color="#4CAF50",
+            text=[f"{s:.4f}" for s in passed_scores], textposition="auto",
+            hovertemplate="%{x}<br>Strict Score: %{y:.4f}<extra></extra>",
+        ))
+
+    if failed_ids:
+        fig.add_trace(go.Bar(
+            x=failed_ids, y=failed_scores,
+            name="Failed (<0.4 / validation_failed)", marker_color="#EF5350",
+            text=[f"{s:.4f}" for s in failed_scores], textposition="auto",
+            hovertemplate="%{x}<br>Strict Score: %{y:.4f}<extra></extra>",
+        ))
+
+    # Add threshold line at 0.4
+    fig.add_hline(
+        y=0.4, line_dash="dash", line_color="#FF9800", line_width=2,
+        annotation_text="Pass threshold (0.4)",
+        annotation_position="top right",
+    )
+
+    fig.update_layout(
+        title="Strict Score Distribution (Pass/Fail Classification)",
+        xaxis_title="Experiment",
+        yaxis_title="Strict Score",
+        yaxis={"range": [0, 1]},
+        barmode="group",
+        height=400,
+        margin={"l": 60, "r": 20, "t": 50, "b": 100},
+        template="plotly_white",
+        font={"size": 11},
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        xaxis={"tickangle": -45},
+    )
+
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# CV Results Visualization
+# ---------------------------------------------------------------------------
+
+def build_cv_fold_scores(
+    cv_data: dict,
+    exp_id: str,
+) -> go.Figure:
+    """Build fold scores bar chart with mean±std and worst-fold highlight.
+
+    Args:
+        cv_data: Parsed cv_results.json dict.
+        exp_id: Experiment ID (for title).
+
+    Returns:
+        Plotly Figure with fold scores bar chart.
+    """
+    fold_scores = cv_data.get("fold_scores", [])
+    cv_mean = cv_data.get("mean", {})
+    cv_std = cv_data.get("std", {})
+    cv_worst = cv_data.get("worst_fold", {})
+
+    if not fold_scores:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No fold score data available",
+            xref="paper", yref="paper", x=0.5, y=0.5,
+            showarrow=False, font={"size": 14, "color": "#9E9E9E"},
+        )
+        fig.update_layout(template="plotly_white")
+        return fig
+
+    # Extract overall_score from each fold
+    fold_labels = []
+    fold_values = []
+    for i, fs in enumerate(fold_scores):
+        if isinstance(fs, dict):
+            score = fs.get("overall_score")
+            if score is not None:
+                fold_labels.append(f"Fold {i + 1}")
+                fold_values.append(float(score))
+
+    if not fold_values:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No fold overall_score data available",
+            xref="paper", yref="paper", x=0.5, y=0.5,
+            showarrow=False, font={"size": 14, "color": "#9E9E9E"},
+        )
+        fig.update_layout(template="plotly_white")
+        return fig
+
+    # Determine worst fold
+    worst_score = None
+    if isinstance(cv_worst, dict):
+        worst_score = cv_worst.get("overall_score")
+
+    mean_val = cv_mean.get("overall_score") if isinstance(cv_mean, dict) else None
+    std_val = cv_std.get("overall_score") if isinstance(cv_std, dict) else None
+
+    # Color bars: worst fold in red, others based on mean comparison
+    colors = []
+    for v in fold_values:
+        if worst_score is not None and abs(v - worst_score) < 1e-6:
+            colors.append("#EF5350")
+        elif mean_val is not None and v >= mean_val:
+            colors.append("#4CAF50")
+        else:
+            colors.append("#FF9800")
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=fold_labels, y=fold_values,
+        marker_color=colors,
+        text=[f"{v:.4f}" for v in fold_values],
+        textposition="auto",
+        hovertemplate="Fold: %{x}<br>Score: %{y:.4f}<extra></extra>",
+    ))
+
+    # Mean line
+    if mean_val is not None:
+        mean_label = f"Mean: {mean_val:.4f}"
+        if std_val is not None:
+            mean_label += f" ± {std_val:.4f}"
+        fig.add_hline(
+            y=mean_val,
+            line_dash="dash", line_color="#2196F3", line_width=2,
+            annotation_text=mean_label,
+            annotation_position="top right",
+        )
+
+    fig.update_layout(
+        title=f"Cross-Validation Fold Scores — {exp_id}",
+        xaxis_title="Fold",
+        yaxis_title="Overall Score",
+        yaxis={"range": [0, 1]},
+        height=350,
+        margin={"l": 50, "r": 20, "t": 50, "b": 40},
+        template="plotly_white",
+        font={"size": 12},
+        showlegend=False,
+    )
+
+    return fig
+
+
+def build_cv_fold_deltas(
+    cv_data: dict,
+    exp_id: str,
+) -> go.Figure:
+    """Build fold deltas chart showing deviation from mean.
+
+    Args:
+        cv_data: Parsed cv_results.json dict.
+        exp_id: Experiment ID (for title).
+
+    Returns:
+        Plotly Figure with fold deltas bar chart.
+    """
+    fold_deltas = cv_data.get("fold_deltas", [])
+
+    if not fold_deltas:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No fold delta data available",
+            xref="paper", yref="paper", x=0.5, y=0.5,
+            showarrow=False, font={"size": 14, "color": "#9E9E9E"},
+        )
+        fig.update_layout(template="plotly_white")
+        return fig
+
+    fold_labels = [f"Fold {i + 1}" for i in range(len(fold_deltas))]
+    colors = ["#4CAF50" if d >= 0 else "#EF5350" for d in fold_deltas]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=fold_labels, y=fold_deltas,
+        marker_color=colors,
+        text=[f"{d:+.4f}" for d in fold_deltas],
+        textposition="auto",
+        hovertemplate="Fold: %{x}<br>Delta: %{y:+.4f}<extra></extra>",
+    ))
+
+    fig.add_hline(
+        y=0, line_dash="solid", line_color="#424242", line_width=1,
+    )
+
+    fig.update_layout(
+        title=f"Fold Deltas (deviation from mean) — {exp_id}",
+        xaxis_title="Fold",
+        yaxis_title="Score Delta",
+        height=300,
+        margin={"l": 50, "r": 20, "t": 50, "b": 40},
+        template="plotly_white",
+        font={"size": 12},
+        showlegend=False,
+    )
+
+    return fig
+
+
+def get_cv_available_experiments(
+    experiments: list[Experiment],
+    cv_data: dict[str, dict],
+    era: str = "All",
+) -> list[str]:
+    """Get list of experiment IDs that have cv_results.json."""
+    filtered = experiments
+    if era != "All":
+        filtered = [e for e in experiments if e.era == era]
+
+    return [e.id for e in filtered if e.id in cv_data]
+
+
+# ---------------------------------------------------------------------------
+# Phase Comparison Panel
+# ---------------------------------------------------------------------------
+
+_PHASE_COMPARISON_METRICS = [
+    ("overall_score", "Overall Score"),
+    ("retrieval_score", "Retrieval Score"),
+    ("plausibility_score", "Plausibility Score"),
+    ("recall_mean", "Recall Mean"),
+    ("retention_auc", "Retention AUC"),
+]
+
+
+def build_phase_comparison(
+    experiments: list[Experiment],
+    phase_a: int,
+    phase_b: int,
+) -> dict[str, Any]:
+    """Build phase comparison statistics.
+
+    Args:
+        experiments: All loaded experiments.
+        phase_a: First phase number.
+        phase_b: Second phase number.
+
+    Returns:
+        Dict with comparison data for rendering.
+    """
+    result: dict[str, Any] = {
+        "phase_a": phase_a,
+        "phase_b": phase_b,
+        "phase_a_name": PHASE_NAMES.get(phase_a, f"Phase {phase_a}"),
+        "phase_b_name": PHASE_NAMES.get(phase_b, f"Phase {phase_b}"),
+        "insufficient_data": False,
+        "metrics": [],
+    }
+
+    # Gather experiments for each phase, excluding validation_failed
+    exps_a = [e for e in experiments if e.phase == phase_a and e.status != "validation_failed"]
+    exps_b = [e for e in experiments if e.phase == phase_b and e.status != "validation_failed"]
+
+    for phase_key, exps in [("a", exps_a), ("b", exps_b)]:
+        scored = [e for e in exps if e.overall_score is not None]
+        result[f"count_{phase_key}"] = len(exps)
+        result[f"scored_count_{phase_key}"] = len(scored)
+
+    # Check insufficient data
+    if result["scored_count_a"] == 0 and result["scored_count_b"] == 0:
+        result["insufficient_data"] = True
+        return result
+
+    for metric_key, metric_label in _PHASE_COMPARISON_METRICS:
+        # Calculate stats for each phase
+        stats_a = _calc_phase_metric_stats(exps_a, metric_key)
+        stats_b = _calc_phase_metric_stats(exps_b, metric_key)
+
+        # Calculate improvement percentage
+        improvement = None
+        if stats_a["mean"] is not None and stats_b["mean"] is not None and stats_a["mean"] != 0:
+            improvement = ((stats_b["mean"] - stats_a["mean"]) / abs(stats_a["mean"])) * 100
+
+        result["metrics"].append({
+            "key": metric_key,
+            "label": metric_label,
+            "phase_a": stats_a,
+            "phase_b": stats_b,
+            "improvement_pct": improvement,
+        })
+
+    return result
+
+
+def _calc_phase_metric_stats(
+    exps: list[Experiment],
+    metric_key: str,
+) -> dict[str, Any]:
+    """Calculate mean, best, count for a metric in a set of experiments."""
+    values = []
+    for e in exps:
+        val = getattr(e, metric_key, None)
+        if val is not None:
+            values.append(float(val))
+
+    if not values:
+        return {"mean": None, "best": None, "count": 0}
+
+    return {
+        "mean": sum(values) / len(values),
+        "best": max(values),
+        "count": len(values),
+    }
+
+
+def get_available_phases(
+    experiments: list[Experiment],
+) -> list[dict[str, Any]]:
+    """Get list of phases that have experiments, for the comparison selector."""
+    phases: dict[int, int] = {}
+    for e in experiments:
+        if e.phase is not None:
+            phases[e.phase] = phases.get(e.phase, 0) + 1
+
+    return [
+        {"label": f"Phase {p}: {PHASE_NAMES.get(p, 'Unknown')} ({count} exps)",
+         "value": p}
+        for p, count in sorted(phases.items())
+    ]

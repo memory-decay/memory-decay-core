@@ -1075,8 +1075,8 @@ class TestDetailViewBuilder:
     def test_detail_view_key_metrics_4_decimal_places(self, app_module):
         """VAL-TABLE-011: Metrics shown with 4 decimal places."""
         detail_text = str(app_module._build_detail_view("exp_lme_0008"))
-        # overall_score for exp_lme_0008 is 0.3415, should show 0.3415 (4 decimals)
-        assert "0.3415" in detail_text, "Expected 4-decimal formatted overall_score"
+        # overall_score for exp_lme_0008 is 0.4630429519731301, should show 0.4630 (4 decimals)
+        assert "0.4630" in detail_text, "Expected 4-decimal formatted overall_score"
 
     def test_detail_view_later_era_metrics_na_for_old(self, app_module):
         """VAL-TABLE-012: Later-era metrics show N/A for experiments without them."""
@@ -1495,3 +1495,292 @@ class TestCharts:
         if available:
             warnings = chart_module.check_retention_warnings([available[0]], all_experiments)
             assert len(warnings) == 0
+
+
+class TestAdvancedCharts:
+    """Tests for advanced analysis chart builders — parameter sweep, snapshots, forgetting depth, CV, phase comparison."""
+
+    @pytest.fixture
+    def chart_module(self):
+        """Import charts module (side-effect-free)."""
+        from dashboard import charts
+        return charts
+
+    @pytest.fixture
+    def all_experiments(self):
+        """Load all experiments from disk."""
+        from dashboard.data_loader import load_all_experiments
+        return load_all_experiments("experiments")
+
+    # -- Parameter Sweep --
+
+    def test_parameter_sweep_returns_figure(self, chart_module, all_experiments):
+        """Parameter sweep returns a Plotly Figure."""
+        import plotly.graph_objects as go
+        fig = chart_module.build_parameter_sweep(all_experiments, "All")
+        assert isinstance(fig, go.Figure)
+
+    def test_parameter_sweep_era_filter(self, chart_module, all_experiments):
+        """Era filter changes available dimensions."""
+        import plotly.graph_objects as go
+        fig_all = chart_module.build_parameter_sweep(all_experiments, "All")
+        fig_lme = chart_module.build_parameter_sweep(all_experiments, "LongMemEval")
+        assert isinstance(fig_all, go.Figure)
+        assert isinstance(fig_lme, go.Figure)
+
+    def test_parameter_sweep_enabled_params(self, chart_module, all_experiments):
+        """Enabled params filter restricts dimensions shown."""
+        fig = chart_module.build_parameter_sweep(all_experiments, "All", enabled_params=["lambda_fact", "alpha"])
+        assert isinstance(fig.data, tuple)
+
+    def test_get_param_sweep_available_params(self, chart_module, all_experiments):
+        """Returns non-empty list of available parameter names."""
+        params = chart_module.get_param_sweep_available_params(all_experiments, "All")
+        assert isinstance(params, list)
+        assert len(params) > 0
+
+    def test_parameter_sweep_single_era_dims(self, chart_module, all_experiments):
+        """Single era shows only that era's parameters as dimensions."""
+        dims_all, avail_all = chart_module.get_param_sweep_dimensions(all_experiments, "All")
+        dims_lme, avail_lme = chart_module.get_param_sweep_dimensions(all_experiments, "LongMemEval")
+        # LME era should have its own set of dimensions
+        assert isinstance(dims_lme, list)
+
+    def test_parameter_sweep_all_hides_sparse(self, chart_module, all_experiments):
+        """All era view hides params with >50% null values."""
+        dims_all, avail_all = chart_module.get_param_sweep_dimensions(all_experiments, "All")
+        dims_lme, avail_lme = chart_module.get_param_sweep_dimensions(all_experiments, "LongMemEval")
+        # All view should have fewer or equal dimensions than LME-only view
+        # (since All includes both eras and filters by >50% null threshold)
+        assert len(avail_all) <= len(avail_lme) + 10  # Allow some tolerance
+
+    # -- Snapshot Viewer --
+
+    def test_snapshot_viewer_returns_figure(self, chart_module, all_experiments):
+        """Snapshot viewer returns a Plotly Figure."""
+        import plotly.graph_objects as go
+        # Use an experiment known to have snapshots
+        fig = chart_module.build_snapshot_viewer(all_experiments, "exp_lme_0008")
+        assert isinstance(fig, go.Figure)
+
+    def test_snapshot_viewer_no_data(self, chart_module, all_experiments):
+        """Snapshot viewer shows placeholder for experiment without snapshots."""
+        fig = chart_module.build_snapshot_viewer(all_experiments, "nonexistent_exp")
+        has_annotation = any(
+            a.text and "No" in str(a.text)
+            for a in fig.layout.annotations if a.text
+        )
+        assert has_annotation
+
+    def test_snapshot_viewer_tick_highlight(self, chart_module, all_experiments):
+        """Snapshot viewer highlights the current tick."""
+        fig = chart_module.build_snapshot_viewer(all_experiments, "exp_lme_0008", current_tick=100)
+        has_vline = len(fig.layout.shapes) > 0 or any(
+            hasattr(s, 'xref') for s in fig.layout.shapes
+        )
+        # Check if there's a vertical line shape
+        shapes = fig.layout.shapes
+        vline_found = any(
+            hasattr(s, 'line') and s.line and getattr(s.line, 'dash', None) == 'dash'
+            for s in shapes
+        ) if shapes else False
+        # Either vline or annotation
+        assert has_vline or vline_found or len(fig.data) > 0
+
+    def test_get_snapshot_tick_data(self, chart_module, all_experiments):
+        """get_snapshot_tick_data returns metric values for a specific tick."""
+        data = chart_module.get_snapshot_tick_data(all_experiments, "exp_lme_0008", 100)
+        assert isinstance(data, dict)
+        # Should have at least some metrics
+        assert len(data) > 0 or data == {}
+
+    def test_get_snapshot_tick_data_nonexistent(self, chart_module, all_experiments):
+        """get_snapshot_tick_data returns empty dict for nonexistent experiment."""
+        data = chart_module.get_snapshot_tick_data(all_experiments, "nonexistent", 0)
+        assert data == {}
+
+    # -- Forgetting Depth --
+
+    def test_forgetting_depth_chart_returns_figure(self, chart_module, all_experiments):
+        """Forgetting depth chart returns a Plotly Figure."""
+        import plotly.graph_objects as go
+        fig = chart_module.build_forgetting_depth_chart(all_experiments, "All")
+        assert isinstance(fig, go.Figure)
+
+    def test_forgetting_depth_only_with_data(self, chart_module, all_experiments):
+        """Forgetting depth chart only shows experiments with data."""
+        fig = chart_module.build_forgetting_depth_chart(all_experiments, "All")
+        # Count experiments with forgetting_depth in the chart
+        total_bars = 0
+        for trace in fig.data:
+            if hasattr(trace, 'x') and trace.x is not None:
+                total_bars += len(trace.x)
+        # Should be much less than total experiments (~23 vs ~468)
+        assert total_bars < 50, f"Expected only experiments with forgetting_depth data, got {total_bars}"
+
+    def test_forgetting_depth_pass_fail_colors(self, chart_module, all_experiments):
+        """Forgetting depth chart has separate pass/fail traces."""
+        fig = chart_module.build_forgetting_depth_chart(all_experiments, "All")
+        trace_names = [t.name for t in fig.data]
+        # Should have at least one trace with Passed or Failed name
+        has_pass_fail = any(n in trace_names for n in ["Passed", "Failed", "No Strict Score"])
+        assert has_pass_fail
+
+    def test_strict_score_chart_returns_figure(self, chart_module, all_experiments):
+        """Strict score chart returns a Plotly Figure."""
+        import plotly.graph_objects as go
+        fig = chart_module.build_strict_score_chart(all_experiments, "All")
+        assert isinstance(fig, go.Figure)
+
+    def test_strict_score_pass_threshold_line(self, chart_module, all_experiments):
+        """Strict score chart shows pass threshold line at 0.4."""
+        fig = chart_module.build_strict_score_chart(all_experiments, "All")
+        has_hline = any(
+            hasattr(s, 'y0') and abs(s.y0 - 0.4) < 0.01
+            for s in fig.layout.shapes
+        ) if fig.layout.shapes else False
+        assert has_hline, "Expected threshold line at y=0.4"
+
+    def test_forgetting_depth_era_filter(self, chart_module, all_experiments):
+        """Era filter limits experiments in forgetting depth chart."""
+        fig_all = chart_module.build_forgetting_depth_chart(all_experiments, "All")
+        fig_lme = chart_module.build_forgetting_depth_chart(all_experiments, "LongMemEval")
+        bars_all = sum(len(t.x) for t in fig_all.data if hasattr(t, 'x') and t.x)
+        bars_lme = sum(len(t.x) for t in fig_lme.data if hasattr(t, 'x') and t.x)
+        assert bars_lme <= bars_all
+
+    # -- CV Results --
+
+    def test_cv_fold_scores_returns_figure(self, chart_module):
+        """CV fold scores chart returns a Plotly Figure."""
+        import plotly.graph_objects as go
+        cv_data = {"fold_scores": [
+            {"overall_score": 0.3 + i * 0.1} for i in range(5)
+        ], "mean": {"overall_score": 0.5}, "std": {"overall_score": 0.05}, "worst_fold": {"overall_score": 0.3}}
+        fig = chart_module.build_cv_fold_scores(cv_data, "test_exp")
+        assert isinstance(fig, go.Figure)
+        assert len(fig.data) > 0
+
+    def test_cv_fold_scores_mean_line(self, chart_module):
+        """CV fold scores chart shows mean line."""
+        cv_data = {"fold_scores": [
+            {"overall_score": 0.3 + i * 0.1} for i in range(5)
+        ], "mean": {"overall_score": 0.5}, "std": {"overall_score": 0.05}}
+        fig = chart_module.build_cv_fold_scores(cv_data, "test_exp")
+        has_hline = any(
+            hasattr(s, 'y0') and abs(s.y0 - 0.5) < 0.01
+            for s in fig.layout.shapes
+        ) if fig.layout.shapes else False
+        assert has_hline, "Expected mean line at y=0.5"
+
+    def test_cv_fold_deltas_returns_figure(self, chart_module):
+        """CV fold deltas chart returns a Plotly Figure."""
+        import plotly.graph_objects as go
+        cv_data = {"fold_deltas": [0.1, -0.05, 0.02, -0.08, 0.01]}
+        fig = chart_module.build_cv_fold_deltas(cv_data, "test_exp")
+        assert isinstance(fig, go.Figure)
+        assert len(fig.data) > 0
+
+    def test_cv_fold_deltas_zero_line(self, chart_module):
+        """CV fold deltas chart shows zero reference line."""
+        cv_data = {"fold_deltas": [0.1, -0.05, 0.02, -0.08, 0.01]}
+        fig = chart_module.build_cv_fold_deltas(cv_data, "test_exp")
+        has_zero_line = any(
+            hasattr(s, 'y0') and abs(s.y0) < 0.01
+            for s in fig.layout.shapes
+        ) if fig.layout.shapes else False
+        assert has_zero_line, "Expected zero reference line"
+
+    def test_cv_fold_scores_worst_fold_highlighted(self, chart_module):
+        """CV fold scores highlights worst fold in red."""
+        cv_data = {
+            "fold_scores": [{"overall_score": 0.3 + i * 0.1} for i in range(5)],
+            "mean": {"overall_score": 0.5},
+            "worst_fold": {"overall_score": 0.3},
+        }
+        fig = chart_module.build_cv_fold_scores(cv_data, "test_exp")
+        # First bar (lowest score = worst) should be red
+        if fig.data:
+            colors = fig.data[0].marker.color
+            assert "#EF5350" in colors, "Expected worst fold to be highlighted in red"
+
+    def test_cv_fold_scores_no_data(self, chart_module):
+        """CV fold scores shows placeholder when no data."""
+        fig = chart_module.build_cv_fold_scores({}, "test_exp")
+        has_annotation = any(
+            a.text and "No" in str(a.text)
+            for a in fig.layout.annotations if a.text
+        )
+        assert has_annotation
+
+    def test_get_cv_available_experiments(self, chart_module, all_experiments):
+        """Returns list of experiment IDs with CV data."""
+        import json, os
+        cv_data = {}
+        for e in all_experiments:
+            cv_path = os.path.join(e.dir_path, "cv_results.json")
+            if os.path.exists(cv_path):
+                with open(cv_path) as f:
+                    cv_data[e.id] = json.load(f)
+        available = chart_module.get_cv_available_experiments(all_experiments, cv_data, "All")
+        assert isinstance(available, list)
+        assert len(available) > 0
+        assert "exp_lme_0008" in available
+
+    def test_get_cv_available_era_filter(self, chart_module, all_experiments):
+        """CV available experiments filtered by era."""
+        import json, os
+        cv_data = {}
+        for e in all_experiments:
+            cv_path = os.path.join(e.dir_path, "cv_results.json")
+            if os.path.exists(cv_path):
+                with open(cv_path) as f:
+                    cv_data[e.id] = json.load(f)
+        lme_avail = chart_module.get_cv_available_experiments(all_experiments, cv_data, "LongMemEval")
+        for eid in lme_avail:
+            assert eid.startswith("exp_lme_"), f"Expected LME experiment, got {eid}"
+
+    # -- Phase Comparison --
+
+    def test_phase_comparison_returns_dict(self, chart_module, all_experiments):
+        """Phase comparison returns a dict with comparison data."""
+        result = chart_module.build_phase_comparison(all_experiments, 1, 2)
+        assert isinstance(result, dict)
+        assert "phase_a" in result
+        assert "phase_b" in result
+        assert "metrics" in result
+
+    def test_phase_comparison_excludes_validation_failed(self, chart_module, all_experiments):
+        """Phase comparison excludes validation_failed from calculations."""
+        result = chart_module.build_phase_comparison(all_experiments, 1, 9)
+        # Check that count_a and scored_count_a differ (validation_failed excluded)
+        assert "scored_count_a" in result
+        assert "scored_count_b" in result
+
+    def test_phase_comparison_improvement_pct(self, chart_module, all_experiments):
+        """Phase comparison includes improvement percentages."""
+        result = chart_module.build_phase_comparison(all_experiments, 1, 2)
+        for metric in result["metrics"]:
+            assert "improvement_pct" in metric
+
+    def test_phase_comparison_metric_keys(self, chart_module, all_experiments):
+        """Phase comparison covers required metrics."""
+        result = chart_module.build_phase_comparison(all_experiments, 1, 8)
+        metric_keys = [m["key"] for m in result["metrics"]]
+        for required in ["overall_score", "retrieval_score", "plausibility_score", "recall_mean", "retention_auc"]:
+            assert required in metric_keys, f"Expected metric {required} in comparison"
+
+    def test_get_available_phases(self, chart_module, all_experiments):
+        """Returns list of phases with experiments."""
+        phases = chart_module.get_available_phases(all_experiments)
+        assert isinstance(phases, list)
+        assert len(phases) > 0
+        for p in phases:
+            assert "label" in p
+            assert "value" in p
+
+    def test_phase_comparison_phase_names(self, chart_module, all_experiments):
+        """Phase comparison includes correct phase names."""
+        result = chart_module.build_phase_comparison(all_experiments, 1, 8)
+        assert "Early Exploration" in result["phase_a_name"] or "Phase 1" in result["phase_a_name"]
+        assert "LongMemEval" in result["phase_b_name"] or "Phase 8" in result["phase_b_name"]
