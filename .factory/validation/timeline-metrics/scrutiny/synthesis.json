@@ -1,0 +1,42 @@
+{
+  "milestone": "timeline-metrics",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": false,
+      "command": "cd /home/roach/.openclaw/workspace/memory-decay && dashboard/.venv/bin/python -m pytest tests/test_dashboard.py -v --tb=short",
+      "exitCode": 1,
+      "failure": "1 test failed: tests/test_dashboard.py::TestDetailViewBuilder::test_detail_view_key_metrics_4_decimal_places - AssertionError: Expected 4-decimal formatted overall_score. Test expects '0.3415' but actual exp_lme_0008 overall_score is 0.4630429519731301 (formatted as '0.4630'). This is a pre-existing test bug from experiment-detail-view feature (dashboard-shell milestone) — test has wrong hardcoded expected value."
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "cd /home/roach/.openclaw/workspace/memory-decay && dashboard/.venv/bin/python -m py_compile dashboard/app.py && dashboard/.venv/bin/python -m py_compile dashboard/data_loader.py",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "cd /home/roach/.openclaw/workspace/memory-decay && dashboard/.venv/bin/python -m py_compile dashboard/*.py",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "failedFeatures": [],
+    "skippedDueToValidatorFailure": ["phase-timeline-and-metric-progression"]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "experiment-detail-view",
+      "severity": "blocking",
+      "description": "test_detail_view_key_metrics_4_decimal_places fails: test expects '0.3415' but exp_lme_0008 overall_score is 0.4630429519731301. Fix: change expected value in test from '0.3415' to '0.4630' (or better yet, compute it dynamically from results.json).",
+      "suggestedFix": "In tests/test_dashboard.py line 1079, change assert '0.3415' to assert '0.4630'. Or better: load the actual value from results.json and format it dynamically."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [],
+  "previousRound": null
+}
