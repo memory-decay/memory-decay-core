@@ -1,0 +1,83 @@
+{
+  "groupId": "snapshot-viewer",
+  "testedAt": "2026-03-21T12:00:00Z",
+  "isolation": {
+    "appUrl": "http://localhost:8050",
+    "browserSession": "daac48305b45__u2",
+    "testingTool": "agent-browser",
+    "constraint": "Stayed on Snapshot Viewer tab only; did not modify era filter"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-PARAMS-002",
+      "title": "Simulation Snapshot Viewer",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Navigate to Snapshot Viewer tab",
+          "expected": "Snapshot Viewer with experiment selector and chart area",
+          "observed": "Snapshot Viewer tab displayed with experiment dropdown, tick controls (⏮ ◀ ▶ ⏭ ⏯ Animate), and empty Plotly chart"
+        },
+        {
+          "action": "Select exp_lme_0008 from experiment dropdown",
+          "expected": "Chart renders with multiple metric traces",
+          "observed": "Chart renders with 5 metric traces: Overall Score (blue), Recall Mean (green), Precision Mean (orange), Plausibility Score (purple), MRR Mean (red). All at 11 ticks (0,20,...,200)."
+        },
+        {
+          "action": "Verify X-axis ticks",
+          "expected": "0, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200",
+          "observed": "X-axis tickvals confirmed at range(0, 201, 20)"
+        },
+        {
+          "action": "Click ▶ (next tick) button",
+          "expected": "Tick indicator moves to next position",
+          "observed": "Red dashed vertical line moves to next tick position with 'Tick N' annotation"
+        },
+        {
+          "action": "Verify stepping controls (⏮ ◀ ▶ ⏭)",
+          "expected": "All four navigation buttons functional",
+          "observed": "All stepping buttons work correctly, moving tick indicator to first/prev/next/last position"
+        },
+        {
+          "action": "Verify animation control (⏯ Animate)",
+          "expected": "Animation toggles automatic tick progression",
+          "observed": "Animation button starts/stops automatic tick progression at 1.5s intervals"
+        },
+        {
+          "action": "Hover on chart and check tooltip",
+          "expected": "Tooltip shows experiment ID, metric name, value at 4 decimal places, tick",
+          "observed": "Tooltip shows: 'exp_lme_0008', metric name, value at 4 decimal places (e.g., 'Overall Score: 0.5398'), and tick number"
+        },
+        {
+          "action": "Spot-check data against results.json",
+          "expected": "Values match snapshots array in results.json",
+          "observed": "8 data points across 3 metrics verified — all match results.json exactly"
+        },
+        {
+          "action": "Verify distinct from detail view mini-charts",
+          "expected": "More metrics (5 vs 3) and stepping controls",
+          "observed": "5 metrics vs 3 in mini-charts, plus stepping controls and animation mode"
+        }
+      ],
+      "evidence": [
+        "Snapshot viewer has experiment selector dropdown, tick controls, and Plotly chart",
+        "Chart shows 5 metric traces with unique colors and legend",
+        "Tick controls (⏮ ◀ ▶ ⏭ ⏯) all functional",
+        "Red dashed vertical line indicates current tick",
+        "Tooltip format: exp_lme_0008 / Metric: 0.XXXX / Tick: N",
+        "Data spot-checked against results.json: all 8 values match"
+      ],
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Dropdown has 434+ entries requiring search to navigate to specific experiment",
+      "resolved": true,
+      "resolution": "Used dropdown search functionality to find exp_lme_0008"
+    }
+  ],
+  "blockers": [],
+  "summary": "VAL-PARAMS-002: PASS — Snapshot Viewer is a standalone tab with experiment selector, 5 metric traces (overall, recall, precision, plausibility, mrr), 11 ticks (0-200), stepping controls (⏮◀▶⏭), animation mode (⏯), 4-decimal-place tooltips, and data matching results.json. Distinct from detail view mini-charts (5 metrics vs 3, plus stepping/animation controls)."
+}
