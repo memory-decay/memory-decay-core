@@ -19,8 +19,12 @@ Environment variables, external dependencies, and setup notes.
 - **Read-only**: Dashboard reads but never modifies experiment data
 - **Schema evolution**: 3 versions of results.json (old: 25 keys, new: 33 keys, latest: 38+ keys)
 
+## Venv Notes
+- The venv at `dashboard/.venv/` was created manually with `--system-site-packages` due to `python3-venv` package not being available on this system. `ensurepip` also unavailable.
+- If the venv breaks, recreate with: `python3 -m venv --system-site-packages dashboard/.venv` then install deps via the `install` command in services.yaml.
+
 ## Known Edge Cases
-- `exp_0360`: Empty directory (0 files)
+- `exp_0360`: Empty directory (0 files) — also falls outside defined phase ranges (phase 5 ends at 359), so get_phase returns None
 - `exp_lme_0001`: Has params.json + hypothesis.txt but no results.json
 - `exp_lme_0071`: Has only params.json
 - `experiments/best`: Symlink to exp_lme_0008
