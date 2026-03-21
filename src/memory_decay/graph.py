@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from typing import Optional, Callable
 
 import networkx as nx
@@ -25,6 +26,13 @@ class MemoryGraph:
         self._gemini_client = None
         self._embedding_dim = 768  # default for ko-sroberta
         self._embedding_cache: dict[tuple[str, str], np.ndarray] = {}
+        self._query_similarity_total_time: float = 0.0
+        self._query_similarity_call_count: int = 0
+        # Precomputed embedding matrix for vectorized similarity search
+        self._emb_matrix: np.ndarray | None = None
+        self._emb_nids: list[str] = []
+        self._emb_created_ticks: np.ndarray | None = None
+        self._emb_node_count: int = 0  # tracks when matrix needs rebuild
 
     def _get_embedder(self) -> Callable:
         """Get the embedding function based on backend."""
@@ -115,6 +123,8 @@ class MemoryGraph:
             type=mtype,
             content=content,
             embedding=embedding,
+            storage_score=1.0,
+            retrieval_score=1.0,
             activation_score=1.0,
             stability_score=0.0,
             impact=impact,
@@ -132,6 +142,8 @@ class MemoryGraph:
                         type="unknown",
                         content="",
                         embedding=np.zeros(self._embedding_dim, dtype=np.float32),
+                        storage_score=0.0,
+                        retrieval_score=0.0,
                         activation_score=0.0,
                         stability_score=0.0,
                         impact=0.0,
@@ -147,6 +159,40 @@ class MemoryGraph:
                     self._graph.add_edge(
                         target_id, memory_id, weight=weight, created_tick=created_tick
                     )
+
+    def _ensure_embedding_matrix(self) -> None:
+        """Build or rebuild the precomputed embedding matrix if needed."""
+        current_count = self._graph.number_of_nodes()
+        if self._emb_matrix is not None and self._emb_node_count == current_count:
+            return
+
+        nids = []
+        embeddings = []
+        created_ticks = []
+        for nid, attrs in self._graph.nodes(data=True):
+            if attrs.get("type") == "unknown":
+                continue
+            emb = attrs.get("embedding")
+            if emb is None:
+                continue
+            nids.append(nid)
+            embeddings.append(emb)
+            created_ticks.append(attrs.get("created_tick", 0))
+
+        if embeddings:
+            matrix = np.array(embeddings, dtype=np.float64)
+            # Pre-normalize rows for cosine similarity via dot product
+            norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+            norms[norms == 0] = 1.0  # avoid division by zero
+            self._emb_matrix = matrix / norms
+            self._emb_nids = nids
+            self._emb_created_ticks = np.array(created_ticks, dtype=np.int64)
+        else:
+            self._emb_matrix = None
+            self._emb_nids = []
+            self._emb_created_ticks = None
+
+        self._emb_node_count = current_count
 
     def query_by_similarity(
         self, query_text: str, top_k: int = 5, current_tick: int | None = None,
@@ -166,25 +212,53 @@ class MemoryGraph:
 
             score *= (1 + assoc_boost * mean_neighbor_activation)
         """
-        query_vec = self._embed_text(query_text)
+        t0 = time.perf_counter()
+        self._ensure_embedding_matrix()
 
-        # First pass: compute base scores
-        candidates = []
-        for nid, attrs in self._graph.nodes(data=True):
-            if attrs.get("type") == "unknown":
-                continue
-            if current_tick is not None and attrs.get("created_tick", 0) > current_tick:
-                continue
-            emb = attrs["embedding"]
-            norm_q = np.linalg.norm(query_vec)
-            norm_e = np.linalg.norm(emb)
-            if norm_q == 0 or norm_e == 0:
-                continue
-            sim = float(np.dot(query_vec, emb) / (norm_q * norm_e))
-            if activation_weight > 0:
-                act = max(float(attrs.get("activation_score", 0.0)), 0.0)
-                sim = sim * (act ** activation_weight)
-            candidates.append((nid, sim))
+        if self._emb_matrix is None or len(self._emb_nids) == 0:
+            self._query_similarity_total_time += time.perf_counter() - t0
+            self._query_similarity_call_count += 1
+            return []
+
+        query_vec = self._embed_text(query_text)
+        norm_q = np.linalg.norm(query_vec)
+        if norm_q == 0:
+            self._query_similarity_total_time += time.perf_counter() - t0
+            self._query_similarity_call_count += 1
+            return []
+        query_normalized = query_vec / norm_q
+
+        # Vectorized cosine similarity: dot product with pre-normalized matrix
+        similarities = self._emb_matrix @ query_normalized
+
+        # Apply current_tick filter
+        if current_tick is not None:
+            mask = self._emb_created_ticks <= current_tick
+            similarities = np.where(mask, similarities, -np.inf)
+
+        # Apply activation weighting
+        if activation_weight > 0:
+            activations = np.array([
+                max(float(self._graph.nodes[nid].get(
+                    "retrieval_score",
+                    self._graph.nodes[nid].get("activation_score", 0.0),
+                )), 0.0)
+                for nid in self._emb_nids
+            ], dtype=np.float64)
+            similarities = similarities * (activations ** activation_weight)
+
+        # Get top_k indices
+        if len(self._emb_nids) <= top_k:
+            top_indices = np.argsort(similarities)[::-1]
+        else:
+            top_indices = np.argpartition(similarities, -top_k)[-top_k:]
+            top_indices = top_indices[np.argsort(similarities[top_indices])[::-1]]
+
+        candidates = [
+            (self._emb_nids[i], float(similarities[i]))
+            for i in top_indices
+            if similarities[i] > -np.inf
+        ]
 
         # Second pass: associative boost
         if assoc_boost > 0:
@@ -197,7 +271,15 @@ class MemoryGraph:
                     for neighbor_id, edge_weight in neighbors:
                         n_node = self._graph.nodes.get(neighbor_id)
                         if n_node and n_node.get("type") != "unknown":
-                            n_act = max(float(n_node.get("activation_score", 0.0)), 0.0)
+                            n_act = max(
+                                float(
+                                    n_node.get(
+                                        "retrieval_score",
+                                        n_node.get("activation_score", 0.0),
+                                    )
+                                ),
+                                0.0,
+                            )
                             weighted_act_sum += edge_weight * n_act
                             weight_sum += edge_weight
                     if weight_sum > 0:
@@ -207,6 +289,8 @@ class MemoryGraph:
             candidates = boosted
 
         candidates.sort(key=lambda x: x[1], reverse=True)
+        self._query_similarity_total_time += time.perf_counter() - t0
+        self._query_similarity_call_count += 1
         return candidates[:top_k]
 
     def get_associated(self, node_id: str) -> list[tuple[str, float]]:
@@ -240,12 +324,31 @@ class MemoryGraph:
         direct_gain: float,
         assoc_gain: float,
         stability_cap: float,
+        score_mode: str,
     ) -> None:
         attrs = self._graph.nodes[node_id]
-        attrs["activation_score"] = min(
-            max(attrs["activation_score"] + boost_amount, 0.0), 1.0
-        )
-        attrs["last_activated_tick"] = self._effective_reinforce_tick(node_id, current_tick)
+        effective_tick = self._effective_reinforce_tick(node_id, current_tick)
+
+        if score_mode in ("both", "retrieval_only"):
+            retrieval_score = min(
+                max(
+                    float(attrs.get("retrieval_score", attrs.get("activation_score", 0.0)))
+                    + boost_amount,
+                    0.0,
+                ),
+                1.0,
+            )
+            attrs["retrieval_score"] = retrieval_score
+            attrs["activation_score"] = retrieval_score
+            attrs["last_activated_tick"] = effective_tick
+
+        if score_mode in ("both", "storage_only"):
+            storage_score = min(
+                max(float(attrs.get("storage_score", attrs.get("activation_score", 0.0))) + boost_amount, 0.0),
+                1.0,
+            )
+            attrs["storage_score"] = storage_score
+            attrs["last_activated_tick"] = effective_tick
 
         if not reinforce or attrs.get("type") == "unknown":
             return
@@ -256,9 +359,7 @@ class MemoryGraph:
         attrs["stability_score"] = min(
             max(current_stability + gain * saturation, 0.0), stability_cap
         )
-        attrs["last_reinforced_tick"] = self._effective_reinforce_tick(
-            node_id, current_tick
-        )
+        attrs["last_reinforced_tick"] = effective_tick
         if source == "direct":
             attrs["retrieval_count"] = int(attrs.get("retrieval_count", 0)) + 1
 
@@ -274,6 +375,7 @@ class MemoryGraph:
         reinforcement_gain_assoc: float = 0.05,
         stability_cap: float = 1.0,
         cascade_decay: float = 0.5,
+        score_mode: str = "both",
     ) -> None:
         """Boost activation and optionally reinforce memory stability.
 
@@ -292,6 +394,7 @@ class MemoryGraph:
             direct_gain=reinforcement_gain_direct,
             assoc_gain=reinforcement_gain_assoc,
             stability_cap=stability_cap,
+            score_mode=score_mode,
         )
 
         if source != "direct":
@@ -309,18 +412,53 @@ class MemoryGraph:
                 direct_gain=reinforcement_gain_direct,
                 assoc_gain=cascade_gain,
                 stability_cap=stability_cap,
+                score_mode=score_mode,
             )
+
+    def reinforce_memory(
+        self,
+        node_id: str,
+        *,
+        reinforcement_gain: float,
+        stability_cap: float,
+        current_tick: Optional[int] = None,
+        count_as_retrieval: bool = True,
+    ) -> None:
+        """Increase stability without changing activation or cascading."""
+        if not self._graph.has_node(node_id):
+            return
+
+        attrs = self._graph.nodes[node_id]
+        if attrs.get("type") in ("unknown", None):
+            return
+
+        current_stability = float(attrs.get("stability_score", 0.0))
+        saturation = max(1.0 - current_stability / max(stability_cap, 1e-9), 0.0)
+        attrs["stability_score"] = min(
+            max(current_stability + reinforcement_gain * saturation, 0.0),
+            stability_cap,
+        )
+        effective_tick = self._effective_reinforce_tick(node_id, current_tick)
+        attrs["last_reinforced_tick"] = effective_tick
+        attrs["last_activated_tick"] = effective_tick
+        if count_as_retrieval:
+            attrs["retrieval_count"] = int(attrs.get("retrieval_count", 0)) + 1
 
     def get_all_activations(self) -> dict[str, float]:
         return {
-            nid: attrs["activation_score"]
+            nid: attrs.get("retrieval_score", attrs["activation_score"])
             for nid, attrs in self._graph.nodes(data=True)
             if attrs.get("type") != "unknown"
         }
 
     def set_activation(self, node_id: str, score: float) -> None:
         if self._graph.has_node(node_id):
+            self._graph.nodes[node_id]["retrieval_score"] = score
             self._graph.nodes[node_id]["activation_score"] = score
+
+    def set_storage_score(self, node_id: str, score: float) -> None:
+        if self._graph.has_node(node_id):
+            self._graph.nodes[node_id]["storage_score"] = score
 
     def get_node(self, node_id: str) -> dict | None:
         if self._graph.has_node(node_id):

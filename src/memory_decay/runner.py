@@ -156,6 +156,7 @@ def run_experiment(
     assoc_boost = params.get("assoc_boost", 0.0)
     evaluator = Evaluator(graph, engine, activation_weight=activation_weight, assoc_boost=assoc_boost)
 
+    t_sim_start = time.perf_counter()
     snapshots = run_simulation(
         graph, engine, evaluator, test_queries,
         total_ticks=total_ticks,
@@ -164,15 +165,26 @@ def run_experiment(
         rehearsal_targets=rehearsal_targets,
         seed=seed,
     )
+    t_sim_end = time.perf_counter()
 
+    t_summary_start = time.perf_counter()
     final_summary = evaluator.score_summary(test_queries)
+    t_summary_end = time.perf_counter()
     duration = time.time() - start_time
+
+    timing = {
+        "simulation_seconds": round(t_sim_end - t_sim_start, 3),
+        "final_score_summary_seconds": round(t_summary_end - t_summary_start, 3),
+        "query_similarity_total_seconds": round(graph._query_similarity_total_time, 3),
+        "query_similarity_call_count": graph._query_similarity_call_count,
+    }
 
     result = {
         "status": "completed",
         **final_summary,
         "snapshots": snapshots,
         "duration_seconds": round(duration, 2),
+        "timing_breakdown": timing,
     }
 
     with open(results_path, "w", encoding="utf-8") as f:
