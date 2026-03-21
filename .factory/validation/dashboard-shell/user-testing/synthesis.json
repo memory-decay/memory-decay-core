@@ -1,6 +1,6 @@
 {
   "milestone": "dashboard-shell",
-  "round": 3,
+  "round": 4,
   "status": "fail",
   "assertionsSummary": {
     "total": 21,
@@ -28,38 +28,53 @@
   "failedAssertions": [
     {
       "id": "VAL-TABLE-005",
-      "reason": "No visual sort indicator on initial load — data pre-sorted descending but all ag-sort-indicator-icon elements have 'ag-hidden' class. No initialSortModel prop set. Sort cycling is 3-state (asc→desc→none) instead of expected 2-state (asc↔desc) toggle. Sorting data ordering works correctly. Fix needed: add initialSortModel prop and set sortingOrder=['asc','desc'] in grid options."
+      "reason": "Three issues: (1) No visual sort indicator on initial load — no initialSortModel prop on AgGrid, data pre-sorted via Python but grid doesn't know. (2) Sort cycling is 3-state (asc→desc→none) instead of 2-state — needs sortingOrder=['asc','desc']. (3) Text sort indicator (#sort-indicator div) permanently out of sync with actual AG Grid sort state — no callback wiring AG Grid sort events to Dash state store.",
+      "fixRequired": "Add initialSortModel=[{colId:'overall_score',sort:'desc'}] prop to dag.AgGrid. Add sortingOrder=['asc','desc'] to dashGridOptions or defaultColDef. Either wire AG Grid sort events to Dash sort-state store, or remove the misleading text indicator."
     },
     {
       "id": "VAL-TABLE-007",
-      "reason": "AG Grid cellStyle function-based callback ({\"function\": \"...\"} format) not executing in dash-ag-grid 33.3.3. Status cells render as plain text with no styling — no badges, no background colors. Plain object cellStyle (hypothesis column) works correctly, confirming the issue is specific to function-based callbacks. Fix needed: compute status styles in Python and pass as value-based cellStyle per row, or use cellRenderer with inline styles."
+      "reason": "AG Grid cellStyle function-based callback ({\"function\": \"...\"} format) not executing in dash-ag-grid 33.3.3. All status cells render as plain text with transparent background, 0px borderRadius, normal font weight. Sidebar legend renders correctly with colored indicators via inline HTML (not AG Grid cellStyle).",
+      "fixRequired": "Replace function-based cellStyle with Python-precomputed value-based styles per row. Add a 'status_style' column to rowData with precomputed CSS (backgroundColor, color, borderRadius, etc.), then reference it via cellStyle: {\"styleConditions\": [{\"condition\": \"true\", \"style\": {\"backgroundColor\": \"params.data.status_style\"}}]} or use cellRenderer with HTML spans."
     },
     {
       "id": "VAL-TABLE-008",
-      "reason": "Same root cause as VAL-TABLE-007: cellStyle function not applying colors to table cells. Sidebar filter has colored indicator squares (matching the colors defined in the non-working cellStyle function) but table cells are plain unstyled text. Fix needed: same as VAL-TABLE-007."
+      "reason": "Same root cause as VAL-TABLE-007: cellStyle function not applying colors to table cells. Cannot verify color consistency because table cells have no colors at all. Sidebar legend renders correctly with 11 distinct status indicator colors preserved after sort/filter.",
+      "fixRequired": "Same as VAL-TABLE-007 — fix status cell styling first, then verify color consistency with sidebar legend."
     },
     {
       "id": "VAL-TABLE-010",
-      "reason": "Browser back button changes URL but does not close detail overlay. history.back() reverts URL from /?experiment=exp_lme_0098 to / but overlay remains visible. Same-page overlay (dcc.Store toggle) is not connected to browser history. In-app back button works correctly. Fix needed: use clientside callback with history.pushState when opening detail view."
+      "reason": "Browser back button changes URL but does NOT close detail overlay. The overlay is a dcc.Store toggle not connected to browser history. In-app back button works correctly. After browser back into broken state, clicking experiment rows may stop working until direct URL navigation resets state.",
+      "fixRequired": "Add a clientside callback that uses history.pushState() when detail view opens, and listens for popstate event to close overlay on browser back. Alternatively, use dcc.Location href navigation for detail views instead of same-page overlay."
     },
     {
       "id": "VAL-TABLE-019",
-      "reason": "Best experiment (exp_lme_0008) row not visually distinguished. rowClassRules function callback not executing in dash-ag-grid 33.3.3 — row has only standard AG Grid classes, no 'best-experiment' class applied. Sidebar shows gold 'Best: exp_lme_0008' text. Fix needed: precompute row classes in Python and pass via getRowClass or apply via cellStyle on all columns."
+      "reason": "Best experiment (exp_lme_0008) row not visually distinguished. rowClassRules function callback not executing in dash-ag-grid 33.3.3 — no 'best-experiment' CSS class applied to row DOM. All rows have identical white background. Sidebar correctly shows 'Best: exp_lme_0008' text.",
+      "fixRequired": "Replace function-based rowClassRules with Python-precomputed row classes. Add a 'row_class' column to rowData with 'best-experiment' for the best experiment row, then use getRowClass callback or apply cellStyle on all columns targeting the best row."
     },
     {
       "id": "VAL-TABLE-021",
-      "reason": "URL state management broken in three ways: (1) Era changes do not update URL — update_url_state callback has era as State not Input. (2) dcc.Location strips query params on page load. (3) Combined era+experiment URL state incomplete. Fix needed: add era as Input to update_url_state, use clientside callback to maintain URL params."
+      "reason": "URL state management broken in 3 ways: (1) Era changes don't update URL — era is State not Input in update_url_state callback. (2) dcc.Location refresh=False strips query params on page load even though restore_from_url correctly reads them. (3) Browser back/forward non-functional since all history entries resolve to same bare URL.",
+      "fixRequired": "Change era from State to Input in update_url_state callback. Use clientside callback to maintain URL params (dcc.Location strips them). Consider using hash-based routing (#era=LongMemEval) or a custom clientside URL management approach that doesn't rely on dcc.Location for param persistence."
     }
   ],
   "blockedAssertions": [],
   "appliedUpdates": [],
-  "previousRound": ".factory/validation/dashboard-shell/user-testing/synthesis.round2.json",
+  "previousRound": ".factory/validation/dashboard-shell/user-testing/synthesis.round3.json",
   "rootCauseAnalysis": {
     "dashAgGridIntegration": "Three failures (VAL-TABLE-007, VAL-TABLE-008, VAL-TABLE-019) share a common root cause: dash-ag-grid 33.3.3 does not support AG Grid function-based configurations (cellStyle functions, rowClassRules). Only plain object configurations work. Fix: convert function-based configs to value-based configs computed in Python before passing to the component.",
     "urlStateManagement": "Three failures (VAL-TABLE-005 partial, VAL-TABLE-010, VAL-TABLE-021) share a related root cause: URL state management is incomplete. Fix: add initialSortModel prop for sort indicator, use clientside callback with history.pushState for detail overlay, add era dropdown as Input to update_url_state callback.",
-    "fixFeatureStatus": "The fix feature (fix-dashboard-shell-ag-grid-and-url-issues) has status 'pending' and has NOT been implemented. No code changes were applied between round 2 and round 3. All 6 failures are identical to previous rounds."
+    "fixFeatureStatus": "The fix feature (fix-dashboard-shell-ag-grid-and-url-issues) has status 'pending' and has NOT been implemented. No code changes were applied between round 3 and round 4. All 6 failures are identical to previous rounds with additional detail from round 4 testing.",
+    "round4NewFindings": [
+      "VAL-TABLE-005: Text sort indicator (#sort-indicator div) found to be permanently out of sync with AG Grid sort state — no callback connecting AG Grid sort events to Dash store (new finding in round 4)",
+      "VAL-TABLE-010: After browser back puts overlay in broken state, clicking experiment rows stops working until direct URL navigation (new finding in round 4)",
+      "VAL-TABLE-021: AG Grid row/cell clicks via Playwright did not trigger Dash callbacks — cellClicked/selectedRows not firing through browser automation clicks (testing friction)"
+    ]
   },
   "flowReports": [
-    "round3-failed-assertions.json"
+    "round4-sort-indicator.json",
+    "round4-status-badges.json",
+    "round4-browser-back.json",
+    "round4-best-highlight.json",
+    "round4-url-state.json"
   ]
 }

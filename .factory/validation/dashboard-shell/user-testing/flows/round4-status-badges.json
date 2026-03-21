@@ -1,0 +1,123 @@
+{
+  "groupId": "status-badges",
+  "testedAt": "2026-03-21T12:00:00Z",
+  "isolation": {
+    "appUrl": "http://localhost:8050",
+    "browserSession": "acfc9d027a0d__status",
+    "testingMode": "read-only"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-TABLE-007",
+      "title": "Status Display — Distinct Visual Indicators",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Navigate to dashboard and inspect status column cells in AG Grid table",
+          "expected": "Status cells render with colored backgrounds, borderRadius, fontWeight — badge-like styling",
+          "observed": "All status cells have transparent background (rgba(0,0,0,0)), 0px borderRadius, normal font weight (400), default text color (rgb(24,29,31)). Plain text only — no badges."
+        },
+        {
+          "action": "Filter to multiple status types (validation_failed, rejected, baseline, rejected_cv) to see variety",
+          "expected": "Each status type has distinct visual treatment",
+          "observed": "All 4 filtered statuses render identically as plain unstyled text. No visual differentiation."
+        },
+        {
+          "action": "Check inline style of status cell span elements",
+          "expected": "Spans have inline style with backgroundColor, color, borderRadius, padding",
+          "observed": "No inline style on span elements. className is 'ag-cell-value' with no additional classes. innerHTML is plain text: '<span ... class=\"ag-cell-value\">completed</span>'"
+        },
+        {
+          "action": "Inspect AG Grid column definition cellStyle for status column",
+          "expected": "cellStyle applies per-status colors and badge styling",
+          "observed": "Column definition uses cellStyle with {\"function\": \"...\"} format. dash-ag-grid 33.3.3 does not execute function-based callbacks — the entire function body is treated as a static string, not evaluated."
+        },
+        {
+          "action": "Check sidebar status legend for comparison",
+          "expected": "Sidebar should also have colors (for comparison with table)",
+          "observed": "Sidebar legend renders colored 10x10px indicator squares with correct per-status background colors (11 statuses). These work because they use inline HTML with computed styles, not AG Grid cellStyle."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/status-badges/VAL-TABLE-007-initial-load.png",
+          "dashboard-shell/status-badges/VAL-TABLE-007-table-status-cells.png",
+          "dashboard-shell/status-badges/VAL-TABLE-007-multiple-statuses-filtered.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A — no API calls for this assertion",
+        "domInspection": {
+          "tableCellStatus": "Plain text, no inline style, no CSS classes beyond ag-cell-value",
+          "cellBackgroundColor": "rgba(0, 0, 0, 0) — transparent",
+          "cellBorderRadius": "0px",
+          "cellFontWeight": "400",
+          "cellColor": "rgb(24, 29, 31) — default dark text",
+          "cellPadding": "0px 15px — default AG Grid cell padding",
+          "columnDefApproach": "cellStyle with {\"function\": \"...\"} format (lines 227-246 of app.py)",
+          "rootCause": "dash-ag-grid 33.3.3 does not execute function-based cellStyle callbacks. The function body string is never evaluated as JavaScript."
+        },
+        "sidebarLegendColors": {
+          "completed": "rgb(212, 237, 218) — green",
+          "improved": "rgb(212, 237, 218) — green (same as completed)",
+          "not_improved": "rgb(255, 243, 205) — yellow",
+          "validation_failed": "rgb(248, 215, 218) — red",
+          "baseline": "rgb(204, 229, 255) — blue",
+          "accepted_cv": "rgb(209, 236, 241) — teal",
+          "rejected": "rgb(248, 215, 218) — red (same as validation_failed)",
+          "rejected_cv": "rgb(226, 227, 229) — gray",
+          "recorded": "rgb(226, 227, 229) — gray (same as rejected_cv)",
+          "no_results": "rgb(226, 227, 229) — gray (same as rejected_cv)",
+          "parse_error": "rgb(255, 243, 205) — yellow (same as not_improved)"
+        }
+      },
+      "issues": "AG Grid cellStyle function-based callback ({\"function\": \"...\"} format) not executing in dash-ag-grid 33.3.3. Status cells render as plain text with no styling — no badges, no background colors, no borderRadius. The column definition (app.py lines 227-246) defines a color map for each status value with backgroundColor, color, borderRadius:12px, padding, fontSize:11px, fontWeight:600 — but none of this is applied. The sidebar status legend renders correctly because it uses inline HTML with computed styles (via _make_status_badge function), not AG Grid cellStyle. Fix approach: compute styles in Python and pass as plain object configs per cell, or use cellRenderer with HTML."
+    },
+    {
+      "id": "VAL-TABLE-008",
+      "title": "Status Color Coding Consistent",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Compare table status cell colors with sidebar filter status indicator colors",
+          "expected": "Status cell background color matches the corresponding sidebar legend indicator color",
+          "observed": "Table cells have transparent background (rgba(0,0,0,0)) for ALL statuses. Sidebar legend has colored 10x10px indicator squares with distinct colors per status. Zero color match — table has no colors to compare."
+        },
+        {
+          "action": "Apply sort operation (click status column header)",
+          "expected": "After sorting, status colors remain consistent",
+          "observed": "After sorting by status column, cells still have transparent background, 0px borderRadius. Colors were never present to preserve."
+        },
+        {
+          "action": "Apply filter operation (filter to validation_failed, rejected, baseline, rejected_cv)",
+          "expected": "After filtering, status colors remain consistent with sidebar",
+          "observed": "After filtering, cells still have transparent background. No colors present."
+        },
+        {
+          "action": "Verify sidebar legend colors preserved after sort/filter",
+          "expected": "Sidebar legend colors remain visible and correct",
+          "observed": "Sidebar legend colors are preserved — all 11 status indicator squares still show correct colors after sort and filter operations."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/status-badges/VAL-TABLE-008-sidebar-legend.png",
+          "dashboard-shell/status-badges/VAL-TABLE-008-status-filter-open.png",
+          "dashboard-shell/status-badges/VAL-TABLE-008-after-sort.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A",
+        "domInspection": {
+          "tableStatusCells": "All transparent background, no color styling",
+          "sidebarLegendIndicators": "All 11 statuses have colored indicator squares with correct colors, preserved after sort/filter",
+          "filterDropdownItems": "No colored indicators in dropdown menu items — dropdown uses dash-dropdown component without color indicators (only the sidebar legend has them)",
+          "colorConsistency": "FAIL — table cells have no colors at all, so there is nothing to be consistent with sidebar legend"
+        }
+      },
+      "issues": "Same root cause as VAL-TABLE-007: cellStyle function-based callback not executing in dash-ag-grid 33.3.3. Table status cells have no color styling at all (transparent background, default text color), making color consistency comparison impossible. Sidebar legend renders correctly with 11 distinct status indicator colors, and these are preserved after sort/filter operations. The status filter dropdown (dash-dropdown multi-select) does NOT have colored indicators — it shows plain text labels only. Note: the sidebar legend has some color collisions (completed=improved=green, validation_failed=rejected=red, not_improved=parse_error=yellow, rejected_cv=recorded=no_results=gray) which means not all statuses are truly 'distinct' even in the legend — but this is secondary to the primary failure of table cells having no colors at all."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 2 assertions: 2 failed. VAL-TABLE-007: Status cells render as plain unstyled text — dash-ag-grid 33.3.3 does not execute function-based cellStyle callbacks. VAL-TABLE-008: Cannot verify color consistency because table cells have no colors. Sidebar legend renders correctly with colored indicator squares. Root cause is the same for both: the AG Grid column definition uses cellStyle with {\"function\": \"...\"} format which is not supported by dash-ag-grid 33.3.3."
+}

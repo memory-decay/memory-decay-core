@@ -1,0 +1,80 @@
+{
+  "groupId": "browser-back",
+  "testedAt": "2026-03-21T12:00:00Z",
+  "isolation": {
+    "appUrl": "http://localhost:8050",
+    "session": "acfc9d027a0d__back",
+    "mode": "read-only testing"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-TABLE-010",
+      "title": "Detail View Back Navigation",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Navigate to http://localhost:8050, set era filter to LongMemEval",
+          "expected": "Leaderboard shows LongMemEval experiments, URL contains ?era=LongMemEval",
+          "observed": "Leaderboard shows LongMemEval experiments. Era button shows 'LongMemEval'. URL is http://localhost:8050/ (era filter is client-side state, not URL param unless experiment also opened)"
+        },
+        {
+          "action": "Click experiment row exp_lme_0102 to open detail view",
+          "expected": "Detail view overlay opens, URL updates to include ?experiment=exp_lme_0102",
+          "observed": "Detail view overlay opened. URL updated to http://localhost:8050/?era=LongMemEval&experiment=exp_lme_0102. Detail shows exp_lme_0102 heading, Key Metrics, Strict Validation, Hypothesis, Parameters, Snapshot Timeline sections. '← Back to Leaderboard' button present."
+        },
+        {
+          "action": "Use browser back button (history.back())",
+          "expected": "URL reverts to /?era=LongMemEval, detail overlay closes, leaderboard visible with era filter preserved",
+          "observed": "URL reverted to http://localhost:8050/ but detail overlay REMAINS VISIBLE. '← Back to Leaderboard' button and all detail sections (exp_lme_0102 heading, Key Metrics, etc.) are still present. The overlay is not connected to browser history."
+        },
+        {
+          "action": "Use in-app '← Back to Leaderboard' button",
+          "expected": "Detail overlay closes, leaderboard visible with era selection preserved",
+          "observed": "PASS: Detail overlay closed correctly. Leaderboard visible with 'Experiment Leaderboard' heading and table rows. Era filter button still shows 'LongMemEval'. No detail view elements present."
+        },
+        {
+          "action": "Navigate directly to http://localhost:8050/?era=LongMemEval&experiment=exp_lme_0098",
+          "expected": "Detail view for exp_lme_0098 opens",
+          "observed": "Detail view for exp_lme_0098 opens correctly. Shows '← Back to Leaderboard' button, exp_lme_0098 heading, and all metric sections."
+        },
+        {
+          "action": "Click in-app back button from exp_lme_0098 detail",
+          "expected": "Returns to leaderboard with era filter preserved",
+          "observed": "PASS: Returns to leaderboard. URL becomes http://localhost:8050/. Detail overlay closed. Era button still shows 'LongMemEval'."
+        },
+        {
+          "action": "Navigate to http://localhost:8050/?era=LongMemEval&experiment=exp_lme_0068, then browser back",
+          "expected": "URL reverts, overlay closes",
+          "observed": "FAIL (same bug): URL reverted from ?era=LongMemEval&experiment=exp_lme_0068 to /, but detail overlay for exp_lme_0068 remains visible with all sections still showing."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/browser-back/01-initial-leaderboard.png",
+          "dashboard-shell/browser-back/02-era-filter-longmemeval.png",
+          "dashboard-shell/browser-back/03-detail-view-open.png",
+          "dashboard-shell/browser-back/04-after-browser-back.png",
+          "dashboard-shell/browser-back/05-after-inapp-back.png",
+          "dashboard-shell/browser-back/07-detail-exp0098-open.png",
+          "dashboard-shell/browser-back/08-after-inapp-back-2nd-test.png",
+          "dashboard-shell/browser-back/09-detail-exp0068-before-back.png",
+          "dashboard-shell/browser-back/10-after-browser-back-exp0068.png"
+        ],
+        "consoleErrors": "none",
+        "network": "No API requests involved — all state is client-side Dash callbacks and dcc.Store"
+      },
+      "issues": "Browser back button (history.back()) changes the URL but does NOT close the detail overlay. The overlay is a same-page Dash dcc.Store toggle that is not connected to browser history. This was a known failure from round 3 and remains unfixed. The in-app '← Back to Leaderboard' button works correctly in all tested scenarios."
+    }
+  ],
+  "frictions": [
+    {
+      "description": "After using browser back button and getting into a broken state (overlay open, URL at /), clicking on experiment rows in the leaderboard no longer opens the detail view. The Dash callback appears to not fire because the URL state is inconsistent with the dcc.Store state. Workaround: navigate directly via URL to reset state.",
+      "resolved": true,
+      "resolution": "Used direct URL navigation (http://localhost:8050/?era=LongMemEval&experiment=exp_lme_0098) to reset state and continue testing.",
+      "affectedAssertions": ["VAL-TABLE-010"]
+    }
+  ],
+  "blockers": [],
+  "summary": "VAL-TABLE-010: FAIL. Browser back button does not close the detail overlay — it changes the URL from /?era=LongMemEval&experiment=exp_XXXX to / but the overlay remains visible. This is a regression that was already identified in round 3 and remains unfixed. The root cause is that the same-page overlay (dcc.Store toggle) is not connected to browser history. The in-app '← Back to Leaderboard' button works correctly in all tested scenarios, closing the overlay and returning to the leaderboard with era filter preserved."
+}

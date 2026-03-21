@@ -1,0 +1,84 @@
+{
+  "groupId": "best-highlight",
+  "testedAt": "2026-03-21T12:00:00Z",
+  "isolation": {
+    "appUrl": "http://localhost:8050",
+    "session": "acfc9d027a0d__best",
+    "bestExperiment": "exp_lme_0008"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-TABLE-019",
+      "title": "Best Experiment Highlighted",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Navigate to http://localhost:8050",
+          "expected": "Dashboard loads with experiment leaderboard",
+          "observed": "Dashboard loaded successfully with 434+ experiments displayed in AG Grid table"
+        },
+        {
+          "action": "Search for 'exp_lme_0008' using search box",
+          "expected": "exp_lme_0008 row is visible and visually distinguished",
+          "observed": "exp_lme_0008 row is visible but has NO visual distinction from other rows"
+        },
+        {
+          "action": "Inspect exp_lme_0008 row CSS classes via JavaScript",
+          "expected": "Row has 'best-experiment' class or similar visual distinction class",
+          "observed": "Row classes are standard AG Grid classes only: 'ag-row-no-focus ag-row ag-row-level-0 ag-row-position-absolute ag-row-not-inline-editing ag-row-even ag-row-first'. No 'best-experiment' class present."
+        },
+        {
+          "action": "Compare computed styles of exp_lme_0008 row vs adjacent rows",
+          "expected": "exp_lme_0008 row has different background color, border, or shadow",
+          "observed": "All rows have identical styling: backgroundColor=rgb(255,255,255), no border, boxShadow=none"
+        },
+        {
+          "action": "Search for star/badge/highlight icons in exp_lme_0008 row",
+          "expected": "Row contains visual indicator (star, badge, etc.)",
+          "observed": "No star, badge, highlight, trophy, or gold elements found in the row"
+        },
+        {
+          "action": "Check page for elements with 'best'/'highlight'/'star' CSS classes",
+          "expected": "Some elements have best/highlight related styling classes",
+          "observed": "Zero elements found with classes containing 'best', 'highlight', 'star', 'trophy', or 'gold'"
+        },
+        {
+          "action": "Verify sidebar shows 'Best: exp_lme_0008' text",
+          "expected": "Sidebar displays best experiment indicator",
+          "observed": "Sidebar text confirmed: 'Showing 8 experiments (both eras) · Best: exp_lme_0008' — sidebar works but row highlight does not"
+        },
+        {
+          "action": "Check for console errors",
+          "expected": "No JS errors related to row class application",
+          "observed": "No console errors present"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/best-highlight/01-initial-page.png",
+          "dashboard-shell/best-highlight/02-exp_lme_0008-filtered.png",
+          "dashboard-shell/best-highlight/03-exp_lme_0008-annotated.png",
+          "dashboard-shell/best-highlight/04-all-experiments-annotated.png",
+          "dashboard-shell/best-highlight/05-sidebar-best-text.png"
+        ],
+        "consoleErrors": "none",
+        "cssInspection": {
+          "rowClasses": "ag-row-no-focus ag-row ag-row-level-0 ag-row-position-absolute ag-row-not-inline-editing ag-row-even ag-row-first",
+          "hasBestClass": false,
+          "computedBg": "rgb(255, 255, 255)",
+          "computedBorder": "",
+          "computedBoxShadow": "none",
+          "iconsInRow": [],
+          "allRowsSameStyling": true
+        },
+        "sidebarText": "Showing 8 experiments (both eras) · Best: exp_lme_0008",
+        "pageElementsWithBestClass": 0
+      },
+      "issues": "The best experiment row (exp_lme_0008) is NOT visually distinguished in the AG Grid leaderboard table. The row has only standard AG Grid CSS classes with no 'best-experiment' class applied. Background color, border, and box-shadow are identical to all other rows. No star, badge, highlight, or trophy icons are present in the row. No elements on the page have CSS classes containing 'best', 'highlight', 'star', 'trophy', or 'gold'. The sidebar correctly displays 'Best: exp_lme_0008' text, but this does not satisfy the assertion requirement of visual distinction in the leaderboard table itself. This is consistent with the known failure context: rowClassRules callback not executing in dash-ag-grid 33.3.3."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "VAL-TABLE-019: FAIL — Best experiment (exp_lme_0008) row has NO visual distinction in the leaderboard. rowClassRules function callback not applying 'best-experiment' class. Sidebar correctly shows 'Best: exp_lme_0008' but the table row itself is indistinguishable from other rows. All rows have identical white background and standard AG Grid classes."
+}

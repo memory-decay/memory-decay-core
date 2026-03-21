@@ -1,0 +1,65 @@
+{
+  "milestone": "dashboard-shell",
+  "round": 3,
+  "status": "fail",
+  "assertionsSummary": {
+    "total": 21,
+    "passed": 15,
+    "failed": 6,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-TABLE-001",
+    "VAL-TABLE-002",
+    "VAL-TABLE-003",
+    "VAL-TABLE-004",
+    "VAL-TABLE-006",
+    "VAL-TABLE-009",
+    "VAL-TABLE-011",
+    "VAL-TABLE-012",
+    "VAL-TABLE-013",
+    "VAL-TABLE-014",
+    "VAL-TABLE-015",
+    "VAL-TABLE-016",
+    "VAL-TABLE-017",
+    "VAL-TABLE-018",
+    "VAL-TABLE-020"
+  ],
+  "failedAssertions": [
+    {
+      "id": "VAL-TABLE-005",
+      "reason": "No visual sort indicator on initial load — data pre-sorted descending but all ag-sort-indicator-icon elements have 'ag-hidden' class. No initialSortModel prop set. Sort cycling is 3-state (asc→desc→none) instead of expected 2-state (asc↔desc) toggle. Sorting data ordering works correctly. Fix needed: add initialSortModel prop and set sortingOrder=['asc','desc'] in grid options."
+    },
+    {
+      "id": "VAL-TABLE-007",
+      "reason": "AG Grid cellStyle function-based callback ({\"function\": \"...\"} format) not executing in dash-ag-grid 33.3.3. Status cells render as plain text with no styling — no badges, no background colors. Plain object cellStyle (hypothesis column) works correctly, confirming the issue is specific to function-based callbacks. Fix needed: compute status styles in Python and pass as value-based cellStyle per row, or use cellRenderer with inline styles."
+    },
+    {
+      "id": "VAL-TABLE-008",
+      "reason": "Same root cause as VAL-TABLE-007: cellStyle function not applying colors to table cells. Sidebar filter has colored indicator squares (matching the colors defined in the non-working cellStyle function) but table cells are plain unstyled text. Fix needed: same as VAL-TABLE-007."
+    },
+    {
+      "id": "VAL-TABLE-010",
+      "reason": "Browser back button changes URL but does not close detail overlay. history.back() reverts URL from /?experiment=exp_lme_0098 to / but overlay remains visible. Same-page overlay (dcc.Store toggle) is not connected to browser history. In-app back button works correctly. Fix needed: use clientside callback with history.pushState when opening detail view."
+    },
+    {
+      "id": "VAL-TABLE-019",
+      "reason": "Best experiment (exp_lme_0008) row not visually distinguished. rowClassRules function callback not executing in dash-ag-grid 33.3.3 — row has only standard AG Grid classes, no 'best-experiment' class applied. Sidebar shows gold 'Best: exp_lme_0008' text. Fix needed: precompute row classes in Python and pass via getRowClass or apply via cellStyle on all columns."
+    },
+    {
+      "id": "VAL-TABLE-021",
+      "reason": "URL state management broken in three ways: (1) Era changes do not update URL — update_url_state callback has era as State not Input. (2) dcc.Location strips query params on page load. (3) Combined era+experiment URL state incomplete. Fix needed: add era as Input to update_url_state, use clientside callback to maintain URL params."
+    }
+  ],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": ".factory/validation/dashboard-shell/user-testing/synthesis.round2.json",
+  "rootCauseAnalysis": {
+    "dashAgGridIntegration": "Three failures (VAL-TABLE-007, VAL-TABLE-008, VAL-TABLE-019) share a common root cause: dash-ag-grid 33.3.3 does not support AG Grid function-based configurations (cellStyle functions, rowClassRules). Only plain object configurations work. Fix: convert function-based configs to value-based configs computed in Python before passing to the component.",
+    "urlStateManagement": "Three failures (VAL-TABLE-005 partial, VAL-TABLE-010, VAL-TABLE-021) share a related root cause: URL state management is incomplete. Fix: add initialSortModel prop for sort indicator, use clientside callback with history.pushState for detail overlay, add era dropdown as Input to update_url_state callback.",
+    "fixFeatureStatus": "The fix feature (fix-dashboard-shell-ag-grid-and-url-issues) has status 'pending' and has NOT been implemented. No code changes were applied between round 2 and round 3. All 6 failures are identical to previous rounds."
+  },
+  "flowReports": [
+    "round3-failed-assertions.json"
+  ]
+}

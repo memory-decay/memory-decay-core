@@ -1,0 +1,64 @@
+{
+  "groupId": "group-sort-indicator",
+  "testedAt": "2026-03-21T12:00:00Z",
+  "isolation": {
+    "url": "http://localhost:8050",
+    "session": "acfc9d027a0d__sort",
+    "notes": "Read-only testing on shared Dash server"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-TABLE-005",
+      "title": "Column Sorting — Ascending/Descending",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Load dashboard at http://localhost:8050",
+          "expected": "Data sorted by overall_score descending with visual sort indicator on Overall column",
+          "observed": "Data IS sorted descending (0.6758, 0.6744, 0.6716...) but NO visual sort indicator. All 30 ag-sort-indicator-icon elements have 'ag-hidden' class. aria-sort='none' on all columns. No initialSortModel prop set on dag.AgGrid component."
+        },
+        {
+          "action": "Click Overall column header (1st click)",
+          "expected": "Sort ascending with ascending sort indicator arrow",
+          "observed": "Sort works ascending (N/A/null values first, then 0.0196, 0.0210...). aria-sort='ascending' on Overall column. Visible ascending sort icon appears (ag-sort-ascending-icon without ag-hidden). However, the text sort indicator says 'Sorted by Overall Score ↓' which is misleading (↓ arrow shown for ascending sort)."
+        },
+        {
+          "action": "Click Overall column header (2nd click)",
+          "expected": "Sort descending with descending sort indicator arrow",
+          "observed": "Sort works descending (0.6758, 0.6744, 0.6716...). aria-sort='descending' on Overall column. Visible descending sort icon appears (ag-sort-descending-icon). Text indicator says 'Sorted by Overall Score ↓' — correct for descending but same text as ascending state."
+        },
+        {
+          "action": "Click Overall column header (3rd click)",
+          "expected": "Toggle back to ascending (2-state: asc↔desc)",
+          "observed": "3-state cycling: asc→desc→NONE. aria-sort='none' on third click. NO sort icons visible (all hidden). Data remains in descending order from the Python-level pandas sort (because AG Grid sort is now 'none' but rowData was already pre-sorted descending by the Dash callback). Text indicator still says 'Sorted by Overall Score ↓' — not updated."
+        },
+        {
+          "action": "Click Retrieval column header (different column)",
+          "expected": "Sort changes to Retrieval column, Overall sort indicator clears",
+          "observed": "Retrieval column gets aria-sort='ascending' and ascending icon. Overall column aria-sort='none'. Data sorts by Retrieval ascending. However, text sort indicator still says 'Sorted by Overall Score ↓' — completely out of sync with actual sort state."
+        },
+        {
+          "action": "Check source code for initialSortModel prop",
+          "expected": "initialSortModel prop set on dag.AgGrid for default descending sort indicator",
+          "observed": "No initialSortModel prop exists on dag.AgGrid component (dashboard/app.py line 421). No sortingOrder prop either. Sorting is handled at Python level via pandas sort_values with sort-state dcc.Store defaulting to {column: 'overall_score', ascending: False}. There is no callback connecting AG Grid sort events to the Dash sort-state store."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/group-sort-indicator/VAL-TABLE-005-initial-load.png",
+          "dashboard-shell/group-sort-indicator/VAL-TABLE-005-click1-asc.png",
+          "dashboard-shell/group-sort-indicator/VAL-TABLE-005-click2-desc.png",
+          "dashboard-shell/group-sort-indicator/VAL-TABLE-005-click3-none.png",
+          "dashboard-shell/group-sort-indicator/VAL-TABLE-005-sort-different-col.png"
+        ],
+        "consoleErrors": "none",
+        "network": "No API calls for sorting — all client-side AG Grid sorting + server-side pandas pre-sort"
+      },
+      "issues": "Three distinct issues found: (1) No visual sort indicator on initial load — data is pre-sorted descending by Python/pandas but AG Grid has no initialSortModel prop, so no sort arrow is shown. (2) Sort cycling is 3-state (asc→desc→none) instead of expected 2-state (asc↔desc) toggle — AG Grid default behavior. Needs sortingOrder=['asc','desc'] in dashGridOptions to disable the 'none' state. (3) Text sort indicator (#sort-indicator div) is completely out of sync with AG Grid's actual sort state — it always shows the initial 'Sorted by Overall Score ↓' value because there is no callback connecting AG Grid sort events to the Dash sort-state store. Clicking column headers triggers AG Grid's built-in client-side sort but does NOT update the Python-level sort-state dcc.Store."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "VAL-TABLE-005: FAIL — Column sorting has three issues: (1) No visual sort indicator on initial load because no initialSortModel prop is set on the AG Grid component. Data IS pre-sorted descending correctly via Python/pandas, but the grid itself doesn't know about the sort. (2) Sort cycling is 3-state (asc→desc→none) instead of the expected 2-state (asc↔desc) toggle. (3) The text sort indicator element is permanently out of sync with the actual AG Grid sort state because there is no callback wiring AG Grid sort events to the Dash state store. Fixes needed: add initialSortModel=[{colId:'overall_score',sort:'desc'}], add sortingOrder=['asc','desc'] to dashGridOptions or defaultColDef, and wire up AG Grid's sortModel events to the Dash sort-state store (or remove the misleading text indicator)."
+}

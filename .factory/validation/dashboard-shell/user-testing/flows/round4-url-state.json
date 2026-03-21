@@ -1,0 +1,75 @@
+{
+  "groupId": "url-state",
+  "testedAt": "2026-03-21T12:00:00Z",
+  "isolation": {
+    "appUrl": "http://localhost:8050",
+    "session": "acfc9d027a0d__url",
+    "access": "read-only"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-TABLE-021",
+      "title": "URL State Management",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Navigate to http://localhost:8050",
+          "expected": "Initial URL with no query params",
+          "observed": "http://localhost:8050/ — no query params (correct for initial load)"
+        },
+        {
+          "action": "Change era dropdown to LongMemEval",
+          "expected": "URL updates to http://localhost:8050/?era=LongMemEval",
+          "observed": "URL remains http://localhost:8050/ — era dropdown is State, not Input, in update_url_state callback so no URL update fires"
+        },
+        {
+          "action": "Click experiment row (exp_lme_0102)",
+          "expected": "URL updates to include ?experiment=exp_lme_0102",
+          "observed": "URL remains http://localhost:8050/ — detail view did NOT open at all (AG Grid cellClicked/selectedRows callbacks not firing through Playwright clicks). Even if it had opened, the URL update would have been incomplete because era is State not Input."
+        },
+        {
+          "action": "Navigate directly to http://localhost:8050/?era=LongMemEval&experiment=exp_lme_0008",
+          "expected": "Dashboard restores LongMemEval era and exp_lme_0008 detail view, URL preserved",
+          "observed": "Era and experiment ARE correctly restored (LongMemEval shown, exp_lme_0008 detail view open). However, dcc.Location strips query params on page load — URL becomes http://localhost:8050/ after loading."
+        },
+        {
+          "action": "Navigate directly to http://localhost:8050/?era=memories_500",
+          "expected": "Dashboard restores memories_500 era, URL preserved",
+          "observed": "Era correctly restored (button shows memories_500, only exp_* experiments visible). However, URL again stripped to http://localhost:8050/."
+        },
+        {
+          "action": "Browser back from exp_lme_0008 detail view",
+          "expected": "Return to leaderboard with era preserved",
+          "observed": "Browser back does nothing visible — all history entries resolve to the same bare URL (http://localhost:8050/) so back/forward has no effect on view state"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/url-state/step1-initial-load.png",
+          "dashboard-shell/url-state/step2-era-longmemeval.png",
+          "dashboard-shell/url-state/step3-experiment-clicked.png",
+          "dashboard-shell/url-state/step3b-fullpage-after-click.png",
+          "dashboard-shell/url-state/step3c-annotated.png",
+          "dashboard-shell/url-state/step4-url-with-params.png",
+          "dashboard-shell/url-state/step5-era-restored-url-stripped.png",
+          "dashboard-shell/url-state/step6-before-back.png",
+          "dashboard-shell/url-state/step7-after-back.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A — all testing was client-side state management"
+      },
+      "issues": "URL state management broken in three ways as previously reported: (1) Era changes do not update URL — update_url_state callback has era as State not Input. (2) dcc.Location strips query params on page load — even though restore_from_url correctly reads the search string and restores view state, the URL bar always ends up bare. (3) Combined era+experiment URL state incomplete — even when both params are provided, the URL is immediately stripped. Browser back/forward is non-functional since all history entries resolve to the same bare URL."
+    }
+  ],
+  "frictions": [
+    {
+      "description": "AG Grid row/cell clicks via Playwright did not trigger Dash callbacks (cellClicked, selectedRows) — the detail view never opened through any click method (agent-browser click, JS click, synthetic event dispatch). This prevented testing the experiment-click URL update path, though the code review confirms it would be incomplete anyway due to era being State.",
+      "resolved": false,
+      "resolution": "Worked around by navigating directly to URLs with query params to test the restoration side.",
+      "affectedAssertions": ["VAL-TABLE-021"]
+    }
+  ],
+  "blockers": [],
+  "summary": "VAL-TABLE-021 FAIL: URL state management has three distinct bugs. (1) Era filter changes never update the URL because update_url_state uses era as State not Input. (2) dcc.Location strips query params on page load, so even direct URL navigation with params (e.g., ?era=LongMemEval&experiment=exp_lme_0008) results in a bare URL after loading, even though view state is correctly restored. (3) Browser back/forward is non-functional since all history entries resolve to the same bare URL. The restore_from_url callback works correctly in reading params and restoring state, but the URL stripping prevents bookmarkability and shareability. Matches previously reported failure context from round 3."
+}
