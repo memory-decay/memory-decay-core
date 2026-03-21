@@ -1,0 +1,151 @@
+{
+  "featureId": "dash-app-shell-and-leaderboard",
+  "reviewedAt": "2026-03-21T04:35:00.000Z",
+  "commitId": "32b78ed",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The implementation provides a comprehensive Dash app shell with AG Grid leaderboard, sidebar navigation with era/status/search filters, detail view overlay, URL state management, and best experiment highlighting. 86 tests pass. The code is well-structured with clear separation of helper functions, configuration constants, and callbacks. Several non-blocking issues identified around incomplete sort state tracking, unused imports, and minor test coverage gaps.",
+    "issues": [
+      {
+        "file": "dashboard/app.py",
+        "line": 15,
+        "severity": "non_blocking",
+        "description": "Unused import: `import math` is never referenced in the module."
+      },
+      {
+        "file": "dashboard/app.py",
+        "line": 23,
+        "severity": "non_blocking",
+        "description": "Unusual import pattern: `from dash import ... callback, dash, ...` re-imports the `dash` module from its own namespace. Works correctly but could confuse maintainers. Consider using `import dash` at the top level and `from dash import Input, Output, State, callback, html, dcc` separately."
+      },
+      {
+        "file": "dashboard/app.py",
+        "line": 278,
+        "severity": "non_blocking",
+        "description": "Sort state Store (`sort-state`) is initialized and read by `update_leaderboard`, but no callback ever writes to it when the user clicks an AG Grid column header. The `sort-indicator` text always shows the initial 'Sorted by Overall Score ↓' regardless of user interaction. AG Grid's built-in client-side sorting does work for actual reordering, making this non-blocking, but the custom sort state management is incomplete/dead code. The `_sort_dataframe()` function serves only as initial sort; subsequent user sort clicks are handled entirely by AG Grid client-side."
+      },
+      {
+        "file": "dashboard/app.py",
+        "line": 83,
+        "severity": "non_blocking",
+        "description": "_load_history_status() re-reads and re-parses history.jsonl independently rather than using the data_loader's load_history() function. This is redundant I/O — the file is already parsed once at module level by the data_loader tests. Not a correctness bug, but creates duplicated parsing logic."
+      },
+      {
+        "file": "dashboard/app.py",
+        "line": 435,
+        "severity": "non_blocking",
+        "description": "AG Grid has `domLayout: 'autoHeight'` combined with `style={'height': '100%'}` and `pagination: True`. The `autoHeight` layout makes the grid height fit its content rather than the container, which could conflict with the 100% height style on the container div. With pagination enabled, only one page of rows is rendered at a time, so this likely works in practice, but the layout configuration is contradictory."
+      },
+      {
+        "file": "dashboard/app.py",
+        "line": 322,
+        "severity": "non_blocking",
+        "description": "The best experiment ID is embedded directly into a JavaScript string via f-string (f\"return params.data.id === '{_best_exp_id or ''}';\"). If _best_exp_id ever contained a single quote or special character, this would break the JavaScript. Currently safe since experiment IDs are alphanumeric+underscore, but it's a fragile pattern."
+      },
+      {
+        "file": "dashboard/app.py",
+        "line": 1030,
+        "severity": "non_blocking",
+        "description": "URL restore callback uses `prevent_initial_call='initial_duplicate'` which is Dash 2.17+ specific. This means the app requires Dash >= 2.17, but there's no version pin enforcement beyond what pip resolves. The handoff notes this was a fix for Dash 4.0 compatibility."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "services",
+      "observation": "The dashboard runs on port 8050 and is documented in services.yaml with start/stop/healthcheck commands. The `start_dashboard` command includes PYTHONPATH which is necessary for the `dashboard.data_loader` import to work. This is correctly configured.",
+      "evidence": ".factory/services.yaml lines 4-10: commands.start_dashboard and services.dashboard sections properly configured"
+    },
+    {
+      "area": "conventions",
+      "observation": "The app loads all experiment data at module level (top-level side effects in app.py). This means importing the module triggers full data loading (~430 experiments). Test files work around this by importing in test methods rather than at module level. AGENTS.md should document that dashboard.app import has heavy side effects.",
+      "evidence": "dashboard/app.py lines 296-302: _experiments, _cv_data, _history_status loaded at module level. tests/test_dashboard.py: each test imports dashboard.app inside test methods to avoid import-time side effects in test collection."
+    },
+    {
+      "area": "skills",
+      "observation": "The handoff reports the worker followed the frontend-worker skill procedure. The skill should document the Dash 4.0 compatibility note (prevent_initial_call='initial_duplicate') since this was a non-obvious fix.",
+      "evidence": "Handoff skillFeedback.followedProcedure=true, commit message mentions 'Fix test layout traversal for Dash 4.0 component tree structure'"
+    },
+    {
+      "area": "conventions",
+      "observation": "The test file tests/test_dashboard.py contains both data_loader tests and dashboard app tests in the same file. The module docstring says 'Tests for dashboard data loader module' but it also tests the app shell, leaderboard logic, and detail view. This is a large monolithic test file (1200+ lines). Future workers should be aware of this convention.",
+      "evidence": "tests/test_dashboard.py: file docstring mentions data_loader, but classes TestDashboardApp, TestLeaderboardLogic, TestDetailViewBuilder test the app module"
+    }
+  ],
+  "testCoverageNotes": [
+    {
+      "assertion": "VAL-TABLE-001",
+      "status": "covered",
+      "test": "test_filter_dataframe_memories_500"
+    },
+    {
+      "assertion": "VAL-TABLE-002",
+      "status": "covered",
+      "test": "test_filter_dataframe_longmemeval"
+    },
+    {
+      "assertion": "VAL-TABLE-003",
+      "status": "covered",
+      "test": "test_filter_dataframe_all_eras"
+    },
+    {
+      "assertion": "VAL-TABLE-004",
+      "status": "covered",
+      "test": "test_status_filter_or_logic, test_status_filter_clearable"
+    },
+    {
+      "assertion": "VAL-TABLE-005",
+      "status": "covered",
+      "test": "test_sort_dataframe_descending, test_sort_dataframe_ascending"
+    },
+    {
+      "assertion": "VAL-TABLE-006",
+      "status": "covered",
+      "test": "test_sort_non_numeric_no_crash"
+    },
+    {
+      "assertion": "VAL-TABLE-007",
+      "status": "not_covered",
+      "note": "No test verifies that each status value renders with a unique visual treatment. The STATUS_COLORS dict has distinct colors for each status and the AG Grid cellStyle function applies them, but no test asserts visual distinction. This is a UI-level assertion best verified by browser testing."
+    },
+    {
+      "assertion": "VAL-TABLE-008",
+      "status": "not_covered",
+      "note": "No test verifies color consistency between table badges and filter controls. The sidebar uses dcc.Dropdown (no custom coloring) while the table uses AG Grid cellStyle. Status colors in the sidebar legend match the STATUS_COLORS dict, but there's no automated verification. Browser-level assertion."
+    },
+    {
+      "assertion": "VAL-TABLE-009",
+      "status": "not_covered",
+      "note": "No automated test for row click opening detail view. The detail view builder is tested (test_detail_view_known_experiment), and the callback exists (on_cell_click, on_row_click), but the end-to-end callback chain isn't tested. Browser-level assertion."
+    },
+    {
+      "assertion": "VAL-TABLE-010",
+      "status": "not_covered",
+      "note": "No automated test for back navigation preserving filter state. The URL state callbacks exist (update_url_state, restore_from_url) but the preservation of filter/sort state on back navigation isn't tested. Browser-level assertion."
+    },
+    {
+      "assertion": "VAL-TABLE-018",
+      "status": "covered",
+      "test": "test_experiment_count_reasonable"
+    },
+    {
+      "assertion": "VAL-TABLE-019",
+      "status": "covered",
+      "test": "test_best_experiment_identified"
+    },
+    {
+      "assertion": "VAL-TABLE-020",
+      "status": "covered",
+      "test": "test_text_search_experiment_id, test_text_search_hypothesis, test_text_search_with_filters_and_logic"
+    },
+    {
+      "assertion": "VAL-TABLE-021",
+      "status": "not_covered",
+      "note": "No automated test for URL state management (update_url_state, restore_from_url callbacks). Browser-level assertion."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "The dash-app-shell-and-leaderboard feature passes review. The implementation delivers a fully functional Dash app shell with AG Grid leaderboard, sidebar filters (era, status, search), detail view overlay, URL state management, and best experiment highlighting. 86 tests pass covering all core data-layer and leaderboard logic assertions. The code is well-organized with clear helper functions and comprehensive inline documentation. Non-blocking issues identified: unused `math` import, incomplete sort-state Store wiring (AG Grid handles sorting client-side but the custom sort indicator is always stale), redundant history.jsonl parsing, and a fragile JS injection pattern for best experiment ID. Five VAL-TABLE assertions (007, 008, 009, 010, 021) are not covered by automated tests but are browser-level UI assertions that were verified interactively per the handoff. No blocking bugs found."
+}

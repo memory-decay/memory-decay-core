@@ -1,0 +1,22 @@
+{
+  "featureId": "experiment-detail-view",
+  "milestone": "dashboard-shell",
+  "reviewedAt": "2026-03-21T22:30:00Z",
+  "commitId": "fefd1d4720daaf1ae72cc0652c59d41a678eaf17",
+  "transcriptSkeletonReviewed": false,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The experiment detail view overlay is well-implemented in dashboard/app.py with comprehensive coverage of all VAL-TABLE assertions (011-017). The code is clean, well-structured, and handles all required edge cases. The _build_metric_card helper reduces duplication effectively. All 25 tests pass.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "services",
+      "observation": "The dashboard has a separate venv at dashboard/.venv/ distinct from the project root .venv/. The services.yaml test command correctly uses dashboard/.venv/bin/python. Workers need to be aware that dashboard tests must use dashboard/.venv, not the project root .venv or system python.",
+      "evidence": ".factory/services.yaml:3 — test command uses dashboard/.venv/bin/python; pyproject.toml does not list dash/plotly as dependencies because they live in the dashboard subproject."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Solid implementation of the experiment detail view overlay. The feature covers all 7 validation assertions (VAL-TABLE-011 through VAL-TABLE-017): experiment ID header, key metrics at 4 decimal places, conditional later-era metrics with N/A fallback, full hypothesis text, params key-value display, CV section with fold deltas and bar charts, and snapshot mini-charts with 3 distinguishable colored lines. Edge cases for validation_failed (error banner + N/A metrics), no_results, missing files, and old-era experiments are all handled. Code quality is good — _build_metric_card helper eliminates the prior inline duplication, error display is prominent with pre-wrap for multi-line messages, and the fold scores bar chart includes a mean reference line. All 25 tests pass. No blocking or non-blocking issues found."
+}

@@ -1,0 +1,109 @@
+{
+  "milestone": "dashboard-shell",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "cd /home/roach/.openclaw/workspace/memory-decay && dashboard/.venv/bin/python -m pytest tests/test_dashboard.py -v --tb=short",
+      "exitCode": 0,
+      "observation": "86 passed in 2.06s"
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "cd /home/roach/.openclaw/workspace/memory-decay && dashboard/.venv/bin/python -m py_compile dashboard/app.py && dashboard/.venv/bin/python -m py_compile dashboard/data_loader.py",
+      "exitCode": 0,
+      "observation": "TYPECHECK PASSED"
+    },
+    "lint": {
+      "passed": true,
+      "command": "cd /home/roach/.openclaw/workspace/memory-decay && dashboard/.venv/bin/python -m py_compile dashboard/*.py",
+      "exitCode": 0,
+      "observation": "LINT PASSED"
+    }
+  },
+  "reviewsSummary": {
+    "total": 2,
+    "passed": 2,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "nonBlockingIssues": [
+    {
+      "featureId": "dash-app-shell-and-leaderboard",
+      "severity": "non_blocking",
+      "description": "Unused import: `import math` never referenced in app.py line 15"
+    },
+    {
+      "featureId": "dash-app-shell-and-leaderboard",
+      "severity": "non_blocking",
+      "description": "Sort state Store is initialized but never updated by any callback; the sort indicator always shows initial state regardless of user clicks. AG Grid client-side sorting still works for actual reordering."
+    },
+    {
+      "featureId": "dash-app-shell-and-leaderboard",
+      "severity": "non_blocking",
+      "description": "_load_history_status() re-reads and re-parses history.jsonl independently rather than using data_loader's load_history(), creating duplicated parsing logic"
+    },
+    {
+      "featureId": "dash-app-shell-and-leaderboard",
+      "severity": "non_blocking",
+      "description": "AG Grid has domLayout='autoHeight' combined with style={'height': '100%'} — contradictory layout config, though works in practice with pagination"
+    },
+    {
+      "featureId": "dash-app-shell-and-leaderboard",
+      "severity": "non_blocking",
+      "description": "Best experiment ID embedded directly into JavaScript string via f-string — fragile if IDs ever contain special characters"
+    },
+    {
+      "featureId": "dash-app-shell-and-leaderboard",
+      "severity": "non_blocking",
+      "description": "prevent_initial_call='initial_duplicate' requires Dash >= 2.17, no explicit version pin enforcement"
+    }
+  ],
+  "appliedUpdates": [
+    {
+      "target": "library",
+      "file": ".factory/library/environment.md",
+      "description": "Updated exp_0360 edge case note: phase 5 range was extended to 9999, so exp_0360 now maps to phase 5 (no longer returns None)",
+      "sourceFeature": "dash-app-shell-and-leaderboard"
+    },
+    {
+      "target": "library",
+      "file": ".factory/library/environment.md",
+      "description": "Added 'Dashboard App Import Side Effects' section documenting that dashboard/app.py loads all experiment data at module level, and test files import inside test methods to avoid heavy import-time side effects",
+      "sourceFeature": "dash-app-shell-and-leaderboard"
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Document that dashboard/app.py has heavy module-level side effects (loads all ~430 experiments at import time). Workers writing dashboard tests should import dashboard.app inside test methods, not at module level, to avoid slow test collection.",
+      "evidence": "Both features (dash-app-shell-and-leaderboard and experiment-detail-view) follow this pattern. All tests in TestDashboardApp, TestLeaderboardLogic, and TestDetailViewBuilder import inside test methods. Feature dash-app-shell-and-leaderboard review flagged this as a convention workers need to know.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Note that the test file tests/test_dashboard.py is monolithic (~1200+ lines) containing tests for data_loader, app shell, leaderboard logic, and detail view. Future workers adding dashboard tests should append to this file following the existing class-based organization pattern.",
+      "evidence": "Feature dash-app-shell-and-leaderboard review noted the file docstring says 'Tests for dashboard data loader module' but it also contains TestDashboardApp, TestLeaderboardLogic, and TestDetailViewBuilder classes. This is the established convention for this project.",
+      "isSystemic": false
+    },
+    {
+      "target": "skills",
+      "suggestion": "Add Dash 4.0 compatibility note to frontend-worker skill: use prevent_initial_call='initial_duplicate' instead of True for URL state restore callbacks. This is a non-obvious requirement that was discovered during implementation.",
+      "evidence": "Feature dash-app-shell-and-leaderboard had to fix this issue (commit 32b78ed mentions 'Fix test layout traversal for Dash 4.0 component tree structure'). The standard Dash pattern of prevent_initial_call=True doesn't work correctly with Dash 4.0's component tree traversal.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Separate dashboard venv at dashboard/.venv/ distinct from project root .venv/",
+      "reason": "already-documented: already present in .factory/library/environment.md under 'Venv location' and 'Venv Notes' sections"
+    },
+    {
+      "observation": "Dashboard runs on port 8050 documented in services.yaml with PYTHONPATH set correctly",
+      "reason": "already-documented: services.yaml already contains correct start/stop/healthcheck commands with PYTHONPATH"
+    }
+  ],
+  "previousRound": null
+}
