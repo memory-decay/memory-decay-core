@@ -1,0 +1,4 @@
+Two-phase adaptive threshold decay: active memories (above importance-sigmoid threshold)
+use Jost decay without a floor; inactive memories use exponential decay toward zero.
+This creates a sharper activation boundary — memories are EITHER strongly active OR decaying —
+which could improve ranking discrimination and thus activation-recall correlation.

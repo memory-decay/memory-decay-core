@@ -1,0 +1,5 @@
+Hyperbolic floor: floor = floor_max * impact / (impact + k_hyp)
+Unlike sigmoid (S-curve), hyperbolic has a smooth concave shape.
+For the importance range [0.1, 0.5], hyperbolic gives more weight to
+low-medium importance items than sigmoid does.
+k_hyp=0.20 means impact=0.2 → floor=0.30*floor_max (half the max floor).
