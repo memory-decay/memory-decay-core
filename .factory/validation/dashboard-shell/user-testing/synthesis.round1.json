@@ -1,0 +1,78 @@
+{
+  "milestone": "dashboard-shell",
+  "round": 1,
+  "status": "fail",
+  "assertionsSummary": {
+    "total": 21,
+    "passed": 15,
+    "failed": 6,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-TABLE-001",
+    "VAL-TABLE-002",
+    "VAL-TABLE-003",
+    "VAL-TABLE-004",
+    "VAL-TABLE-006",
+    "VAL-TABLE-009",
+    "VAL-TABLE-011",
+    "VAL-TABLE-012",
+    "VAL-TABLE-013",
+    "VAL-TABLE-014",
+    "VAL-TABLE-015",
+    "VAL-TABLE-016",
+    "VAL-TABLE-017",
+    "VAL-TABLE-018",
+    "VAL-TABLE-020"
+  ],
+  "failedAssertions": [
+    {
+      "id": "VAL-TABLE-005",
+      "reason": "No visual sort indicator on initial load — data pre-sorted descending but aria-sort='none' on all columns. Sort cycling is 3-state (none→asc→desc→none) instead of expected 2-state asc/desc toggle. Sorting itself works correctly for data ordering."
+    },
+    {
+      "id": "VAL-TABLE-007",
+      "reason": "AG Grid cellStyle function-based callback ({\"function\": \"...\"} format) not executing in dash-ag-grid 33.3.3. Status badges render as plain text without color/icon styling in the table. Sidebar status legend (HTML-based) renders colors correctly."
+    },
+    {
+      "id": "VAL-TABLE-008",
+      "reason": "Same root cause as VAL-TABLE-007: cellStyle function not applying colors to table cells. No color consistency to verify since table cells have no styling at all."
+    },
+    {
+      "id": "VAL-TABLE-010",
+      "reason": "Browser back button does not work because detail view is a same-page overlay (dcc.Store toggle), not a separate URL route. No browser history entry created. In-app '← Back to Leaderboard' button works correctly and preserves all filter state."
+    },
+    {
+      "id": "VAL-TABLE-019",
+      "reason": "Best experiment (exp_lme_0008) row not visually distinguished in leaderboard. The .best-experiment CSS class from rowClassRules is not applied to the DOM row element. The ⭐ star IS shown in detail view header and sidebar 'Best: exp_lme_0008' text, but the table row itself has no highlight."
+    },
+    {
+      "id": "VAL-TABLE-021",
+      "reason": "URL state management broken. Era filter changes and experiment selection do not update the browser URL. dcc.Location(refresh=False) strips query params. The restore_from_url callback works (direct navigation with params restores state) but update_url_state fails to maintain params. Bookmarkability and browser back/forward non-functional."
+    }
+  ],
+  "blockedAssertions": [],
+  "appliedUpdates": [
+    {
+      "target": "user-testing.md",
+      "description": "Updated experiment counts: LongMemEval is now 93 (dashboard shows), total 451. Previously documented as 78 and 436.",
+      "source": "flow-report"
+    },
+    {
+      "target": "user-testing.md",
+      "description": "Documented AG Grid interaction frictions: row clicks sometimes toggle selection instead of opening detail; pagination buttons require JS click; sort indicator 3-state cycle.",
+      "source": "flow-report"
+    }
+  ],
+  "previousRound": null,
+  "rootCauseAnalysis": {
+    "dashAgGridIntegration": "Three failures (VAL-TABLE-007, VAL-TABLE-008, VAL-TABLE-019) share a common root cause: dash-ag-grid 33.3.3 does not properly support AG Grid function-based configurations (cellStyle functions, rowClassRules). Only plain object configurations work. This affects status badge colors, sort indicators, and best experiment highlighting. Fix: convert function-based configs to value-based configs computed in Python before passing to the component.",
+    "urlStateManagement": "VAL-TABLE-021 and VAL-TABLE-010 share a related root cause: dcc.Location does not maintain URL query params when refresh=False. The same-page overlay approach for detail view means no browser history entries. Fix: use dcc.Location with refresh=False but pushState via clientside callback, or switch to URL-routed detail view."
+  },
+  "flowReports": [
+    "group1-era-status-search.json",
+    "group2-sort-perf-url.json",
+    "group3-detail-metrics.json",
+    "group4-detail-edge.json"
+  ]
+}

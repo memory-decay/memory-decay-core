@@ -1,0 +1,161 @@
+{
+  "groupId": "round2-failed-assertions",
+  "testedAt": "2026-03-21T14:00:00Z",
+  "isolation": {
+    "dashboardUrl": "http://localhost:8050",
+    "browserSession": "8d495af0bb0b__fv1",
+    "missionDir": "/home/roach/.factory/missions/ab06734e-fa45-49b3-9115-00c7fc9bfd7a"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-TABLE-005",
+      "title": "Column Sorting — Ascending/Descending",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Navigate to http://localhost:8050 and check Overall column header for sort indicator",
+          "expected": "Visual sort indicator (arrow) visible on initial load showing descending sort (default)",
+          "observed": "ALL sort indicator icons have class 'ag-hidden' with display:none. No visual indicator on initial load despite data being sorted descending by overall_score."
+        },
+        {
+          "action": "Click Overall column header once",
+          "expected": "Sort toggles to ascending with visible ascending indicator",
+          "observed": "Descending indicator appeared (ag-sort-descending-icon unhidden). Data remains descending (0.6744, 0.6635, 0.6573...)."
+        },
+        {
+          "action": "Click Overall column header second time",
+          "expected": "Sort toggles to descending with visible descending indicator",
+          "observed": "ALL sort indicators hidden again. No indicator visible. Data still descending."
+        },
+        {
+          "action": "Click Overall column header third time",
+          "expected": "Sort toggles to ascending",
+          "observed": "Ascending indicator appeared (ag-sort-ascending-icon unhidden). Data now ascending with N/A values at top."
+        }
+      ],
+      "evidence": [
+        "dashboard-shell/round2-rerun/initial-load.png",
+        "dashboard-shell/round2-rerun/VAL-TABLE-005-sort-click1.png",
+        "dashboard-shell/round2-rerun/VAL-TABLE-005-sort-click3-asc.png"
+      ],
+      "issues": "Two failures: (1) No visual sort indicator on initial load even though data is sorted by overall_score descending via defaultSort config. All ag-sort-indicator-icon elements have 'ag-hidden' class with display:none. (2) 3-state sort cycling (desc→none→asc) instead of required 2-state (asc/desc toggle). The 'none' state in the middle means every other click shows no indicator at all."
+    },
+    {
+      "id": "VAL-TABLE-007",
+      "title": "Status Display — Distinct Visual Indicators",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Inspect Status column cells in the AG Grid table",
+          "expected": "Status values render with unique visual treatment (colored badges)",
+          "observed": "All status cells contain plain text inside <span class='ag-cell-value'> with no styling, no badges, no background colors, no CSS classes differentiating statuses. HTML is just plain text: '<span class=\"ag-cell-value\">completed</span>'."
+        },
+        {
+          "action": "Compare multiple status values (completed, improved, not_improved, accepted_cv)",
+          "expected": "Each status visually distinguishable at a glance",
+          "observed": "All statuses render identically as plain unstyled text. No visual differentiation whatsoever."
+        }
+      ],
+      "evidence": [
+        "dashboard-shell/round2-rerun/VAL-TABLE-007-008-status-badges.png"
+      ],
+      "issues": "AG Grid cellStyle callback not executing or not configured. Status values are rendered as plain text with no CSS classes or inline styles. The cellRenderer function that should add status-specific styling/badges appears to not be working. The sidebar filter controls DO render colored indicator squares next to status names, but the table cells do not."
+    },
+    {
+      "id": "VAL-TABLE-008",
+      "title": "Status Color Coding Consistent",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Compare status badge colors in table vs sidebar status filter",
+          "expected": "Status colors consistent between table badges and filter controls",
+          "observed": "Sidebar filter controls have colored indicator squares (e.g., completed=green background rgb(212,237,218), validation_failed=red rgb(248,215,218), baseline=blue rgb(204,229,255)). Table status cells have NO styling at all — plain text with default colors."
+        },
+        {
+          "action": "Check if colors persist after filter/sort operations",
+          "expected": "Colors preserved",
+          "observed": "Not applicable — no colors exist in table cells to preserve."
+        }
+      ],
+      "evidence": [
+        "dashboard-shell/round2-rerun/VAL-TABLE-007-008-status-badges.png",
+        "dashboard-shell/round2-rerun/VAL-TABLE-008-sidebar-filter-open.png"
+      ],
+      "issues": "Cannot be consistent because table cells have NO styling. The color definitions exist in the sidebar (Dash HTML components with inline styles), but the AG Grid cellStyle/cellRenderer functions are not applying equivalent styling to table cells. The gap is between Dash-rendered sidebar and AG Grid cell rendering."
+    },
+    {
+      "id": "VAL-TABLE-010",
+      "title": "Detail View Back Navigation",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Navigate to http://localhost:8050, click exp_lme_0098 row to open detail view",
+          "expected": "Detail overlay opens",
+          "observed": "Detail overlay opens, URL changes to http://localhost:8050/?experiment=exp_lme_0098, '← Back to Leaderboard' button visible."
+        },
+        {
+          "action": "Use browser back button (history.back())",
+          "expected": "Returns to leaderboard view, overlay closes",
+          "observed": "URL reverts to http://localhost:8050/, but the detail overlay REMAINS visible. '← Back to Leaderboard' button is still displayed. The overlay did not close."
+        }
+      ],
+      "evidence": [
+        "dashboard-shell/round2-rerun/VAL-TABLE-010-detail-view.png",
+        "dashboard-shell/round2-rerun/VAL-TABLE-010-after-back.png",
+        "dashboard-shell/round2-rerun/VAL-TABLE-010-back-button-still-visible.png"
+      ],
+      "issues": "Browser back button navigates the URL but does not close the detail overlay. The same-page overlay mechanism (dcc.Store-based, not route-based) means history.back() changes the URL but doesn't trigger the close callback. The URL and the view state become desynchronized. Note: the in-app '← Back to Leaderboard' button works correctly."
+    },
+    {
+      "id": "VAL-TABLE-019",
+      "title": "Best Experiment Highlighted",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Find exp_lme_0008 row in the leaderboard table",
+          "expected": "Row visually distinguished (highlighted background, badge, or star)",
+          "observed": "Row has class 'ag-row-even ag-row-no-focus ag-row ag-row-level-0 ag-row-position-absolute ag-row-not-inline-editing' — standard AG Grid row classes only. No 'best-experiment' class, no highlight class, no visual distinction. Computed background color is rgb(255,255,255) — same as all other even rows."
+        },
+        {
+          "action": "Compare exp_lme_0008 row styling with other rows",
+          "expected": "Noticeable visual difference",
+          "observed": "No visual difference. Row looks identical to every other row. The rowClassRules configuration that should apply 'best-experiment' class is not executing."
+        }
+      ],
+      "evidence": [
+        "dashboard-shell/round2-rerun/VAL-TABLE-019-best-experiment-highlight.png"
+      ],
+      "issues": "The .best-experiment CSS class is not applied to the exp_lme_0008 row. AG Grid's rowClassRules function callback is not executing or not matching correctly. The row has only standard AG Grid classes. The sidebar text does mention 'Best: exp_lme_0008' with gold color, but the table row itself has no highlight."
+    },
+    {
+      "id": "VAL-TABLE-021",
+      "title": "URL State Management",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Change era dropdown from 'All' to 'LongMemEval'",
+          "expected": "URL updates to include era parameter (e.g., ?era=LongMemEval)",
+          "observed": "URL remains http://localhost:8050/ — no query params added. The era change is only reflected in the UI button text, not in the URL."
+        },
+        {
+          "action": "Navigate directly to http://localhost:8050/?era=LongMemEval&experiment=exp_lme_0008",
+          "expected": "URL preserved, state restored from query params",
+          "observed": "dcc.Location strips the query params — URL becomes http://localhost:8050/ immediately after page load. However, the state IS restored correctly (era=LongMemEval, detail view open)."
+        },
+        {
+          "action": "Click experiment row to open detail view",
+          "expected": "URL updates to include experiment parameter",
+          "observed": "URL does update to include experiment parameter (e.g., ?experiment=exp_lme_0098), but era parameter is not included when era is not 'All'."
+        }
+      ],
+      "evidence": [
+        "dashboard-shell/round2-rerun/VAL-TABLE-021-era-longmemeval-no-url-change.png"
+      ],
+      "issues": "Three sub-failures: (1) Era changes do not update the URL — only experiment selection triggers URL update (the update_url_state callback only has selected-experiment as Input). (2) dcc.Location strips query params on page load/refresh, so navigating to a URL with params causes them to be immediately removed (though state is restored internally via restore_from_url callback). (3) Combined era+experiment URL state is incomplete."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Re-tested all 6 previously failing assertions. All 6 remain failing with identical failure modes. No code fixes have been applied since round 1. VAL-TABLE-005: no sort indicator on initial load + 3-state cycling. VAL-TABLE-007: status cells are plain text with no visual styling. VAL-TABLE-008: table cells have no colors to be consistent with. VAL-TABLE-010: browser back changes URL but doesn't close detail overlay. VAL-TABLE-019: best-experiment row class not applied. VAL-TABLE-021: era changes don't update URL, dcc.Location strips query params."
+}
