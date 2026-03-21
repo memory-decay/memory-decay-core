@@ -1,0 +1,5 @@
+Hybrid dual-state retrieval-rule experiment:
+- Keep the exp_lme_0128 decay, floor, and importance-scaled retrieval settings.
+- Use retrieval_consolidation_mode=retrieval_top1_fraction with retrieval_storage_boost_scale=0.25.
+- Only rank-1 successful recalls get reinforced.
+- Goal: eliminate reinforcement from ambiguous top-k hits and test whether that improves robustness.

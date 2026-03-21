@@ -1,0 +1,4 @@
+Hybrid dual-state follow-up to exp_lme_0154:
+- Keep the exp_lme_0128 decay, floor, and importance-scaled retrieval settings.
+- Use retrieval_consolidation_mode=retrieval_with_storage_fraction with retrieval_storage_boost_scale=0.40.
+- Rationale: 0.25 recovered too little retrieval quality. Increase the storage fraction to see if overall can approach 0128 while staying td-positive.

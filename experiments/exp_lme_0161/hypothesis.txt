@@ -1,0 +1,5 @@
+Retrieval-rule diagnostic on top of the hybrid dual-state baseline:
+- Keep the exp_lme_0128 decay, floor, and importance-scaled retrieval settings.
+- Use retrieval_consolidation_mode=retrieval_margin_bm25_fraction.
+- Storage is reinforced only when the semantic hit is rank-1, has enough semantic margin over rank-2, and also passes a lexical BM25 agreement check.
+- Goal: reduce ambiguous storage reinforcement and improve robustness without giving up fixed-split retrieval quality.

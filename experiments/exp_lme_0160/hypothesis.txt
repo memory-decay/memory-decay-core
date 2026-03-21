@@ -1,0 +1,5 @@
+Hybrid dual-state retrieval-rule experiment:
+- Keep the exp_lme_0128 decay, floor, and importance-scaled retrieval settings.
+- Use retrieval_consolidation_mode=retrieval_capped_fraction with retrieval_storage_boost_scale=0.25 and retrieval_state_cap=0.85.
+- Retrieval reinforcement is bounded by remaining headroom to the cap.
+- Goal: preserve retrieval quality while preventing retrieval-state ceilinging.
