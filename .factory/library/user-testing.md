@@ -80,6 +80,26 @@ Testing surface, required tools, and resource cost classification.
 - Default sort applied at data level, not via AG Grid sort API — no sort indicator on initial load
 - Multi-select status filter: clicking option closes dropdown; must click checkbox input via JS
 
+### Plotly Chart Interaction Limitations (timeline-metrics)
+- Plotly charts use internal drag overlay (.draglayer with nsewdrag class) that intercepts all mouse events, preventing agent-browser from triggering Plotly clickData callbacks (e.g., clicking phase timeline bars to filter)
+- Even hiding the overlay via CSS doesn't work because Plotly's internal pointer tracking requires native pointer events
+- Workaround: verify click callback implementation via source code review + unit tests, not browser automation
+
+### Heatmap Null Cell Display (timeline-metrics)
+- Null/None heatmap cells are visually blank as expected (correct)
+- Hover on null cells shows "Value: 0.0000" due to Plotly %{z:.4f} template formatting NaN
+- Minor UX issue — cells correctly communicate missing data visually
+
+### Dash Custom Dropdown (timeline-metrics)
+- Uses virtualized rendering with non-standard DOM classes (dash-options-list, dash-dropdown-content)
+- Not accessible via standard Playwright accessibility tree
+- Requires direct DOM manipulation via JavaScript to find and click options
+
+### Retention Curve Dropdown (timeline-metrics)
+- Pre-filters to only show experiments WITH retention data (114 experiments)
+- Experiments without retention data (e.g., exp_0001) are excluded from dropdown
+- check_retention_warnings() function exists but code path is unreachable through UI
+
 ### Performance Baseline (localhost)
 - Initial load: ~145ms (< 3s threshold)
 - Era switch: ~248ms (< 2s threshold)

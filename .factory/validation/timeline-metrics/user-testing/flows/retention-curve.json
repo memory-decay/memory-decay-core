@@ -1,0 +1,125 @@
+{
+  "groupId": "retention-curve",
+  "testedAt": "2026-03-21T12:00:00Z",
+  "isolation": {
+    "dashboardUrl": "http://localhost:8050",
+    "sessionName": "a2b091201496__retention",
+    "access": "read-only"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-TIMELINE-007",
+      "title": "Retention Curve Overlay",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Navigate to http://localhost:8050 and click Retention Curves tab",
+          "expected": "Retention Curve Overlay section displayed with multi-select dropdown and Clear All button",
+          "observed": "Retention Curve Overlay section displayed with dropdown showing placeholder 'Select 2–5 experiments with retention data...', Clear All button, and empty Plotly chart with annotation 'Select 2-5 experiments to compare retention curves'"
+        },
+        {
+          "action": "Select 3 experiments via multi-select dropdown (exp_lme_0008, exp_lme_0059, exp_lme_0002)",
+          "expected": "3 distinct lines rendered with unique colors and legend entries",
+          "observed": "3 traces rendered: exp_lme_0008 (#1565C0 blue), exp_lme_0059 (#E65100 orange), exp_lme_0002 (#2E7D32 green). Count shows '3 of 5 experiments selected'. X-axis at ticks [40, 80, 120, 160, 200]. Y-axis range [0, 1]. Legend with all 3 names visible."
+        },
+        {
+          "action": "Select 2 more experiments (exp_lme_0000, exp_lme_0003) to reach 5 total, then attempt to select a 6th (exp_lme_0005)",
+          "expected": "6th selection rejected, limited to 5",
+          "observed": "After selecting 5 experiments, count shows '5 of 5 experiments selected'. Clicking 6th experiment (exp_lme_0005) does not add it. Chart still shows exactly 5 traces: [exp_lme_0008, exp_lme_0059, exp_lme_0002, exp_lme_0000, exp_lme_0003]"
+        },
+        {
+          "action": "Click 'Clear All' button",
+          "expected": "All curves removed, chart returns to empty state",
+          "observed": "Count resets to 'Select experiments to compare'. Graph has 0 traces. Chart shows empty state annotation."
+        },
+        {
+          "action": "Verify selecting experiment without retention_curve shows warning",
+          "expected": "Warning displayed when selecting experiment without retention data",
+          "observed": "The dropdown pre-filters to only show experiments WITH retention data (114 experiments with retention data available). Experiments without retention data (like exp_0001) are not shown in the dropdown at all, making it impossible to select them. The warning mechanism exists in code (check_retention_warnings function) but is not reachable through the UI because of the pre-filter."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "timeline-metrics/retention-curve/VAL-TIMELINE-007-empty-state.png",
+          "timeline-metrics/retention-curve/VAL-TIMELINE-007-three-curves.png",
+          "timeline-metrics/retention-curve/VAL-TIMELINE-007-five-curves-max.png",
+          "timeline-metrics/retention-curve/VAL-TIMELINE-007-cleared-state.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A - all client-side Dash callbacks",
+        "chartDataVerified": {
+          "threeExperiments": {
+            "traceCount": 3,
+            "traces": [
+              {"name": "exp_lme_0008", "color": "#1565C0", "x": [40, 80, 120, 160, 200]},
+              {"name": "exp_lme_0059", "color": "#E65100", "x": [40, 80, 120, 160, 200]},
+              {"name": "exp_lme_0002", "color": "#2E7D32", "x": [40, 80, 120, 160, 200]}
+            ]
+          },
+          "fiveExperiments": {
+            "traceCount": 5,
+            "traces": ["exp_lme_0008", "exp_lme_0059", "exp_lme_0002", "exp_lme_0000", "exp_lme_0003"]
+          },
+          "sixthRejected": true,
+          "clearAll": {"traceCount": 0, "countText": "Select experiments to compare"}
+        }
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TIMELINE-008",
+      "title": "Retention Curve Handles Missing Data",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Check if exp_0001 (old-era, no retention data) appears in retention dropdown",
+          "expected": "exp_0001 should appear but show 'unavailable' when selected",
+          "observed": "exp_0001 is NOT in the dropdown at all. The dropdown only shows experiments that HAVE retention data (114 experiments). All experiments in the dropdown have been pre-filtered by get_retention_available_experiments()."
+        },
+        {
+          "action": "Verify fallback hierarchy in code",
+          "expected": "top-level retention_curve > final snapshot (tick=200) retention_curve > 'unavailable'",
+          "observed": "Code review confirms: build_retention_overlay() checks exp.retention_curve first, then falls back to final snapshot (tick=200) retention_curve. If neither exists, the trace is skipped (continue). The 'unavailable' message is NOT displayed in the chart — the code has a comment 'show message via annotation' but only does 'continue'. The check_retention_warnings() function does generate 'no retention data available' warning text, but since the dropdown pre-filters, this code path is unreachable through normal UI usage."
+        },
+        {
+          "action": "Verify 'unavailable' message is shown to user for experiments without retention data",
+          "expected": "User should see 'unavailable' message for exp_0001",
+          "observed": "No 'unavailable' message is visible to users. The dropdown prevents selecting experiments without retention data, and the chart simply skips traces with no data rather than showing an 'unavailable' annotation."
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "codeAnalysis": {
+          "get_retention_available_experiments": "Pre-filters dropdown to only show experiments with retention data (top-level or final snapshot). exp_0001 is excluded.",
+          "build_retention_overlay": "Has fallback hierarchy (top-level > snapshot tick=200), but if no data found, simply does 'continue' without showing unavailable message. Comment says 'show message via annotation' but implementation just skips.",
+          "check_retention_warnings": "Generates warning text for experiments without retention data, but this code path is unreachable through UI because dropdown pre-filters."
+        }
+      },
+      "issues": "VAL-TIMELINE-008 FAIL: Two issues found:\n1. exp_0001 (no retention data) is not visible in the dropdown at all — the dropdown pre-filters to only show experiments WITH retention data, so the 'unavailable' behavior cannot be tested through the UI.\n2. The chart code (build_retention_overlay) does NOT show an 'unavailable' message for experiments without retention data — it simply skips them with 'continue'. The code has a misleading comment saying 'show message via annotation' but the implementation doesn't add any annotation.\n\nThe fallback hierarchy IS correctly implemented in code (top-level retention_curve > final snapshot retention_curve > skip), but the user-facing 'unavailable' message from the validation contract is not implemented."
+    }
+  ],
+  "frictions": [
+    {
+      "description": "The Retention Curve Overlay section is positioned below the leaderboard table, requiring significant scrolling to reach. The 'Clear All' button at y=767 is well below the initial viewport, and clicking it via agent-browser required explicit scrollIntoView() JavaScript.",
+      "resolved": true,
+      "resolution": "Used document.querySelector('#retention-clear-btn').scrollIntoView({block: 'center'}) followed by .click() to reach and click the button.",
+      "affectedAssertions": ["VAL-TIMELINE-007"]
+    },
+    {
+      "description": "The Dash custom dropdown component uses virtualized rendering with non-standard DOM classes (dash-options-list, dash-dropdown-content, dash-dropdown-grid-container) that don't appear in the standard Playwright accessibility tree. Standard snapshot/interact workflow failed; required direct DOM manipulation via JavaScript.",
+      "resolved": true,
+      "resolution": "Used JavaScript evaluation to find dropdown options by iterating .dash-options-list children, checking textContent for matching experiment IDs, and calling .click() directly on the matching element.",
+      "affectedAssertions": ["VAL-TIMELINE-007", "VAL-TIMELINE-008"]
+    },
+    {
+      "description": "JavaScript evaluation context persists variable declarations across eval calls within the same session, causing SyntaxError: Identifier already declared errors. Required using unique variable names for each eval call.",
+      "resolved": true,
+      "resolution": "Used unique variable names (ol2, ol3, ol4, etc.) for each JavaScript eval call.",
+      "affectedAssertions": ["VAL-TIMELINE-007"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 2 assertions: VAL-TIMELINE-007 PASS (retention curve overlay works correctly: 3 distinct colored curves, 5-experiment limit enforced, Clear All works, ticks at 40/80/120/160/200). VAL-TIMELINE-008 FAIL (experiments without retention data are pre-filtered from dropdown so 'unavailable' message is unreachable through UI, and chart code doesn't show 'unavailable' annotation — just skips the trace)."
+}

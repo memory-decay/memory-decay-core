@@ -1,0 +1,90 @@
+{
+  "groupId": "threshold-heatmap",
+  "testedAt": "2026-03-21T06:30:00Z",
+  "isolation": {
+    "dashboardURL": "http://localhost:8050",
+    "sessionName": "a2b091201496__heatmap",
+    "mode": "read-only, shared server"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-TIMELINE-006",
+      "title": "Threshold Metric Heatmap",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Navigate to http://localhost:8050 and click Threshold Heatmap tab",
+          "expected": "Heatmap section visible with 2 panels (recall_rate and precision_rate)",
+          "observed": "Heatmap section displayed with 2 panels. Recall heatmap uses Blues colorscale, precision uses Reds colorscale. Both show 9 thresholds (0.1-0.9) on Y-axis and 114 experiments on X-axis."
+        },
+        {
+          "action": "Verify color scale legend with 5+ breakpoints",
+          "expected": "Colorbar visible with at least 5 breakpoints showing linear [0,1] range",
+          "observed": "Colorbar present on both heatmaps. Labels: 0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 'Score' (6 numeric breakpoints + title). Colorscale has 9 internal gradient stops. zmin=0, zmax=1 (linear [0,1] range confirmed)."
+        },
+        {
+          "action": "Hover on exp_0000 threshold 0.2 recall cell",
+          "expected": "Tooltip shows value matching results.json (0.06097560975609756)",
+          "observed": "Tooltip: 'Experiment: exp_0000, Threshold: 0.2, Value: 0.0610'. results.json value: 0.06097560975609756 → rounds to 0.0610 ✓"
+        },
+        {
+          "action": "Hover on exp_lme_0003 threshold 0.5 recall cell",
+          "expected": "Tooltip shows value matching results.json",
+          "observed": "Tooltip: 'Experiment: exp_lme_0003, Threshold: 0.5, Value: 0.6209'. results.json value: 0.6209150326797386 → rounds to 0.6209 ✓"
+        },
+        {
+          "action": "Hover on exp_0000 threshold 0.3 precision cell",
+          "expected": "Tooltip shows value matching results.json",
+          "observed": "Tooltip: 'Experiment: exp_0000, Threshold: 0.3, Value: 0.1496'. results.json value: 0.14963503649635038 → rounds to 0.1496 ✓"
+        },
+        {
+          "action": "Verify early-era null cells (exp_0000 thresholds 0.1, 0.6-0.9)",
+          "expected": "Blank/gray cells for missing thresholds",
+          "observed": "exp_0000 z-data: [null, 0.0609, 0.0487, 0.0121, 0.0121, null, null, null, null]. Thresholds 0.1 and 0.6-0.9 are null (visually blank). Text annotations are empty strings for null cells. Minor note: hover on null cells shows 'Value: 0.0000' due to Plotly formatting NaN with :.4f template, but cells are visually distinct (blank)."
+        },
+        {
+          "action": "Verify new-era experiments have all 9 thresholds populated",
+          "expected": "All 9 thresholds (0.1-0.9) have non-null values",
+          "observed": "exp_lme_0003 recall: all 9 thresholds have values (e.g., 0.6209 for 0.1-0.8, 0.6078 for 0.9). exp_lme_0003 precision: all 9 thresholds have values."
+        },
+        {
+          "action": "Measure heatmap rendering timing",
+          "expected": "Renders within 3 seconds",
+          "observed": "Tab switch heatmap render time: ~76ms (measured from tab click until both Plotly plots populated with data). Well under 3s requirement."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "timeline-metrics/threshold-heatmap/VAL-TIMELINE-006-heatmap-overview.png",
+          "timeline-metrics/threshold-heatmap/VAL-TIMELINE-006-heatmap-full.png",
+          "timeline-metrics/threshold-heatmap/VAL-TIMELINE-006-heatmap-annotated.png",
+          "timeline-metrics/threshold-heatmap/VAL-TIMELINE-006-hover-exp0000-threshold0.2-recall.png",
+          "timeline-metrics/threshold-heatmap/VAL-TIMELINE-006-hover-exp_lme_0003-threshold0.5-recall.png",
+          "timeline-metrics/threshold-heatmap/VAL-TIMELINE-006-hover-exp0000-threshold0.3-precision.png",
+          "timeline-metrics/threshold-heatmap/VAL-TIMELINE-006-hover-exp0000-threshold0.1-precision-null.png",
+          "timeline-metrics/threshold-heatmap/VAL-TIMELINE-006-heatmap-section.png"
+        ],
+        "consoleErrors": "none",
+        "network": "Page loaded successfully with 29 resources"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Both leaderboard and heatmap views show simultaneously when heatmap tab is clicked - they are displayed side-by-side rather than replacing each other. This required scrolling to see the heatmap section. The leaderboard view remains visible.",
+      "resolved": true,
+      "resolution": "Used document.getElementById('heatmap-view').scrollIntoView() and JavaScript evaluation to verify heatmap content. Full-page screenshot captured both views.",
+      "affectedAssertions": ["VAL-TIMELINE-006"]
+    },
+    {
+      "description": "Hover on null/None heatmap cells shows 'Value: 0.0000' instead of something indicating missing data (e.g., 'N/A' or 'missing'). The cells are visually blank as expected, but the hover tooltip is misleading.",
+      "resolved": false,
+      "resolution": "Not resolved - this is a minor UX issue. The visual blank appearance correctly communicates missing data. The hover template uses %{z:.4f} which formats NaN as 0.0000.",
+      "affectedAssertions": ["VAL-TIMELINE-006"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 1 assertion (VAL-TIMELINE-006): PASSED. Heatmap shows recall_rate and precision_rate at thresholds 0.1-0.9 across experiments with linear color scale [0,1] and 6 numeric breakpoints. Hover values match results.json for both old-era (exp_0000) and new-era (exp_lme_0003) experiments. Early-era null cells (thresholds 0.1, 0.6-0.9 for exp_0000) are visually blank. Render time ~76ms, well under 3s limit. Minor friction: null cell hover shows 0.0000 instead of N/A."
+}

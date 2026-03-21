@@ -1,0 +1,178 @@
+{
+  "groupId": "metric-progression",
+  "testedAt": "2026-03-21T00:00:00Z",
+  "isolation": {
+    "dashboardUrl": "http://localhost:8050",
+    "sessionName": "a2b091201496__metric_progression",
+    "mode": "read-only, shared server"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-TIMELINE-002",
+      "title": "Metric Progression Line Charts",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Navigate to Timeline & Metrics view with era='All'",
+          "expected": "3 metric progression charts visible (Overall, Retrieval, Plausibility Score)",
+          "observed": "3 charts visible: Overall Score, Retrieval Score, Plausibility Score. All render correctly with Plotly."
+        },
+        {
+          "action": "Verify Y-axis range is [0,1] on all charts",
+          "expected": "Y-axis fixed [0,1] range",
+          "observed": "All 3 charts have yaxis.range=[0,1] confirmed via JavaScript inspection of Plotly layout"
+        },
+        {
+          "action": "Verify phase background shading is present and non-overlapping",
+          "expected": "Phase shading rectangles, non-overlapping boundaries",
+          "observed": "8 shading rectangles covering Phases 0-7 (9 phases, Phase 6 has very narrow range). Boundaries: -0.5→24.5, 24.5→49.5, 49.5→79.5, 79.5→293.5, 293.5→357.5, 357.5→358.5, 358.5→403.5, 403.5→467.5. All adjacent, non-overlapping."
+        },
+        {
+          "action": "Verify experiments ordered chronologically by phase (old-era before LME-era)",
+          "expected": "exp_NNNN before exp_lme_NNNN",
+          "observed": "First experiment: exp_0000 (x=0), last old-era: exp_0259 (x=256), first LME: exp_lme_0000 (x=358), last: exp_lme_0070 (x=428). Old-era before LME-era confirmed."
+        },
+        {
+          "action": "Spot-check exp_lme_0008 overall_score",
+          "expected": "~0.4630 (from results.json)",
+          "observed": "Chart shows y=0.4630429519731301 at x=366 for exp_lme_0008. results.json: 0.4630429519731301. Exact match."
+        },
+        {
+          "action": "Spot-check exp_0000 overall_score",
+          "expected": "~0.0210 (from results.json)",
+          "observed": "Chart shows y=0.020986353816341393 for exp_0000. results.json: 0.020986353816341393. Exact match."
+        },
+        {
+          "action": "Spot-check exp_lme_0002 across all 3 charts",
+          "expected": "Overall ~0.3360, Retrieval ~0.3589, Plausibility ~0.5745",
+          "observed": "Overall: 0.33597732280064924, Retrieval: 0.3588836014926755, Plausibility: 0.5744901021435359. All match results.json exactly."
+        },
+        {
+          "action": "Spot-check exp_0000 retrieval and plausibility scores",
+          "expected": "retrieval ~0.0217, plausibility ~0.7954",
+          "observed": "Retrieval: 0.021650871203463082, Plausibility: 0.7953839421742998. Both match results.json exactly."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "timeline-metrics/metric-progression/VAL-TIMELINE-002-all-charts-initial.png",
+          "timeline-metrics/metric-progression/VAL-TIMELINE-002-full-page-all-eras.png"
+        ],
+        "consoleErrors": "none",
+        "dataVerification": "5 experiments spot-checked against results.json: exp_lme_0008, exp_0000, exp_lme_0002 (all 3 metrics), exp_lme_0000 (all 3 metrics). All values match exactly."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TIMELINE-003",
+      "title": "Scoring Discontinuity Indicator",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Check for discontinuity indicator at Phase 4/5 boundary",
+          "expected": "Visible dashed line or annotation at x=293.5",
+          "observed": "Shape index 8 is a vertical dashed line (type='line', dash='dash', color='#D32F2F', width=2) at x=293.5 spanning full y-domain [0,1]. Present in all 3 metric charts."
+        },
+        {
+          "action": "Verify annotation text explains scoring formula change",
+          "expected": "Text explaining scores are not directly comparable",
+          "observed": "Annotation at x=293.5, y=1 with text: '⚠ Scoring formula change<br>(scores not directly comparable)'. Always visible (no click/hover required)."
+        },
+        {
+          "action": "Verify indicator position between last Phase 4 and first Phase 5 experiment",
+          "expected": "Indicator at correct boundary position",
+          "observed": "Phase 4 shading ends at x=293.5, Phase 5 shading starts at x=293.5. Dashed line and annotation placed exactly at this boundary."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "timeline-metrics/metric-progression/VAL-TIMELINE-003-discontinuity-indicator.png",
+          "timeline-metrics/metric-progression/VAL-TIMELINE-003-discontinuity-zoomed-all-era.png"
+        ],
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TIMELINE-004",
+      "title": "Validation-Failed Experiments in Charts",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Check for validation_failed trace in Overall Score chart",
+          "expected": "Distinct marker trace for validation_failed experiments",
+          "observed": "Trace named 'validation_failed' exists with mode='markers', symbol='x', color='#D32F2F', size=10. Contains 11 experiments: exp_0004, exp_0163, exp_0259, exp_lme_0032, exp_lme_0054, exp_lme_0056, exp_lme_0058, exp_lme_0063, exp_lme_0066, exp_lme_0067, exp_lme_0070."
+        },
+        {
+          "action": "Verify exp_lme_0063 and exp_lme_0066 appear as distinct markers",
+          "expected": "Both present as red X markers",
+          "observed": "exp_lme_0063 at x=421, exp_lme_0066 at x=424. Both in validation_failed trace with red X markers."
+        },
+        {
+          "action": "Verify no line interpolation through validation_failed points",
+          "expected": "No line trace contains these experiments",
+          "observed": "Checked all line-mode traces in both 'All' and 'LongMemEval' era views. No line trace contains exp_lme_0063 (x=421) or exp_lme_0066 (x=424). Confirmed excluded from interpolation."
+        },
+        {
+          "action": "Verify same behavior across all 3 metric charts",
+          "expected": "All charts show validation_failed as red X markers",
+          "observed": "All 3 charts (Overall, Retrieval, Plausibility) have identical validation_failed trace: symbol='x', color='#D32F2F'. No line traces contain failed experiments."
+        },
+        {
+          "action": "Verify no crash when validation_failed experiments are visible",
+          "expected": "No console errors",
+          "observed": "No console errors detected during any view configuration."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "timeline-metrics/metric-progression/VAL-TIMELINE-004-validation-failed-markers.png",
+          "timeline-metrics/metric-progression/VAL-TIMELINE-004-validation-failed-LME-view.png"
+        ],
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TIMELINE-005",
+      "title": "Non-Contiguous Experiment IDs",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Check if line drawn between exp_lme_0000 (x=358) and exp_lme_0002 (x=360)",
+          "expected": "No line connecting non-adjacent experiment IDs",
+          "observed": "Line trace at index 11 (mode='lines') contains x=[358, 360, 361, 362, ...]. Plotly draws a continuous line from (358, 0.037) to (360, 0.336), crossing the x=359 position where exp_lme_0001 would be if it had results.json. There is NO gap in the line."
+        },
+        {
+          "action": "Verify same issue in Retrieval and Plausibility charts",
+          "expected": "No line in any chart between non-adjacent IDs",
+          "observed": "Retrieval chart trace at index 11 (lines) also starts with x=[358, 360, 361] — same gap issue. Plausibility chart has the same pattern."
+        },
+        {
+          "action": "Check the exp_lme_0001 experiment",
+          "expected": "exp_lme_0001 exists but has no results.json",
+          "observed": "Confirmed: exp_lme_0001 exists in experiments/ but has only params.json + hypothesis.txt, no results.json. It appears nowhere in any chart trace."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "timeline-metrics/metric-progression/VAL-TIMELINE-005-non-contiguous-gap.png"
+        ],
+        "consoleErrors": "none",
+        "dataDetails": "Line trace 11 (Overall Score) contains x=[358, 360, 361, 362, 363, 364, 365, 366, 367, 368] — jumps from x=358 to x=360 without a null/gap break. Plotly renders a line segment between these two points, visually connecting exp_lme_0000 and exp_lme_0002 across the missing x=359 position."
+      },
+      "issues": "A line IS drawn between non-adjacent experiment IDs (exp_lme_0000 at x=358 and exp_lme_0002 at x=360). The implementation does not insert null values or break the line trace to create a visual gap at x=359 where exp_lme_0001 is missing. To fix: insert a null/NaN y-value at x=359 in the line traces to create a visible break in the line."
+    }
+  ],
+  "frictions": [
+    {
+      "description": "JavaScript eval context persists variable declarations between calls, causing 'Identifier already declared' errors. Worked around by wrapping all code in IIFEs.",
+      "resolved": true,
+      "resolution": "Used (function(){...})() wrapper for all JavaScript eval calls",
+      "affectedAssertions": ["VAL-TIMELINE-002", "VAL-TIMELINE-003", "VAL-TIMELINE-004", "VAL-TIMELINE-005"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 4 assertions: 3 passed, 1 failed. VAL-TIMELINE-002 (Metric Progression Line Charts) PASSED: Y-axis [0,1] confirmed, phase shading present and non-overlapping, values match results.json exactly for 5 spot-checked experiments, chronological ordering correct. VAL-TIMELINE-003 (Scoring Discontinuity Indicator) PASSED: Red dashed vertical line at Phase 4/5 boundary (x=293.5) with annotation '⚠ Scoring formula change (scores not directly comparable)' always visible. VAL-TIMELINE-004 (Validation-Failed Experiments in Charts) PASSED: 11 validation_failed experiments shown as red X markers (#D32F2F), excluded from all line traces, no crash. VAL-TIMELINE-005 (Non-Contiguous Experiment IDs) FAILED: Line is drawn between exp_lme_0000 (x=358) and exp_lme_0002 (x=360) without a gap at x=359 for missing exp_lme_0001."
+}

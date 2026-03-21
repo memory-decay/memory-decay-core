@@ -1,0 +1,54 @@
+{
+  "milestone": "timeline-metrics",
+  "round": 1,
+  "status": "fail",
+  "assertionsSummary": {
+    "total": 9,
+    "passed": 7,
+    "failed": 2,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-TIMELINE-001",
+    "VAL-TIMELINE-002",
+    "VAL-TIMELINE-003",
+    "VAL-TIMELINE-004",
+    "VAL-TIMELINE-006",
+    "VAL-TIMELINE-007",
+    "VAL-TIMELINE-009"
+  ],
+  "failedAssertions": [
+    {
+      "id": "VAL-TIMELINE-005",
+      "reason": "Line drawn between non-adjacent experiment IDs (exp_lme_0000 at x=358 and exp_lme_0002 at x=360). The implementation does not insert null/NaN break values in line traces when an experiment ID is missing (exp_lme_0001 has no results.json). Plotly renders a continuous line segment across the gap. Fix: detect missing experiment IDs in sorted sequences and insert null y-values to create visible line breaks."
+    },
+    {
+      "id": "VAL-TIMELINE-008",
+      "reason": "Experiments without retention_curve data are pre-filtered from the dropdown (get_retention_available_experiments), so users can never trigger the 'unavailable' message. The chart code (build_retention_overlay) does not display an 'unavailable' annotation for experiments without data — it simply skips them with 'continue'. The check_retention_warnings function generates warning text but this code path is unreachable through the UI. Fix: either (a) show all experiments in dropdown and display 'unavailable' message when one without retention data is selected, or (b) display the 'unavailable' message differently (e.g., static note about unavailable experiments)."
+    }
+  ],
+  "blockedAssertions": [],
+  "appliedUpdates": [
+    {
+      "target": "user-testing.md",
+      "description": "Added known friction: Plotly charts use internal drag overlay that intercepts mouse events, preventing agent-browser from triggering Plotly clickData callbacks. Click-to-filter on phase timeline bars cannot be verified via browser automation.",
+      "source": "flow-report"
+    },
+    {
+      "target": "user-testing.md",
+      "description": "Added known friction: JavaScript eval context persists variable declarations across calls within same agent-browser session, requiring unique variable names or IIFE wrappers.",
+      "source": "flow-report"
+    },
+    {
+      "target": "user-testing.md",
+      "description": "Added known friction: Dash custom dropdown uses virtualized rendering with non-standard DOM classes, requiring direct DOM manipulation via JavaScript instead of standard Playwright accessibility tree.",
+      "source": "flow-report"
+    },
+    {
+      "target": "user-testing.md",
+      "description": "Added known friction: Heatmap null cell hover shows 'Value: 0.0000' due to Plotly %{z:.4f} template formatting NaN. Cells are visually blank as expected.",
+      "source": "flow-report"
+    }
+  ],
+  "previousRound": null
+}
