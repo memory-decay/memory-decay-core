@@ -13,7 +13,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
+import re
+from collections import Counter
 from pathlib import Path
 from typing import Optional
 
@@ -134,6 +137,115 @@ def run_simulation(
         idx = ((tick // interval) - 1) % len(eligible)
         return eligible[idx]
 
+    def _importance_for(node_id: str) -> float:
+        node = graph._graph.nodes.get(node_id)
+        if not node or node.get("type") in ("unknown", None):
+            return 0.0
+
+        alpha = float(params.get("alpha", 1.0))
+        rho = float(params.get("stability_weight", 0.0))
+        denom = alpha + rho
+        if denom <= 0.0:
+            return 0.0
+
+        impact = max(float(node.get("impact", 0.0)), 0.0)
+        stability = max(float(node.get("stability_score", 0.0)), 0.0)
+        importance = (impact * alpha + stability * rho) / denom
+        return min(max(importance, 0.0), 1.0)
+
+    def _scaled_boost(node_id: str, base_boost: float) -> float:
+        boost = float(base_boost)
+        if not (
+            params.get("importance_scaled_boost", False)
+            or params.get("importance_scaled_retrieval_boost", False)
+        ):
+            return boost
+
+        min_scale = max(float(params.get("importance_boost_min_scale", 0.5)), 0.0)
+        max_scale = max(float(params.get("importance_boost_max_scale", 1.0)), min_scale)
+        importance = _importance_for(node_id)
+        scale = min_scale + (max_scale - min_scale) * importance
+        return boost * scale
+
+    def _lexical_tokens(text: str) -> list[str]:
+        return re.findall(r"[0-9A-Za-z가-힣]+", text.lower())
+
+    def _bm25_scores(query_text: str, candidate_ids: list[str]) -> dict[str, float]:
+        query_terms = list(dict.fromkeys(_lexical_tokens(query_text)))
+        if not query_terms or not candidate_ids:
+            return {}
+
+        tokenized_docs: dict[str, list[str]] = {}
+        for cid in candidate_ids:
+            node = graph.get_node(cid)
+            content = node.get("content", "") if node else ""
+            tokenized_docs[cid] = _lexical_tokens(content)
+
+        avgdl = sum(len(tokens) for tokens in tokenized_docs.values()) / max(len(tokenized_docs), 1)
+        avgdl = max(avgdl, 1.0)
+
+        doc_freq: Counter[str] = Counter()
+        for tokens in tokenized_docs.values():
+            doc_freq.update(set(tokens))
+
+        scores: dict[str, float] = {}
+        k1 = 1.2
+        b = 0.75
+        n_docs = len(tokenized_docs)
+        for cid, tokens in tokenized_docs.items():
+            tf = Counter(tokens)
+            dl = max(len(tokens), 1)
+            score = 0.0
+            for term in query_terms:
+                freq = tf.get(term, 0)
+                if freq == 0:
+                    continue
+                df = doc_freq.get(term, 0)
+                idf = math.log(1.0 + (n_docs - df + 0.5) / (df + 0.5))
+                denom = freq + k1 * (1.0 - b + b * dl / avgdl)
+                score += idf * (freq * (k1 + 1.0)) / max(denom, 1e-9)
+            scores[cid] = score
+        return scores
+
+    def _apply_fractional_hybrid_reinforcement(
+        expected_id: str,
+        *,
+        retrieval_amount: float,
+        storage_scale: float,
+        current_tick: int,
+    ) -> None:
+        graph.re_activate(
+            expected_id,
+            retrieval_amount,
+            source="retrieval_consolidation",
+            reinforce=False,
+            current_tick=current_tick,
+            reinforcement_gain_direct=params["reinforcement_gain_direct"],
+            reinforcement_gain_assoc=params["reinforcement_gain_assoc"],
+            stability_cap=params["stability_cap"],
+            score_mode="retrieval_only",
+        )
+        storage_amount = retrieval_amount * max(storage_scale, 0.0)
+        if storage_amount > 0.0:
+            graph.re_activate(
+                expected_id,
+                storage_amount,
+                source="retrieval_consolidation",
+                reinforce=False,
+                current_tick=current_tick,
+                reinforcement_gain_direct=params["reinforcement_gain_direct"],
+                reinforcement_gain_assoc=params["reinforcement_gain_assoc"],
+                stability_cap=params["stability_cap"],
+                score_mode="storage_only",
+            )
+        graph.reinforce_memory(
+            expected_id,
+            reinforcement_gain=float(params["reinforcement_gain_direct"]),
+            stability_cap=float(params["stability_cap"]),
+            current_tick=current_tick,
+            count_as_retrieval=True,
+        )
+
     def apply_retrieval_consolidation(current_tick: int) -> None:
         """Boost test memories that were successfully recalled at this tick.
 
@@ -142,28 +254,183 @@ def run_simulation(
         """
         retrieval_boost = params.get("retrieval_boost", 0.10)
         activation_weight = params.get("activation_weight", 0.5)
+        retrieval_mode = params.get(
+            "retrieval_consolidation_mode",
+            "activation_and_stability",
+        )
         for query_text, expected_id in test_queries:
             # Query with same parameters as evaluator
-            results = graph.query_by_similarity(
-                query_text,
-                top_k=5,
-                current_tick=current_tick,
-                activation_weight=activation_weight,
-                assoc_boost=params.get("assoc_boost", 0.0),
-            )
+            # Two-stage BM25 re-ranking: get larger initial set, then re-rank with BM25
+            if retrieval_mode == "retrieval_bm25_rerank":
+                initial_k = params.get("bm25_rerank_initial_k", 20)
+                final_k = params.get("bm25_rerank_final_k", 5)
+                bm25_weight = params.get("bm25_rerank_weight", 0.5)
+                results = graph.query_by_similarity(
+                    query_text,
+                    top_k=initial_k,
+                    current_tick=current_tick,
+                    activation_weight=activation_weight,
+                    assoc_boost=params.get("assoc_boost", 0.0),
+                )
+                if results:
+                    cand_ids = [rid for rid, _ in results]
+                    bm25 = _bm25_scores(query_text, cand_ids)
+                    if bm25:
+                        cos_scores = {rid: score for rid, score in results}
+                        max_cos = max(cos_scores.values())
+                        min_cos = min(cos_scores.values())
+                        max_bm = max(bm25.values())
+                        # Combine: normalize both to [0,1], then weighted sum
+                        combined = {}
+                        for rid in cand_ids:
+                            norm_cos = (cos_scores[rid] - min_cos) / max(max_cos - min_cos, 1e-8)
+                            norm_bm = bm25.get(rid, 0.0) / max(max_bm, 1e-8)
+                            combined[rid] = (1 - bm25_weight) * norm_cos + bm25_weight * norm_bm
+                        results = sorted(combined.items(), key=lambda x: x[1], reverse=True)[:final_k]
+                else:
+                    results = []
+            else:
+                results = graph.query_by_similarity(
+                    query_text,
+                    top_k=params.get("retrieval_top_k", 5),
+                    current_tick=current_tick,
+                    activation_weight=activation_weight,
+                    assoc_boost=params.get("assoc_boost", 0.0),
+                )
             result_ids = [rid for rid, _ in results]
             if expected_id in result_ids:
-                # Successful recall — boost this memory (testing effect)
-                graph.re_activate(
-                    expected_id,
-                    retrieval_boost,
-                    source="retrieval_consolidation",
-                    reinforce=True,
-                    current_tick=current_tick,
-                    reinforcement_gain_direct=params["reinforcement_gain_direct"],
-                    reinforcement_gain_assoc=params["reinforcement_gain_assoc"],
-                    stability_cap=params["stability_cap"],
-                )
+                rank = result_ids.index(expected_id) + 1
+                if retrieval_mode == "stability_only_direct":
+                    graph.reinforce_memory(
+                        expected_id,
+                        reinforcement_gain=float(params["reinforcement_gain_direct"]),
+                        stability_cap=float(params["stability_cap"]),
+                        current_tick=current_tick,
+                        count_as_retrieval=True,
+                    )
+                elif retrieval_mode == "retrieval_only":
+                    graph.re_activate(
+                        expected_id,
+                        _scaled_boost(expected_id, retrieval_boost),
+                        source="retrieval_consolidation",
+                        reinforce=True,
+                        current_tick=current_tick,
+                        reinforcement_gain_direct=params["reinforcement_gain_direct"],
+                        reinforcement_gain_assoc=params["reinforcement_gain_assoc"],
+                        stability_cap=params["stability_cap"],
+                        score_mode="retrieval_only",
+                    )
+                elif retrieval_mode == "retrieval_top1_fraction":
+                    if rank != 1:
+                        continue
+                    retrieval_amount = _scaled_boost(expected_id, retrieval_boost)
+                    _apply_fractional_hybrid_reinforcement(
+                        expected_id,
+                        retrieval_amount=retrieval_amount,
+                        storage_scale=float(params.get("retrieval_storage_boost_scale", 0.25)),
+                        current_tick=current_tick,
+                    )
+                elif retrieval_mode == "retrieval_rank_scaled_fraction":
+                    retrieval_amount = _scaled_boost(expected_id, retrieval_boost)
+                    rank_power = max(float(params.get("retrieval_rank_power", 1.0)), 0.0)
+                    min_rank_scale = max(float(params.get("retrieval_rank_min_scale", 0.25)), 0.0)
+                    rank_scale = max(min_rank_scale, 1.0 / (rank ** rank_power))
+                    retrieval_amount *= rank_scale
+                    _apply_fractional_hybrid_reinforcement(
+                        expected_id,
+                        retrieval_amount=retrieval_amount,
+                        storage_scale=float(params.get("retrieval_storage_boost_scale", 0.25)),
+                        current_tick=current_tick,
+                    )
+                elif retrieval_mode == "retrieval_capped_fraction":
+                    cap = min(max(float(params.get("retrieval_state_cap", 0.85)), 0.0), 1.0)
+                    node = graph.get_node(expected_id)
+                    current_retrieval = float(
+                        node.get("retrieval_score", node.get("activation_score", 0.0))
+                    ) if node else 0.0
+                    retrieval_amount = min(
+                        _scaled_boost(expected_id, retrieval_boost),
+                        max(cap - current_retrieval, 0.0),
+                    )
+                    _apply_fractional_hybrid_reinforcement(
+                        expected_id,
+                        retrieval_amount=retrieval_amount,
+                        storage_scale=float(params.get("retrieval_storage_boost_scale", 0.25)),
+                        current_tick=current_tick,
+                    )
+                elif retrieval_mode == "retrieval_with_storage_fraction":
+                    retrieval_amount = _scaled_boost(expected_id, retrieval_boost)
+                    _apply_fractional_hybrid_reinforcement(
+                        expected_id,
+                        retrieval_amount=retrieval_amount,
+                        storage_scale=float(params.get("retrieval_storage_boost_scale", 0.25)),
+                        current_tick=current_tick,
+                    )
+                elif retrieval_mode == "retrieval_margin_bm25_fraction":
+                    retrieval_amount = _scaled_boost(expected_id, retrieval_boost)
+                    graph.re_activate(
+                        expected_id,
+                        retrieval_amount,
+                        source="retrieval_consolidation",
+                        reinforce=False,
+                        current_tick=current_tick,
+                        reinforcement_gain_direct=params["reinforcement_gain_direct"],
+                        reinforcement_gain_assoc=params["reinforcement_gain_assoc"],
+                        stability_cap=params["stability_cap"],
+                        score_mode="retrieval_only",
+                    )
+                    graph.reinforce_memory(
+                        expected_id,
+                        reinforcement_gain=float(params["reinforcement_gain_direct"]),
+                        stability_cap=float(params["stability_cap"]),
+                        current_tick=current_tick,
+                        count_as_retrieval=True,
+                    )
+                    if rank != 1:
+                        continue
+                    top_score = results[0][1]
+                    second_score = results[1][1] if len(results) > 1 else 0.0
+                    margin = top_score - second_score
+                    margin_threshold = float(params.get("retrieval_margin_threshold", 0.2))
+                    if margin < margin_threshold:
+                        continue
+                    bm25_scores = _bm25_scores(query_text, result_ids)
+                    target_bm25 = bm25_scores.get(expected_id, 0.0)
+                    bm25_threshold = float(params.get("retrieval_bm25_min_score", 0.01))
+                    if target_bm25 < bm25_threshold:
+                        continue
+                    if bm25_scores:
+                        best_lexical = max(bm25_scores, key=bm25_scores.get)
+                        if best_lexical != expected_id:
+                            continue
+                    storage_amount = retrieval_amount * max(
+                        float(params.get("retrieval_storage_boost_scale", 0.25)),
+                        0.0,
+                    )
+                    if storage_amount > 0.0:
+                        graph.re_activate(
+                            expected_id,
+                            storage_amount,
+                            source="retrieval_consolidation",
+                            reinforce=False,
+                            current_tick=current_tick,
+                            reinforcement_gain_direct=params["reinforcement_gain_direct"],
+                            reinforcement_gain_assoc=params["reinforcement_gain_assoc"],
+                            stability_cap=params["stability_cap"],
+                            score_mode="storage_only",
+                        )
+                else:
+                    # Successful recall — boost this memory (testing effect)
+                    graph.re_activate(
+                        expected_id,
+                        _scaled_boost(expected_id, retrieval_boost),
+                        source="retrieval_consolidation",
+                        reinforce=True,
+                        current_tick=current_tick,
+                        reinforcement_gain_direct=params["reinforcement_gain_direct"],
+                        reinforcement_gain_assoc=params["reinforcement_gain_assoc"],
+                        stability_cap=params["stability_cap"],
+                    )
 
     def apply_reactivation(tick: int) -> None:
         if reactivation_policy == "none":
@@ -183,7 +450,7 @@ def run_simulation(
             target_id = rng.choice(candidates)
             graph.re_activate(
                 target_id,
-                reactivation_boost,
+                _scaled_boost(target_id, reactivation_boost),
                 source="direct",
                 reinforce=True,
                 current_tick=engine.current_tick,
@@ -202,7 +469,7 @@ def run_simulation(
                 if train_target:
                     graph.re_activate(
                         train_target,
-                        reactivation_boost,
+                        _scaled_boost(train_target, reactivation_boost),
                         source="direct",
                         reinforce=True,
                         current_tick=engine.current_tick,
@@ -222,7 +489,7 @@ def run_simulation(
                     test_target = test_eligible[idx]
                     graph.re_activate(
                         test_target,
-                        reactivation_boost,
+                        _scaled_boost(test_target, reactivation_boost),
                         source="direct",
                         reinforce=True,
                         current_tick=engine.current_tick,
@@ -241,7 +508,7 @@ def run_simulation(
                 if train_target:
                     graph.re_activate(
                         train_target,
-                        reactivation_boost,
+                        _scaled_boost(train_target, reactivation_boost),
                         source="direct",
                         reinforce=True,
                         current_tick=engine.current_tick,
@@ -262,7 +529,7 @@ def run_simulation(
                     test_target = test_eligible[idx]
                     graph.re_activate(
                         test_target,
-                        reactivation_boost,
+                        _scaled_boost(test_target, reactivation_boost),
                         source="direct",
                         reinforce=True,
                         current_tick=engine.current_tick,
@@ -291,7 +558,7 @@ def run_simulation(
         if target_id:
             graph.re_activate(
                 target_id,
-                reactivation_boost,
+                _scaled_boost(target_id, reactivation_boost),
                 source="direct",
                 reinforce=True,
                 current_tick=engine.current_tick,
