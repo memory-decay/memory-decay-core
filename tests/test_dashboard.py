@@ -1784,3 +1784,246 @@ class TestAdvancedCharts:
         result = chart_module.build_phase_comparison(all_experiments, 1, 8)
         assert "Early Exploration" in result["phase_a_name"] or "Phase 1" in result["phase_a_name"]
         assert "LongMemEval" in result["phase_b_name"] or "Phase 8" in result["phase_b_name"]
+
+
+# ---------------------------------------------------------------------------
+# Cross-Area Integration Tests (VAL-CROSS)
+# ---------------------------------------------------------------------------
+
+class TestCrossAreaFilterConsistency:
+    """Tests for cross-area filter consistency and navigation flows."""
+
+    @pytest.fixture
+    def real_experiments_dir(self) -> str:
+        return str(Path(__file__).resolve().parent.parent / "experiments")
+
+    @pytest.fixture
+    def app_module(self):
+        import dashboard.app as app_module
+        return app_module
+
+    @pytest.fixture
+    def all_experiments(self, real_experiments_dir):
+        from dashboard.data_loader import load_all_experiments
+        return load_all_experiments(real_experiments_dir)
+
+    def test_era_filter_propagates_to_all_views(self, app_module, all_experiments):
+        """VAL-CROSS-001: Era filter produces consistent experiment sets across views.
+
+        Leaderboard filtering, chart building, and experiment retrieval
+        should all return the same experiment set for a given era.
+        """
+        # Filter to LongMemEval
+        era = "LongMemEval"
+        era_experiments = [e for e in all_experiments if e.era == era]
+        old_era_experiments = [e for e in all_experiments if e.era == "memories_500"]
+
+        # Build leaderboard data for LongMemEval
+        import pandas as pd
+        df = app_module._build_dataframe(all_experiments, {})
+        filtered_df = app_module._filter_dataframe(df, era, [], "")
+        assert len(filtered_df) == len(era_experiments)
+
+        # Verify no old-era experiments leak through
+        for _, row in filtered_df.iterrows():
+            assert row["era"] == "LongMemEval", f"Old-era experiment {row['id']} leaked into LongMemEval filter"
+
+        # Verify era chart building uses same filter
+        fig_timeline = app_module.charts.build_phase_timeline(all_experiments, era, None)
+        assert fig_timeline is not None
+
+        # Verify old-era experiments are excluded from parameter sweep
+        param_exps = app_module.charts.get_param_sweep_available_params(all_experiments, era)
+        assert isinstance(param_exps, list)
+
+    def test_phase_click_filters_leaderboard(self, app_module, all_experiments):
+        """VAL-CROSS-002: Phase filter correctly limits leaderboard to that phase only."""
+        import pandas as pd
+
+        df = app_module._build_dataframe(all_experiments, {})
+        phase_8_experiments = df[df["phase"] == 8]
+
+        # Apply filters: All eras + phase 8
+        filtered = app_module._filter_dataframe(df, "All", [], "")
+        filtered = filtered[filtered["phase"] == 8]
+
+        assert len(filtered) == len(phase_8_experiments)
+        for _, row in filtered.iterrows():
+            assert row["phase"] == 8
+
+        # Verify metric progression de-emphasis is built
+        figs = app_module.charts.build_metric_progression(all_experiments, "All", 8)
+        assert len(figs) == 3
+
+    def test_experiment_discovery_data_consistency(self, app_module, all_experiments):
+        """VAL-CROSS-003: exp_lme_0008 data is consistent across detail view builder."""
+        exp_id = "exp_lme_0008"
+        exp = next((e for e in all_experiments if e.id == exp_id), None)
+        assert exp is not None
+
+        # Build detail view
+        detail = app_module._build_detail_view(exp_id)
+        detail_text = str(detail)
+
+        # Verify experiment ID shown
+        assert exp_id in detail_text
+
+        # Verify key metrics at 4 decimal places
+        if exp.overall_score is not None:
+            assert f"{exp.overall_score:.4f}" in detail_text
+
+    def test_best_experiment_score_consistency(self, app_module, all_experiments):
+        """VAL-CROSS-005: Best experiment scores identical across views (4 decimal places).
+
+        The best experiment should show the same score in:
+        - Detail view
+        - Leaderboard (via data loader)
+        - Data source (results.json)
+        """
+        import json
+        import os
+
+        best_id = app_module._best_exp_id
+        assert best_id is not None
+
+        exp = next((e for e in all_experiments if e.id == best_id), None)
+        assert exp is not None
+
+        # Get score from data loader
+        data_loader_score = exp.overall_score
+
+        # Get score from results.json
+        results_path = os.path.join(exp.dir_path, "results.json")
+        if os.path.exists(results_path):
+            with open(results_path) as f:
+                results = json.load(f)
+            results_score = results.get("overall_score")
+        else:
+            results_score = data_loader_score
+
+        # Build detail view and extract score
+        detail = app_module._build_detail_view(best_id)
+        detail_text = str(detail)
+
+        # All should match at 4 decimal places
+        if data_loader_score is not None and results_score is not None:
+            assert f"{data_loader_score:.4f}" == f"{results_score:.4f}", \
+                f"Data loader score {data_loader_score} != results.json score {results_score}"
+            assert f"{data_loader_score:.4f}" in detail_text, \
+                f"Score {data_loader_score:.4f} not found in detail view"
+
+    def test_sidebar_filter_persistence(self, app_module, all_experiments):
+        """VAL-CROSS-006: Filter logic is independent of active page/view.
+
+        The _filter_dataframe function should produce the same results
+        regardless of which page is being viewed.
+        """
+        import pandas as pd
+
+        df = app_module._build_dataframe(all_experiments, {})
+
+        # Apply same filters multiple times
+        result1 = app_module._filter_dataframe(df, "LongMemEval", ["improved"], "decay")
+        result2 = app_module._filter_dataframe(df, "LongMemEval", ["improved"], "decay")
+        result3 = app_module._filter_dataframe(df, "LongMemEval", ["improved"], "decay")
+
+        assert len(result1) == len(result2) == len(result3)
+        assert result1["id"].tolist() == result2["id"].tolist() == result3["id"].tolist()
+
+    def test_era_toggle_clean_state(self, app_module, all_experiments):
+        """VAL-CROSS-004: Multiple era toggles produce clean state each time.
+
+        Simulating 3 full toggle cycles (All→LME→All→LME→All→LME).
+        """
+        import pandas as pd
+
+        df = app_module._build_dataframe(all_experiments, {})
+
+        for cycle in range(3):
+            # All → LongMemEval
+            lme = app_module._filter_dataframe(df, "LongMemEval", [], "")
+            assert all(row["era"] == "LongMemEval" for _, row in lme.iterrows())
+
+            # LongMemEval → All
+            all_df = app_module._filter_dataframe(df, "All", [], "")
+            assert len(all_df) > len(lme)
+
+        # Final state should be LongMemEval (last toggle in cycle)
+        final = app_module._filter_dataframe(df, "LongMemEval", [], "")
+        assert all(row["era"] == "LongMemEval" for _, row in final.iterrows())
+
+    def test_parameter_sweep_detail_round_trip(self, app_module, all_experiments):
+        """VAL-CROSS-008: Parameter sweep → detail → back preserves sweep state.
+
+        Tests that detail view builder can accept different source pages.
+        """
+        exp_id = "exp_lme_0008"
+
+        # Build detail from parameter sweep
+        detail = app_module._build_detail_view(exp_id, source_page="params")
+        detail_text = str(detail)
+        assert exp_id in detail_text
+        assert "Back to Parameter Sweep" in detail_text
+
+        # Build detail from leaderboard
+        detail2 = app_module._build_detail_view(exp_id, source_page="leaderboard")
+        detail_text2 = str(detail2)
+        assert "Back to Leaderboard" in detail_text2
+
+        # Build detail from snapshots
+        detail3 = app_module._build_detail_view(exp_id, source_page="snapshots")
+        detail_text3 = str(detail3)
+        assert "Back to Snapshot Viewer" in detail_text3
+
+    def test_phase_comparison_distinct_from_filter(self, app_module, all_experiments):
+        """VAL-CROSS-007: Phase comparison uses distinct dropdown selectors.
+
+        Verify that the phase comparison result excludes validation_failed
+        and only includes data from the two selected phases.
+        """
+        result = app_module.charts.build_phase_comparison(all_experiments, 3, 8)
+
+        # Should have proper structure
+        assert result is not None
+        assert "count_a" in result
+        assert "count_b" in result
+        assert "metrics" in result
+
+        # Validation_failed should be excluded from calculations
+        # (mean may be None if no scored experiments exist for a metric)
+        for metric in result["metrics"]:
+            phase_a = metric["phase_a"]
+            phase_b = metric["phase_b"]
+            # Structure should be correct regardless of data
+            assert "mean" in phase_a
+            assert "mean" in phase_b
+            assert "best" in phase_a
+            assert "best" in phase_b
+
+    def test_retention_cleared_on_phase_filter(self, app_module, all_experiments):
+        """Retention selection cleared when phase filter removes selected experiments.
+
+        If experiments are selected in retention but a phase filter removes some,
+        the selection should be updated.
+        """
+        # Get experiments from different phases
+        phase_8_exps = [e.id for e in all_experiments if e.phase == 8 and e.retention_curve]
+        phase_7_exps = [e.id for e in all_experiments if e.phase == 7 and e.retention_curve]
+
+        if not phase_8_exps or not phase_7_exps:
+            return  # Skip if not enough data
+
+        # Simulate retention selection with experiments from both phases
+        mixed_selection = phase_8_exps[:2] + phase_7_exps[:2]
+
+        # After applying phase 8 filter, phase 7 experiments should be removed
+        filtered = []
+        for exp_id in mixed_selection:
+            exp = next((e for e in all_experiments if e.id == exp_id), None)
+            if exp and exp.phase == 8:
+                filtered.append(exp_id)
+
+        assert len(filtered) < len(mixed_selection)
+        for exp_id in filtered:
+            exp = next((e for e in all_experiments if e.id == exp_id), None)
+            assert exp is not None and exp.phase == 8

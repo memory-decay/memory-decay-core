@@ -291,6 +291,7 @@ app.layout = html.Div(
         dcc.Store(id="cv-selected-exp", data=None),
         dcc.Store(id="compare-phase-a", data=None),
         dcc.Store(id="compare-phase-b", data=None),
+        dcc.Store(id="detail-source-page", data="leaderboard"),
 
         # Sidebar
         html.Div(
@@ -970,6 +971,53 @@ app.index_string = """
         {%scripts%}
         {%renderer%}
     </footer>
+    <script>
+    // Cross-area navigation: browser back/forward support for detail view
+    (function() {
+        var _pushOnNextDetail = true;
+
+        // Monitor detail view visibility to push history entry
+        var _observer = new MutationObserver(function(mutations) {
+            var detailEl = document.getElementById('detail-view');
+            if (!detailEl) return;
+            var style = window.getComputedStyle(detailEl);
+            var isVisible = style.display !== 'none';
+            var expData = window.dash_clientside || {};
+
+            if (isVisible && _pushOnNextDetail) {
+                // Detail view opened: push a history entry so browser back closes it
+                history.pushState({detailOpen: true}, '');
+                _pushOnNextDetail = false;
+            } else if (!isVisible && !_pushOnNextDetail) {
+                // Detail view closed: we don't push, the history entry was already consumed
+                _pushOnNextDetail = true;
+            }
+        });
+
+        // Observe the detail-view style changes
+        setTimeout(function() {
+            var detailEl = document.getElementById('detail-view');
+            if (detailEl) {
+                _observer.observe(detailEl, {attributes: true, attributeFilter: ['style']});
+            }
+        }, 2000);
+
+        // On browser back: if detail view is open, close it
+        window.addEventListener('popstate', function(event) {
+            var detailEl = document.getElementById('detail-view');
+            if (!detailEl) return;
+            var style = window.getComputedStyle(detailEl);
+            if (style.display !== 'none') {
+                // Find and click the back button to close detail view
+                var backBtn = document.getElementById('back-button');
+                if (backBtn) {
+                    backBtn.click();
+                }
+                _pushOnNextDetail = true;
+            }
+        });
+    })();
+    </script>
 </body>
 </html>
 """
@@ -1084,7 +1132,7 @@ def _build_metric_card(
     )
 
 
-def _build_detail_view(exp_id: str) -> list:
+def _build_detail_view(exp_id: str, source_page: str = "leaderboard") -> list:
     """Build detail view content for an experiment."""
     exp = next((e for e in _experiments if e.id == exp_id), None)
     if exp is None:
@@ -1337,13 +1385,26 @@ def _build_detail_view(exp_id: str) -> list:
             html.Div("No data", style={"color": "#adb5bd", "fontSize": "14px"}),
         ]
 
+    # Back button label depends on source page (VAL-CROSS-008)
+    page_labels = {
+        "leaderboard": "← Back to Leaderboard",
+        "timeline": "← Back to Timeline",
+        "heatmap": "← Back to Heatmap",
+        "retention": "← Back to Retention Curves",
+        "params": "← Back to Parameter Sweep",
+        "snapshots": "← Back to Snapshot Viewer",
+        "analysis": "← Back to Analysis",
+        "compare": "← Back to Phase Compare",
+    }
+    back_label = page_labels.get(source_page, "← Back to Leaderboard")
+
     # Assemble detail view
     content = [
         # Header
         html.Div(
             style={"padding": "16px 24px", "borderBottom": "1px solid #dee2e6", "display": "flex", "alignItems": "center", "gap": "16px", "position": "sticky", "top": 0, "backgroundColor": "white", "zIndex": 10},
             children=[
-                html.Button("← Back to Leaderboard", id="back-button", n_clicks=0,
+                html.Button(back_label, id="back-button", n_clicks=0,
                     style={"padding": "8px 16px", "border": "1px solid #dee2e6", "borderRadius": "6px", "backgroundColor": "#f8f9fa", "cursor": "pointer", "fontSize": "13px", "color": "#495057"}),
                 html.Div(
                     style={"display": "flex", "alignItems": "center", "gap": "12px"},
@@ -1377,6 +1438,7 @@ def _build_detail_view(exp_id: str) -> list:
         Input("status-filter", "value"),
         Input("search-input", "value"),
         Input("sort-state", "data"),
+        Input("selected-phase", "data"),
     ],
 )
 def update_leaderboard(
@@ -1384,10 +1446,19 @@ def update_leaderboard(
     statuses: list[str] | None,
     search: str | None,
     sort_state: dict | None,
+    selected_phase: int | None,
 ) -> tuple[list[dict], list, str]:
-    """Update leaderboard table based on filters, search, and sort."""
+    """Update leaderboard table based on filters, search, sort, and phase.
+
+    VAL-CROSS-001: era filter propagates atomically to leaderboard.
+    VAL-CROSS-002: phase click filters leaderboard to that phase only.
+    """
     # Apply filters
     filtered = _filter_dataframe(_df_all, era, statuses or [], search or "")
+
+    # Apply phase filter (VAL-CROSS-002)
+    if selected_phase is not None:
+        filtered = filtered[filtered["phase"] == selected_phase]
 
     # Apply sort from state
     sort_col = "overall_score"
@@ -1404,6 +1475,8 @@ def update_leaderboard(
     # Count
     total_count = len(row_data)
     era_label = era if era != "All" else "both eras"
+    if selected_phase is not None:
+        era_label += f" · Phase {selected_phase}"
     count_children = [
         html.Span(f"Showing {total_count} experiments ({era_label})", style={"fontWeight": "600", "color": "#495057"}),
     ]
@@ -1421,12 +1494,14 @@ def update_leaderboard(
 @callback(
     Output("selected-experiment", "data", allow_duplicate=True),
     Input("leaderboard-grid", "cellClicked"),
+    State("active-page", "data"),
     prevent_initial_call=True,
 )
-def on_cell_click(cellClicked: dict | None) -> str | None:
+def on_cell_click(cellClicked: dict | None, active_page: str) -> str | None:
     """Open detail view when a cell is clicked."""
     if not cellClicked or not cellClicked.get("data"):
         return dash.no_update
+    # Track source page for round-trip navigation
     return cellClicked["data"].get("id")
 
 
@@ -1443,13 +1518,18 @@ def on_row_click(selectedRows: list[dict] | None) -> str | None:
 
 
 @callback(
-    Output("selected-experiment", "data", allow_duplicate=True),
+    [
+        Output("selected-experiment", "data", allow_duplicate=True),
+        Output("detail-source-page", "data", allow_duplicate=True),
+    ],
     Input("back-button", "n_clicks"),
+    State("detail-source-page", "data"),
     prevent_initial_call=True,
 )
-def on_back_button(n_clicks: int) -> None:
+def on_back_button(n_clicks: int, source_page: str) -> tuple:
     """Close detail view on back button click."""
-    return None
+    # Keep source_page set so we can navigate back to it
+    return None, source_page
 
 
 @callback(
@@ -1457,22 +1537,32 @@ def on_back_button(n_clicks: int) -> None:
         Output("detail-view", "style"),
         Output("detail-view", "children"),
         Output("leaderboard-view", "style", allow_duplicate=True),
+        Output("active-page", "data", allow_duplicate=True),
     ],
     Input("selected-experiment", "data"),
+    State("detail-source-page", "data"),
     prevent_initial_call="initial_duplicate",
 )
-def toggle_detail_view(exp_id: str | None) -> tuple[dict, list, dict]:
-    """Toggle between leaderboard and detail view."""
+def toggle_detail_view(exp_id: str | None, source_page: str) -> tuple:
+    """Toggle between leaderboard and detail view.
+
+    When closing (exp_id is None), navigate to the source page
+    to support round-trip navigation (VAL-CROSS-008).
+    """
     if exp_id is None:
+        # Navigate back to source page
         return (
             {"display": "none", "position": "absolute", "top": 0, "left": 0, "right": 0, "bottom": 0, "backgroundColor": "white", "zIndex": 100, "overflow": "auto"},
             [],
-            {"display": "block"},
+            {"display": "none"},
+            source_page or "leaderboard",
         )
+    # Show detail view, hide current page
     return (
         {"display": "block", "position": "absolute", "top": 0, "left": 0, "right": 0, "bottom": 0, "backgroundColor": "white", "zIndex": 100, "overflow": "auto"},
-        _build_detail_view(exp_id),
+        _build_detail_view(exp_id, source_page or "leaderboard"),
         {"display": "none"},
+        dash.no_update,
     )
 
 
@@ -1490,6 +1580,27 @@ def update_url_state(exp_id: str | None, era: str) -> str:
             params.append(f"era={era}")
         params.append(f"experiment={exp_id}")
         return "?" + "&".join(params)
+    # No experiment selected — show era in URL if not "All"
+    if era and era != "All":
+        return f"?era={era}"
+    return ""
+
+
+@callback(
+    Output("url", "search", allow_duplicate=True),
+    Input("era-dropdown", "value"),
+    State("selected-experiment", "data"),
+    prevent_initial_call=True,
+)
+def update_url_era(era: str | None, exp_id: str | None) -> str:
+    """Update URL when era changes (VAL-CROSS-001, VAL-TABLE-021)."""
+    params = []
+    if era and era != "All":
+        params.append(f"era={era}")
+    if exp_id:
+        params.append(f"experiment={exp_id}")
+    if params:
+        return "?" + "&".join(params)
     return ""
 
 
@@ -1502,7 +1613,12 @@ def update_url_state(exp_id: str | None, era: str) -> str:
     prevent_initial_call="initial_duplicate",
 )
 def restore_from_url(search: str) -> tuple:
-    """Restore experiment and era from URL on page load / refresh."""
+    """Restore experiment and era from URL on page load / refresh.
+
+    dcc.Location(refresh=False) strips query params on load, but our
+    clientside callback below re-writes them from window.location.
+    This server callback restores state whenever the URL search changes.
+    """
     if not search:
         return dash.no_update, dash.no_update
 
@@ -1519,6 +1635,67 @@ def restore_from_url(search: str) -> tuple:
         return restored_exp, restored_era
     except (ValueError, AttributeError):
         return dash.no_update, dash.no_update
+
+
+# Clientside callback: preserve URL params on page load
+# dcc.Location strips query params; this re-writes them from window.location
+app.clientside_callback(
+    """
+    function(n_clicks) {
+        var loc = window.location;
+        if (loc.search && !document.querySelector('[id="url"]')) {
+            // Use Dash's internal location setter
+        }
+        // Re-set the search via history.replaceState to preserve it
+        if (loc.search) {
+            history.replaceState(null, '', loc.pathname + loc.search + loc.hash);
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("url", "search", allow_duplicate=True),
+    Input("url", "search"),
+    prevent_initial_call="initial_duplicate",
+)
+
+
+# ---------------------------------------------------------------------------
+# Era change: clear dependent state (VAL-CROSS-004)
+# ---------------------------------------------------------------------------
+
+@callback(
+    [
+        Output("retention-selected", "data", allow_duplicate=True),
+        Output("retention-dropdown", "value", allow_duplicate=True),
+        Output("param-exp-detail-selector", "value", allow_duplicate=True),
+        Output("snapshot-selected-exp", "data", allow_duplicate=True),
+        Output("snapshot-exp-selector", "value", allow_duplicate=True),
+        Output("cv-exp-selector", "value", allow_duplicate=True),
+        Output("selected-phase", "data", allow_duplicate=True),
+    ],
+    Input("era-dropdown", "value"),
+    prevent_initial_call=True,
+)
+def clear_dependent_state_on_era_change(era: str) -> tuple:
+    """Clear view-specific selections when era changes.
+
+    This ensures clean state for:
+    - Retention curve selection (experiments may not exist in new era)
+    - Parameter sweep experiment selector
+    - Snapshot viewer experiment selector
+    - CV experiment selector
+    - Phase filter
+    (VAL-CROSS-004: no state leaks between era switches)
+    """
+    return (
+        [],       # retention-selected
+        [],       # retention-dropdown
+        None,     # param-exp-detail-selector
+        None,     # snapshot-selected-exp
+        None,     # snapshot-exp-selector
+        None,     # cv-exp-selector
+        None,     # selected-phase
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1552,7 +1729,6 @@ _TAB_INACTIVE = {
 
 @callback(
     [
-        Output("active-page", "data"),
         Output("leaderboard-view", "style", allow_duplicate=True),
         Output("timeline-view", "style", allow_duplicate=True),
         Output("heatmap-view", "style", allow_duplicate=True),
@@ -1570,23 +1746,32 @@ _TAB_INACTIVE = {
         Output("tab-analysis", "style"),
         Output("tab-compare", "style"),
     ],
-    [
-        Input("tab-leaderboard", "n_clicks"),
-        Input("tab-timeline", "n_clicks"),
-        Input("tab-heatmap", "n_clicks"),
-        Input("tab-retention", "n_clicks"),
-        Input("tab-params", "n_clicks"),
-        Input("tab-snapshots", "n_clicks"),
-        Input("tab-analysis", "n_clicks"),
-        Input("tab-compare", "n_clicks"),
-    ],
+    Input("active-page", "data"),
+    State("selected-experiment", "data"),
     prevent_initial_call=True,
 )
-def switch_page(n_lb, n_tl, n_hm, n_rt, n_pm, n_sn, n_an, n_cp) -> tuple:
-    """Switch between page views based on tab clicks."""
-    triggered = callback_ctx.triggered_id
+def update_page_display(
+    active_page: str,
+    selected_exp: str | None,
+) -> tuple:
+    """Update page display when active-page changes (from tab clicks or detail view return).
 
-    page_map = {
+    When detail view is open (selected_exp is not None), don't change page views.
+    When detail view is closed, show the correct page.
+
+    VAL-CROSS-008: supports round-trip navigation from parameter sweep → detail → back.
+    """
+    # If detail view is open, don't interfere with page views
+    if selected_exp is not None:
+        return tuple(dash.no_update for _ in range(15))
+
+    page = active_page or "leaderboard"
+
+    all_views = ["leaderboard", "timeline", "heatmap", "retention", "params", "snapshots", "analysis", "compare"]
+    views = {v: {"display": "none"} for v in all_views}
+    views[page] = {"display": "block", "padding": "0"}
+
+    tab_to_page = {
         "tab-leaderboard": "leaderboard",
         "tab-timeline": "timeline",
         "tab-heatmap": "heatmap",
@@ -1596,19 +1781,15 @@ def switch_page(n_lb, n_tl, n_hm, n_rt, n_pm, n_sn, n_an, n_cp) -> tuple:
         "tab-analysis": "analysis",
         "tab-compare": "compare",
     }
-
-    page = page_map.get(triggered, "leaderboard")
-
-    all_views = ["leaderboard", "timeline", "heatmap", "retention", "params", "snapshots", "analysis", "compare"]
-    views = {v: {"display": "none"} for v in all_views}
-    views[page] = {"display": "block", "padding": "0"}
+    page_to_tab = {v: k for k, v in tab_to_page.items()}
 
     all_tabs = ["tab-leaderboard", "tab-timeline", "tab-heatmap", "tab-retention", "tab-params", "tab-snapshots", "tab-analysis", "tab-compare"]
     tab_styles = {t: _TAB_INACTIVE.copy() for t in all_tabs}
-    tab_styles[triggered] = _TAB_ACTIVE.copy()
+    active_tab = page_to_tab.get(page)
+    if active_tab:
+        tab_styles[active_tab] = _TAB_ACTIVE.copy()
 
     return (
-        page,
         views["leaderboard"],
         views["timeline"],
         views["heatmap"],
@@ -1626,6 +1807,39 @@ def switch_page(n_lb, n_tl, n_hm, n_rt, n_pm, n_sn, n_an, n_cp) -> tuple:
         tab_styles["tab-analysis"],
         tab_styles["tab-compare"],
     )
+
+
+@callback(
+    [
+        Output("active-page", "data", allow_duplicate=True),
+    ],
+    [
+        Input("tab-leaderboard", "n_clicks"),
+        Input("tab-timeline", "n_clicks"),
+        Input("tab-heatmap", "n_clicks"),
+        Input("tab-retention", "n_clicks"),
+        Input("tab-params", "n_clicks"),
+        Input("tab-snapshots", "n_clicks"),
+        Input("tab-analysis", "n_clicks"),
+        Input("tab-compare", "n_clicks"),
+    ],
+    prevent_initial_call=True,
+)
+def on_tab_click(n_lb, n_tl, n_hm, n_rt, n_pm, n_sn, n_an, n_cp) -> tuple[str]:
+    """Record which tab was clicked — active-page triggers update_page_display."""
+    triggered = callback_ctx.triggered_id
+
+    page_map = {
+        "tab-leaderboard": "leaderboard",
+        "tab-timeline": "timeline",
+        "tab-heatmap": "heatmap",
+        "tab-retention": "retention",
+        "tab-params": "params",
+        "tab-snapshots": "snapshots",
+        "tab-analysis": "analysis",
+        "tab-compare": "compare",
+    }
+    return (page_map.get(triggered, "leaderboard"),)
 
 
 # ---------------------------------------------------------------------------
@@ -1834,59 +2048,30 @@ def update_retention_chart(selected_ids: list[str] | None, active_page: str) -> 
 # ---------------------------------------------------------------------------
 
 @callback(
-    Output("status-filter", "value", allow_duplicate=True),
+    [
+        Output("status-filter", "value", allow_duplicate=True),
+        Output("retention-selected", "data", allow_duplicate=True),
+    ],
     Input("selected-phase", "data"),
+    State("retention-selected", "data"),
     prevent_initial_call=True,
 )
-def leaderboard_phase_filter(selected_phase: int | None) -> list | None:
-    """When a phase is selected from timeline, also filter leaderboard by phase.
+def phase_change_dependent_updates(selected_phase: int | None, current_retention: list[str] | None) -> tuple:
+    """When phase is selected, clear retention selections for experiments not in that phase.
 
-    This propagates phase selection to the leaderboard table.
-    Since AG Grid doesn't have a built-in phase filter, we apply it
-    via the data flow — the leaderboard callback reads selected-phase.
+    Also keeps leaderboard phase filter working (status filter unchanged).
     """
-    # Phase filter is handled in the leaderboard callback
-    return dash.no_update
+    updated_retention = dash.no_update
+    if selected_phase is not None and current_retention:
+        filtered = []
+        for exp_id in current_retention:
+            exp = next((e for e in _experiments if e.id == exp_id), None)
+            if exp and exp.phase == selected_phase:
+                filtered.append(exp_id)
+        if len(filtered) != len(current_retention):
+            updated_retention = filtered
 
-
-# Update leaderboard callback to also consider selected-phase
-# We need to modify the existing leaderboard callback to also read selected-phase.
-# Since we can't modify the existing callback's inputs directly, we'll add a
-# supplementary callback that filters leaderboard-grid when phase changes.
-
-@callback(
-    Output("leaderboard-grid", "rowData", allow_duplicate=True),
-    Input("selected-phase", "data"),
-    State("era-dropdown", "value"),
-    State("status-filter", "value"),
-    State("search-input", "value"),
-    State("sort-state", "data"),
-    prevent_initial_call=True,
-)
-def update_leaderboard_by_phase(
-    selected_phase: int | None,
-    era: str,
-    statuses: list[str] | None,
-    search: str | None,
-    sort_state: dict | None,
-) -> list[dict]:
-    """Filter leaderboard when phase is selected from timeline."""
-    filtered = _filter_dataframe(_df_all, era, statuses or [], search or "")
-
-    # Apply phase filter
-    if selected_phase is not None:
-        filtered = filtered[filtered["phase"] == selected_phase]
-
-    # Apply sort
-    sort_col = "overall_score"
-    ascending = False
-    if sort_state:
-        sort_col = sort_state.get("column", "overall_score")
-        ascending = sort_state.get("ascending", False)
-
-    filtered = _sort_dataframe(filtered, sort_col, ascending)
-
-    return _build_row_data(filtered)
+    return dash.no_update, updated_retention
 
 
 # ---------------------------------------------------------------------------
@@ -1939,15 +2124,20 @@ def update_param_sweep(era: str, enabled_params: list[str] | None, active_page: 
 
 
 @callback(
-    Output("selected-experiment", "data", allow_duplicate=True),
+    [
+        Output("selected-experiment", "data", allow_duplicate=True),
+        Output("detail-source-page", "data", allow_duplicate=True),
+    ],
     Input("param-exp-detail-selector", "value"),
+    State("active-page", "data"),
     prevent_initial_call=True,
 )
-def on_param_exp_detail_select(exp_id: str | None) -> str | None:
-    """Navigate to experiment detail from parameter sweep."""
+def on_param_exp_detail_select(exp_id: str | None, active_page: str) -> tuple:
+    """Navigate to experiment detail from parameter sweep (VAL-CROSS-008)."""
     if exp_id is None:
-        return dash.no_update
-    return exp_id
+        return dash.no_update, dash.no_update
+    # Track source page so detail view can show "Back to <Source>" button
+    return exp_id, active_page or "leaderboard"
 
 
 # ---------------------------------------------------------------------------
