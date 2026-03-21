@@ -1,0 +1,15 @@
+commands:
+  install: cd /home/roach/.openclaw/workspace/memory-decay && dashboard/.venv/bin/pip install -e ".[dev]" 2>/dev/null || cd /home/roach/.openclaw/workspace/memory-decay && dashboard/.venv/bin/pip install dash plotly pandas pytest
+  test: cd /home/roach/.openclaw/workspace/memory-decay && dashboard/.venv/bin/python -m pytest tests/test_dashboard.py -v --tb=short
+  typecheck: cd /home/roach/.openclaw/workspace/memory-decay && dashboard/.venv/bin/python -m py_compile dashboard/app.py && dashboard/.venv/bin/python -m py_compile dashboard/data_loader.py
+  start_dashboard: cd /home/roach/.openclaw/workspace/memory-decay && PORT=8050 dashboard/.venv/bin/python dashboard/app.py
+  stop_dashboard: lsof -ti :8050 | xargs kill 2>/dev/null; echo "stopped"
+  lint: cd /home/roach/.openclaw/workspace/memory-decay && dashboard/.venv/bin/python -m py_compile dashboard/*.py
+
+services:
+  dashboard:
+    start: cd /home/roach/.openclaw/workspace/memory-decay && PORT=8050 dashboard/.venv/bin/python dashboard/app.py
+    stop: lsof -ti :8050 | xargs kill 2>/dev/null; echo "stopped"
+    healthcheck: curl -sf http://localhost:8050
+    port: 8050
+    depends_on: []
