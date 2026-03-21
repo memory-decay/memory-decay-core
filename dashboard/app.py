@@ -205,6 +205,7 @@ _GRID_COLUMN_DEFS = [
         "field": "overall_score",
         "filter": "agNumberColumnFilter",
         "sortable": True,
+        "sort": "desc",
         "minWidth": 100,
         "valueFormatter": {"function": "params.value !== null ? d3.format('.4f')(params.value) : 'N/A'"},
     },
@@ -231,23 +232,53 @@ _GRID_COLUMN_DEFS = [
         "sortable": True,
         "minWidth": 140,
         "cellStyle": {
-            "function": (
-                "const colors = {"
-                "  completed: {bg: '#d4edda', text: '#155724'},"
-                "  no_results: {bg: '#e2e3e5', text: '#383d41'},"
-                "  validation_failed: {bg: '#f8d7da', text: '#721c24'},"
-                "  baseline: {bg: '#cce5ff', text: '#004085'},"
-                "  improved: {bg: '#d4edda', text: '#155724'},"
-                "  not_improved: {bg: '#fff3cd', text: '#856404'},"
-                "  rejected: {bg: '#f8d7da', text: '#721c24'},"
-                "  accepted_cv: {bg: '#d1ecf1', text: '#0c5460'},"
-                "  rejected_cv: {bg: '#e2e3e5', text: '#383d41'},"
-                "  recorded: {bg: '#e2e3e5', text: '#383d41'},"
-                "  parse_error: {bg: '#fff3cd', text: '#856404'},"
-                "};"
-                "const c = colors[params.value] || colors.completed;"
-                "return {backgroundColor: c.bg, color: c.text, borderRadius: '12px', padding: '2px 8px', fontSize: '11px', fontWeight: '600', display: 'inline-block', textAlign: 'center'};"
-            )
+            "styleConditions": [
+                {
+                    "condition": "params.value === 'completed'",
+                    "style": {"backgroundColor": "#d4edda", "color": "#155724", "borderRadius": "12px", "padding": "2px 8px", "fontSize": "11px", "fontWeight": "600", "display": "inline-block", "textAlign": "center"},
+                },
+                {
+                    "condition": "params.value === 'no_results'",
+                    "style": {"backgroundColor": "#e2e3e5", "color": "#383d41", "borderRadius": "12px", "padding": "2px 8px", "fontSize": "11px", "fontWeight": "600", "display": "inline-block", "textAlign": "center"},
+                },
+                {
+                    "condition": "params.value === 'validation_failed'",
+                    "style": {"backgroundColor": "#f8d7da", "color": "#721c24", "borderRadius": "12px", "padding": "2px 8px", "fontSize": "11px", "fontWeight": "600", "display": "inline-block", "textAlign": "center"},
+                },
+                {
+                    "condition": "params.value === 'parse_error'",
+                    "style": {"backgroundColor": "#fff3cd", "color": "#856404", "borderRadius": "12px", "padding": "2px 8px", "fontSize": "11px", "fontWeight": "600", "display": "inline-block", "textAlign": "center"},
+                },
+                {
+                    "condition": "params.value === 'baseline'",
+                    "style": {"backgroundColor": "#cce5ff", "color": "#004085", "borderRadius": "12px", "padding": "2px 8px", "fontSize": "11px", "fontWeight": "600", "display": "inline-block", "textAlign": "center"},
+                },
+                {
+                    "condition": "params.value === 'improved'",
+                    "style": {"backgroundColor": "#d4edda", "color": "#155724", "borderRadius": "12px", "padding": "2px 8px", "fontSize": "11px", "fontWeight": "600", "display": "inline-block", "textAlign": "center"},
+                },
+                {
+                    "condition": "params.value === 'not_improved'",
+                    "style": {"backgroundColor": "#fff3cd", "color": "#856404", "borderRadius": "12px", "padding": "2px 8px", "fontSize": "11px", "fontWeight": "600", "display": "inline-block", "textAlign": "center"},
+                },
+                {
+                    "condition": "params.value === 'rejected'",
+                    "style": {"backgroundColor": "#f8d7da", "color": "#721c24", "borderRadius": "12px", "padding": "2px 8px", "fontSize": "11px", "fontWeight": "600", "display": "inline-block", "textAlign": "center"},
+                },
+                {
+                    "condition": "params.value === 'accepted_cv'",
+                    "style": {"backgroundColor": "#d1ecf1", "color": "#0c5460", "borderRadius": "12px", "padding": "2px 8px", "fontSize": "11px", "fontWeight": "600", "display": "inline-block", "textAlign": "center"},
+                },
+                {
+                    "condition": "params.value === 'rejected_cv'",
+                    "style": {"backgroundColor": "#e2e3e5", "color": "#383d41", "borderRadius": "12px", "padding": "2px 8px", "fontSize": "11px", "fontWeight": "600", "display": "inline-block", "textAlign": "center"},
+                },
+                {
+                    "condition": "params.value === 'recorded'",
+                    "style": {"backgroundColor": "#e2e3e5", "color": "#383d41", "borderRadius": "12px", "padding": "2px 8px", "fontSize": "11px", "fontWeight": "600", "display": "inline-block", "textAlign": "center"},
+                },
+            ],
+            "defaultStyle": {"backgroundColor": "#e2e3e5", "color": "#383d41", "borderRadius": "12px", "padding": "2px 8px", "fontSize": "11px", "fontWeight": "600", "display": "inline-block", "textAlign": "center"},
         },
     },
     {
@@ -263,10 +294,9 @@ _GRID_COLUMN_DEFS = [
 ]
 
 # Best experiment row style
+_best_exp_id_escaped = _best_exp_id.replace("'", "\\'") if _best_exp_id else ""
 _GRID_ROW_CLASS_RULES = {
-    "best-experiment": {
-        "function": f"return params.data.id === '{_best_exp_id or ''}';"
-    }
+    "best-experiment": f"params.data && params.data.id === '{_best_exp_id_escaped}'"
 }
 
 # ---------------------------------------------------------------------------
@@ -974,46 +1004,50 @@ app.index_string = """
     <script>
     // Cross-area navigation: browser back/forward support for detail view
     (function() {
-        var _pushOnNextDetail = true;
+        var _detailOpen = false;
 
         // Monitor detail view visibility to push history entry
         var _observer = new MutationObserver(function(mutations) {
             var detailEl = document.getElementById('detail-view');
             if (!detailEl) return;
-            var style = window.getComputedStyle(detailEl);
-            var isVisible = style.display !== 'none';
-            var expData = window.dash_clientside || {};
 
-            if (isVisible && _pushOnNextDetail) {
-                // Detail view opened: push a history entry so browser back closes it
+            // Check the actual display style
+            var isVisible = detailEl.style.display === 'block';
+
+            if (isVisible && !_detailOpen) {
+                // Detail view just opened: push a history entry
                 history.pushState({detailOpen: true}, '');
-                _pushOnNextDetail = false;
-            } else if (!isVisible && !_pushOnNextDetail) {
-                // Detail view closed: we don't push, the history entry was already consumed
-                _pushOnNextDetail = true;
+                _detailOpen = true;
+            } else if (!isVisible && _detailOpen) {
+                // Detail view just closed
+                _detailOpen = false;
             }
         });
 
         // Observe the detail-view style changes
-        setTimeout(function() {
+        function setupObserver() {
             var detailEl = document.getElementById('detail-view');
             if (detailEl) {
                 _observer.observe(detailEl, {attributes: true, attributeFilter: ['style']});
+            } else {
+                setTimeout(setupObserver, 500);
             }
-        }, 2000);
+        }
+        // Start observing after a short delay to ensure DOM is ready
+        setTimeout(setupObserver, 1000);
 
         // On browser back: if detail view is open, close it
         window.addEventListener('popstate', function(event) {
             var detailEl = document.getElementById('detail-view');
             if (!detailEl) return;
-            var style = window.getComputedStyle(detailEl);
-            if (style.display !== 'none') {
+            var isVisible = detailEl.style.display === 'block';
+            if (isVisible) {
                 // Find and click the back button to close detail view
                 var backBtn = document.getElementById('back-button');
                 if (backBtn) {
                     backBtn.click();
                 }
-                _pushOnNextDetail = true;
+                _detailOpen = false;
             }
         });
     })();
@@ -1536,7 +1570,6 @@ def on_back_button(n_clicks: int, source_page: str) -> tuple:
     [
         Output("detail-view", "style"),
         Output("detail-view", "children"),
-        Output("leaderboard-view", "style", allow_duplicate=True),
         Output("active-page", "data", allow_duplicate=True),
     ],
     Input("selected-experiment", "data"),
@@ -1548,20 +1581,20 @@ def toggle_detail_view(exp_id: str | None, source_page: str) -> tuple:
 
     When closing (exp_id is None), navigate to the source page
     to support round-trip navigation (VAL-CROSS-008).
+
+    Uses initial_duplicate to allow initial call while having
+    allow_duplicate on active-page output.
     """
     if exp_id is None:
-        # Navigate back to source page
         return (
             {"display": "none", "position": "absolute", "top": 0, "left": 0, "right": 0, "bottom": 0, "backgroundColor": "white", "zIndex": 100, "overflow": "auto"},
             [],
-            {"display": "none"},
             source_page or "leaderboard",
         )
-    # Show detail view, hide current page
+    # Show detail view
     return (
         {"display": "block", "position": "absolute", "top": 0, "left": 0, "right": 0, "bottom": 0, "backgroundColor": "white", "zIndex": 100, "overflow": "auto"},
         _build_detail_view(exp_id, source_page or "leaderboard"),
-        {"display": "none"},
         dash.no_update,
     )
 
@@ -1616,8 +1649,11 @@ def restore_from_url(search: str) -> tuple:
     """Restore experiment and era from URL on page load / refresh.
 
     dcc.Location(refresh=False) strips query params on load, but our
-    clientside callback below re-writes them from window.location.
+    clientside callback re-writes them from window.location.
     This server callback restores state whenever the URL search changes.
+
+    Uses initial_duplicate to allow initial call while having allow_duplicate.
+    On initial load, search is empty → returns no_update.
     """
     if not search:
         return dash.no_update, dash.no_update
@@ -1638,23 +1674,23 @@ def restore_from_url(search: str) -> tuple:
 
 
 # Clientside callback: preserve URL params on page load
-# dcc.Location strips query params; this re-writes them from window.location
+# dcc.Location in Dash 4.0 strips query params on initial load.
+# This clientside callback detects when the search is empty but
+# window.location.search has params, and re-applies them.
 app.clientside_callback(
     """
-    function(n_clicks) {
+    function(pathname) {
         var loc = window.location;
-        if (loc.search && !document.querySelector('[id="url"]')) {
-            // Use Dash's internal location setter
-        }
-        // Re-set the search via history.replaceState to preserve it
-        if (loc.search) {
-            history.replaceState(null, '', loc.pathname + loc.search + loc.hash);
+        // If Dash stripped the search params but browser still has them,
+        // re-apply them to dcc.Location so server callbacks can read them.
+        if (loc.search && loc.search.length > 1) {
+            return loc.search;
         }
         return window.dash_clientside.no_update;
     }
     """,
     Output("url", "search", allow_duplicate=True),
-    Input("url", "search"),
+    Input("url", "pathname"),
     prevent_initial_call="initial_duplicate",
 )
 
@@ -2081,6 +2117,7 @@ def phase_change_dependent_updates(selected_phase: int | None, current_retention
 @callback(
     [
         Output("param-dimension-selector", "options"),
+        Output("param-dimension-selector", "value"),
         Output("param-exp-detail-selector", "options"),
     ],
     [
@@ -2089,13 +2126,20 @@ def phase_change_dependent_updates(selected_phase: int | None, current_retention
     ],
 )
 def update_param_sweep_options(era: str, active_page: str) -> tuple:
-    """Update parameter sweep dimension options and experiment selector."""
+    """Update parameter sweep dimension options and experiment selector.
+
+    Pre-selects available dimensions when Parameter Sweep tab loads
+    so the chart is not empty by default (VAL-PARAMS-001).
+    """
     if active_page != "params":
-        return dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update
 
     # Get available params for the toggle selector
     available_params = charts.get_param_sweep_available_params(_experiments, era)
     param_options = [{"label": p, "value": p} for p in available_params]
+
+    # Auto-select all available dimensions (chart won't render empty)
+    preselected = available_params[:8] if available_params else []
 
     # Get experiments with params and scores for detail selector
     filtered = _experiments if era == "All" else [e for e in _experiments if e.era == era]
@@ -2104,7 +2148,7 @@ def update_param_sweep_options(era: str, active_page: str) -> tuple:
     exp_options = [{"label": f"{e.id} (overall: {_format_score(e.overall_score)})", "value": e.id}
                    for e in scored_with_params[:100]]
 
-    return param_options, exp_options
+    return param_options, preselected, exp_options
 
 
 @callback(
