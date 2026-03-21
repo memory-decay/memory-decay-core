@@ -1,0 +1,21 @@
+{
+  "groupId": "round2-phase-mapping-retest",
+  "assertions": ["VAL-DATA-011"],
+  "status": "pass",
+  "results": {
+    "VAL-DATA-011": {
+      "status": "pass",
+      "evidence": "All 438 experiments have a phase assignment. exp_0360 maps to phase 5 (was None in round 1). Phase counts sum to total (438). No gaps. exp_lme_0030 (phase 8) != exp_0030 (phase 2)."
+    }
+  },
+  "details": {
+    "loadTime": "0.10s",
+    "totalExperiments": 438,
+    "phaseCounts": {"1": 25, "2": 25, "3": 30, "4": 214, "5": 64, "7": 1, "8": 45, "9": 34},
+    "exp0360Phase": 5,
+    "fixApplied": "PHASE_RANGES phase 5 extended from old-era 297-359 to 297-9999"
+  },
+  "toolsUsed": ["python-script"],
+  "frictions": [],
+  "blockers": []
+}
