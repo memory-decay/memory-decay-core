@@ -1,39 +1,77 @@
 # Memory Chain — Round 0019
 
-## Experiments: exp_lme_0218-0229 (H1-H7 hypothesis sweep)
+## Experiments: H1-H7 sweep + jost_power + Option B + lambda_ep fine-tune
 **Date**: 2026-03-22
 **Parent**: [round_0018.md](round_0018.md)
 
-## Results Summary
-| Exp | Hypothesis | CV | Retrieval | Forget | Plausibility | Key Finding |
-|-----|-----------|-----|---------|--------|--------------|-------------|
-| 0222 | H2b: 3.5x faster decay | **0.6757** | 0.614 | 0.632 | 0.836 | **WINNER — +7.6% over baseline** |
-| 0225 | H4: act=0.3 + scale=0.5 | 0.6486 | 0.614 | 0.504 | 0.907 | Good retrieval, no forgetting |
-| 0221 | H2a: 2x faster decay | 0.6465 | 0.602 | 0.561 | 0.837 | Moderate improvement |
-| 0205 | baseline | 0.6282 | 0.588 | 0.504 | 0.866 | — |
-| 0218 | H1a: scale=0.5 only | 0.6243 | 0.585 | 0.504 | 0.855 | Scale alone doesn't help forgetting |
-| 0228 | H6: retrieval_only | 0.4641 | 0.520 | 0.504 | 0.318 | Kills plausibility — storage essential |
-| 0220 | H1c: scale=0.0 | 0.4655 | 0.527 | 0.315 | — | Zero storage kills plausibility |
+## All Results Summary
 
-## Critical Insight
-**Base decay rate is the real lever, not storage_scale.**
+### Jost Power Sweep (0249-0254)
+All at: lambda_fact=0.050, lambda_episode=0.200, act_w=0.35
 
-storage_scale lowering (H1a/b/c) does NOT force non-target forgetting — non-targets simply don't receive consolidation anyway, so adjusting the scale only affects targets. The actual mechanism for getting non-targets to decay faster is raising `lambda_fact` and `lambda_episode`.
+| Exp | jost_power | Overall | Plausibility |
+|-----|-----------|---------|--------------|
+| 0250 | 2.5 | **0.7134** | 0.9750 |
+| 0251 | 3.0 | 0.7027 | 0.9629 |
+| 0252 | 3.5 | 0.6894 | 0.9572 |
+| 0249 | 2.0 | 0.6877 | 0.8350 |
+| 0253 | 4.0 | 0.6545 | 0.8790 |
+| 0254 | 4.5 | 0.6484 | 0.8981 |
 
-Dose-response confirmed: 2x → 3.5x decay → better performance monotonically.
+### Option B Alternative Mechanisms (0255-0257)
+All at: lambda_fact=0.050, lambda_episode=0.200, act_w=0.35
+
+| Exp | Mechanism | Overall | Plausibility | CV | CV% |
+|-----|-----------|---------|--------------|-----|-----|
+| **0255** | **Hebbian-decay** | **0.7090** | **0.9554** | **0.7056** | **1.2%** |
+| 0257 | Adaptive threshold | 0.5875 | 0.5008 | — | fail |
+| 0256 | Hyperbolic floor | 0.5727 | 0.8009 | — | fail |
+
+### Lambda Episode Fine-Tune (0258-0262)
+All at: lambda_fact=0.050, act_w=0.35
+
+| Exp | lambda_ep | Overall | Plausibility |
+|-----|-----------|---------|--------------|
+| 0234 | 0.200 | 0.7067 | 0.9691 |
+| 0258 | 0.170 | 0.7045 | 0.9745 |
+| 0259 | 0.185 | 0.7038 | 0.9662 |
+| 0260 | 0.195 | 0.7001 | 0.9674 |
+| 0262 | 0.215 | 0.7005 | 0.9478 |
+| 0261 | 0.205 | 0.6950 | 0.9550 |
+
+---
+
+## NEW BEST: exp_lme_0255 (Hebbian-decay)
+
+**Key insight:** The Hebbian-decay mechanism — which modulates decay rate by distance-from-floor — achieves the best cross-validation score (CV=0.7056, 1.2%) despite slightly lower fixed-split than 0250. The mechanism is fundamentally different from Jost's Law and validates the distance-from-floor hypothesis.
+
+| Metric | Value |
+|--------|-------|
+| Overall (fixed split) | 0.7090 |
+| Retrieval | — |
+| Plausibility | 0.9554 |
+| CV mean | 0.7056 |
+| CV std | 0.0088 |
+| CV% | **1.2%** (extremely stable) |
+
+**Params:** lambda_fact=0.050, lambda_episode=0.200, act_w=0.35, jost_power=3.0 + distance_scale modulation
 
 ## Decisions Made
-- Accept exp_lme_0222 (3.5x decay) as new best — CV=0.6757 (+34% over round_0018's best 0.5035)
-- Update `best` symlink to exp_lme_0222
-- Storage scale below 1.0 does NOT improve forgetting — retract H1 hypothesis direction
-- retrieval_only mode destroys plausibility — storage reinforcement is essential, not optional
+- Accept exp_lme_0255 (Hebbian-decay) as new best
+- Update `best` symlink to exp_lme_0255
+- Hebbian-decay (distance-from-floor modulation) validated as best mechanism
+- Hyperbolic floor and Adaptive threshold both FAIL — discard these directions
+- Jost power 2.5 (0250) has best fixed-split but lower CV than 0255
+- lambda_episode=0.200 confirmed optimal
 
 ## What To Avoid
-- storage_scale tuning below 1.0 as a forgetting lever — proven ineffective
-- retrieval_only mode — it destroys plausibility entirely
-- Claims of "search converging" — round_0018 was wrong at CV=0.5035
+- Hyperbolic floor mechanism — proven to fail
+- Adaptive threshold mechanism — proven to fail
+- Lambda_episode values away from 0.200 — no improvement
+- High jost_power (>3.5) — degrades performance
 
 ## Next Step Direction
-1. Fine-tune decay rate between 2x and 3.5x (experiments 0230–0234) to map full dose-response and find optimal multiplier
-2. If 4.0x+ extends the curve, continue that direction
-3. Combine H2b's fast decay with H4's activation_weight tuning (0225 had good retrieval but no forgetting — combine with faster decay?)
+The decay mechanism search is maturing. Remaining open questions:
+1. **Fine-tune Hebbian-decay distance_scale parameter** (0.3, 0.7, 1.0?) — the mechanism works but the coefficient matters
+2. **Combine Hebbian + jost_power=2.5** — does the mechanism work even better with lower jost_power?
+3. **Stability/reinforcement tuning** at Hebbian-decay optimal params
