@@ -594,6 +594,25 @@ def _build_row_data(
     return rows
 
 
+def _build_metric_card(
+    name: str,
+    val: float | None,
+    bg_color: str = "#f8f9fa",
+    border_color: str = "#e9ecef",
+    label_color: str = "#6c757d",
+    value_color: str = "#212529",
+    font_size: str = "20px",
+) -> html.Div:
+    """Build a single metric card for the detail view."""
+    return html.Div(
+        style={"padding": "12px", "backgroundColor": bg_color, "borderRadius": "6px", "border": f"1px solid {border_color}"},
+        children=[
+            html.Div(name, style={"fontSize": "11px", "color": label_color, "textTransform": "uppercase", "letterSpacing": "0.5px"}),
+            html.Div(_format_score(val), style={"fontSize": font_size, "fontWeight": "700", "color": value_color, "marginTop": "4px"}),
+        ],
+    )
+
+
 def _build_detail_view(exp_id: str) -> list:
     """Build detail view content for an experiment."""
     exp = next((e for e in _experiments if e.id == exp_id), None)
@@ -604,65 +623,9 @@ def _build_detail_view(exp_id: str) -> list:
     history_status_val = _history_status.get(exp_id)
     display_status = history_status_val or exp.status
     is_best = _best_exp_id == exp_id
+    is_validation_failed = exp.status == "validation_failed"
 
-    # Key metrics
-    metrics = [
-        ("Overall Score", exp.overall_score),
-        ("Retrieval Score", exp.retrieval_score),
-        ("Plausibility Score", exp.plausibility_score),
-        ("Recall Mean", exp.recall_mean),
-        ("Precision Mean", exp.precision_mean),
-        ("MRR Mean", exp.mrr_mean),
-        ("Correlation Score", exp.corr_score),
-        ("Retention AUC", exp.retention_auc),
-        ("Selectivity Score", exp.selectivity_score),
-    ]
-
-    metrics_html = [
-        html.H3("Key Metrics", style={"marginTop": "24px", "marginBottom": "12px", "fontSize": "16px"}),
-        html.Div(
-            style={"display": "grid", "gridTemplateColumns": "repeat(auto-fill, minmax(200px, 1fr))", "gap": "12px"},
-            children=[
-                html.Div(
-                    style={"padding": "12px", "backgroundColor": "#f8f9fa", "borderRadius": "6px", "border": "1px solid #e9ecef"},
-                    children=[
-                        html.Div(name, style={"fontSize": "11px", "color": "#6c757d", "textTransform": "uppercase", "letterSpacing": "0.5px"}),
-                        html.Div(_format_score(val), style={"fontSize": "20px", "fontWeight": "700", "color": "#212529", "marginTop": "4px"}),
-                    ],
-                )
-                for name, val in metrics
-            ],
-        ),
-    ]
-
-    # Later-era metrics
-    later_metrics = [
-        ("Strict Score", exp.strict_score),
-        ("Forgetting Depth", exp.forgetting_depth),
-        ("Forgetting Score", exp.forgetting_score),
-        ("Eval V2 Score", exp.eval_v2_score),
-    ]
-    has_later = any(v is not None for _, v in later_metrics)
-    later_html = []
-    if has_later:
-        later_html = [
-            html.H3("Strict Validation", style={"marginTop": "24px", "marginBottom": "12px", "fontSize": "16px"}),
-            html.Div(
-                style={"display": "grid", "gridTemplateColumns": "repeat(auto-fill, minmax(200px, 1fr))", "gap": "12px"},
-                children=[
-                    html.Div(
-                        style={"padding": "12px", "backgroundColor": "#fff8e1", "borderRadius": "6px", "border": "1px solid #ffe082"},
-                        children=[
-                            html.Div(name, style={"fontSize": "11px", "color": "#856404", "textTransform": "uppercase", "letterSpacing": "0.5px"}),
-                            html.Div(_format_score(val), style={"fontSize": "20px", "fontWeight": "700", "color": "#212529", "marginTop": "4px"}),
-                        ],
-                    )
-                    for name, val in later_metrics
-                ],
-            ),
-        ]
-
-    # Error section
+    # Error section (shown first, prominently, for validation_failed)
     error_section = []
     if exp.error:
         error_section = [
@@ -670,12 +633,58 @@ def _build_detail_view(exp_id: str) -> list:
                 style={"padding": "16px", "backgroundColor": "#f8d7da", "borderRadius": "6px", "border": "1px solid #f5c6cb", "marginBottom": "16px"},
                 children=[
                     html.Div("⚠ Validation Error", style={"fontWeight": "700", "color": "#721c24", "marginBottom": "8px"}),
-                    html.Div(exp.error, style={"color": "#721c24", "fontSize": "14px", "fontFamily": "monospace"}),
+                    html.Div(exp.error, style={"color": "#721c24", "fontSize": "14px", "fontFamily": "monospace", "whiteSpace": "pre-wrap"}),
                 ],
             ),
         ]
 
-    # Hypothesis section
+    # Key metrics — show N/A for all when validation_failed (VAL-TABLE-014)
+    key_metrics = [
+        ("Overall Score", None if is_validation_failed else exp.overall_score),
+        ("Retrieval Score", None if is_validation_failed else exp.retrieval_score),
+        ("Plausibility Score", None if is_validation_failed else exp.plausibility_score),
+        ("Recall Mean", None if is_validation_failed else exp.recall_mean),
+        ("Precision Mean", None if is_validation_failed else exp.precision_mean),
+        ("MRR Mean", None if is_validation_failed else exp.mrr_mean),
+        ("Correlation Score", None if is_validation_failed else exp.corr_score),
+        ("Retention AUC", None if is_validation_failed else exp.retention_auc),
+        ("Selectivity Score", None if is_validation_failed else exp.selectivity_score),
+    ]
+
+    metrics_html = [
+        html.H3("Key Metrics", style={"marginTop": "24px", "marginBottom": "12px", "fontSize": "16px"}),
+        html.Div(
+            style={"display": "grid", "gridTemplateColumns": "repeat(auto-fill, minmax(200px, 1fr))", "gap": "12px"},
+            children=[
+                _build_metric_card(name, val)
+                for name, val in key_metrics
+            ],
+        ),
+    ]
+
+    # Later-era metrics — always show, with "N/A" for missing (VAL-TABLE-012)
+    later_metrics = [
+        ("Strict Score", None if is_validation_failed else exp.strict_score),
+        ("Forgetting Depth", None if is_validation_failed else exp.forgetting_depth),
+        ("Forgetting Score", None if is_validation_failed else exp.forgetting_score),
+        ("Eval V2 Score", None if is_validation_failed else exp.eval_v2_score),
+    ]
+    later_html = [
+        html.H3("Strict Validation & Extended Metrics", style={"marginTop": "24px", "marginBottom": "12px", "fontSize": "16px"}),
+        html.Div(
+            style={"display": "grid", "gridTemplateColumns": "repeat(auto-fill, minmax(200px, 1fr))", "gap": "12px"},
+            children=[
+                _build_metric_card(
+                    name, val,
+                    bg_color="#fff8e1", border_color="#ffe082",
+                    label_color="#856404",
+                )
+                for name, val in later_metrics
+            ],
+        ),
+    ]
+
+    # Hypothesis section (VAL-TABLE-013)
     hypothesis_section = [
         html.H3("Hypothesis", style={"marginTop": "24px", "marginBottom": "12px", "fontSize": "16px"}),
         html.Div(
@@ -684,8 +693,9 @@ def _build_detail_view(exp_id: str) -> list:
         ),
     ]
 
-    # Parameters section
+    # Parameters section (VAL-TABLE-013)
     if exp.params:
+        params_items = sorted(exp.params.items())
         params_section = [
             html.H3("Parameters", style={"marginTop": "24px", "marginBottom": "12px", "fontSize": "16px"}),
             html.Div(
@@ -698,7 +708,7 @@ def _build_detail_view(exp_id: str) -> list:
                             html.Span(str(v), style={"fontFamily": "monospace", "color": "#212529", "fontWeight": "600", "fontSize": "13px"}),
                         ],
                     )
-                    for k, v in sorted(exp.params.items())
+                    for k, v in params_items
                 ],
             ),
         ]
@@ -708,23 +718,26 @@ def _build_detail_view(exp_id: str) -> list:
             html.Div("Parameters not available", style={"color": "#adb5bd", "fontSize": "14px"}),
         ]
 
-    # CV section
+    # CV section (VAL-TABLE-015)
     cv_section = []
     if cv:
         cv_mean = cv.get("mean", {})
         cv_std = cv.get("std", {})
         cv_k = cv.get("k", "?")
         cv_worst = cv.get("worst_fold", {})
+        fold_scores = cv.get("fold_scores", [])
+        fold_deltas = cv.get("fold_deltas", [])
 
-        cv_metrics = []
+        # CV mean metrics
+        cv_metric_cards = []
         if isinstance(cv_mean, dict):
-            cv_metrics.extend([
+            cv_metric_cards.extend([
                 ("CV Mean (overall)", cv_mean.get("overall_score")),
                 ("CV Mean (retrieval)", cv_mean.get("retrieval_score")),
                 ("CV Mean (plausibility)", cv_mean.get("plausibility_score")),
             ])
         if isinstance(cv_std, dict):
-            cv_metrics.extend([
+            cv_metric_cards.extend([
                 ("CV Std (overall)", cv_std.get("overall_score")),
                 ("CV Std (retrieval)", cv_std.get("retrieval_score")),
             ])
@@ -735,60 +748,122 @@ def _build_detail_view(exp_id: str) -> list:
             html.Div(
                 style={"display": "grid", "gridTemplateColumns": "repeat(auto-fill, minmax(200px, 1fr))", "gap": "12px", "marginBottom": "16px"},
                 children=[
-                    html.Div(
-                        style={"padding": "12px", "backgroundColor": "#e8f5e9", "borderRadius": "6px", "border": "1px solid #a5d6a7"},
-                        children=[
-                            html.Div(name, style={"fontSize": "11px", "color": "#2e7d32", "textTransform": "uppercase", "letterSpacing": "0.5px"}),
-                            html.Div(_format_score(val), style={"fontSize": "18px", "fontWeight": "700", "color": "#212529", "marginTop": "4px"}),
-                        ],
+                    _build_metric_card(
+                        name, val,
+                        bg_color="#e8f5e9", border_color="#a5d6a7",
+                        label_color="#2e7d32", font_size="18px",
                     )
-                    for name, val in cv_metrics
+                    for name, val in cv_metric_cards
                 ],
             ),
         ]
 
+        # Worst fold
         if cv_worst and isinstance(cv_worst, dict):
             worst_overall = cv_worst.get("overall_score")
             cv_section.append(
                 html.Div(
                     style={"padding": "12px", "backgroundColor": "#fff3e0", "borderRadius": "6px", "border": "1px solid #ffcc80", "marginBottom": "16px"},
                     children=[
-                        html.Div("Worst Fold", style={"fontSize": "11px", "color": "#e65100", "textTransform": "uppercase"}),
+                        html.Div("Worst Fold", style={"fontSize": "11px", "color": "#e65100", "textTransform": "uppercase", "letterSpacing": "0.5px"}),
                         html.Div(_format_score(worst_overall), style={"fontSize": "18px", "fontWeight": "700", "color": "#212529", "marginTop": "4px"}),
                     ],
                 ),
             )
 
-    # Snapshot mini-charts
+        # Fold deltas
+        if fold_deltas:
+            delta_text = ", ".join(f"{d:+.4f}" for d in fold_deltas)
+            cv_section.append(
+                html.Div(
+                    style={"padding": "12px", "backgroundColor": "#f8f9fa", "borderRadius": "6px", "border": "1px solid #e9ecef", "marginBottom": "16px"},
+                    children=[
+                        html.Div("Fold Deltas", style={"fontSize": "11px", "color": "#6c757d", "textTransform": "uppercase", "letterSpacing": "0.5px", "marginBottom": "4px"}),
+                        html.Div(delta_text, style={"fontFamily": "monospace", "fontSize": "13px", "color": "#495057"}),
+                    ],
+                ),
+            )
+
+        # Fold scores bar chart
+        if fold_scores and isinstance(fold_scores, list):
+            fold_overalls = []
+            for i, fs in enumerate(fold_scores):
+                if isinstance(fs, dict):
+                    score = fs.get("overall_score")
+                    if score is not None:
+                        fold_overalls.append({"fold": f"Fold {i + 1}", "overall_score": score})
+
+            if fold_overalls:
+                fold_fig = go.Figure()
+                fold_fig.add_trace(go.Bar(
+                    x=[f["fold"] for f in fold_overalls],
+                    y=[f["overall_score"] for f in fold_overalls],
+                    marker_color=["#4CAF50" if s >= (cv_mean.get("overall_score") if isinstance(cv_mean, dict) else 0) else "#FF9800" for s in [f["overall_score"] for f in fold_overalls]],
+                    text=[f"{s:.4f}" for s in [f["overall_score"] for f in fold_overalls]],
+                    textposition="auto",
+                ))
+                # Add mean line
+                if isinstance(cv_mean, dict) and cv_mean.get("overall_score") is not None:
+                    fold_fig.add_hline(
+                        y=cv_mean["overall_score"],
+                        line_dash="dash", line_color="#2196F3",
+                        annotation_text=f"Mean: {cv_mean['overall_score']:.4f}",
+                        annotation_position="top right",
+                    )
+                fold_fig.update_layout(
+                    title="Fold Scores (overall_score)",
+                    yaxis_title="Score", yaxis={"range": [0, 1]},
+                    height=250, margin={"l": 50, "r": 20, "t": 40, "b": 40},
+                    template="plotly_white", font={"size": 12},
+                    showlegend=False,
+                )
+                cv_section.append(dcc.Graph(figure=fold_fig, config={"displayModeBar": False}))
+
+    # Snapshot mini-charts (VAL-TABLE-016, VAL-TABLE-017)
     snapshot_section = []
     if exp.snapshots:
         ticks = [s["tick"] for s in exp.snapshots if "tick" in s]
         if ticks:
             fig = go.Figure()
             trace_configs = [
-                ("overall_score", "Overall Score", "#2196F3"),
-                ("retrieval_score", "Retrieval Score", "#4CAF50"),
-                ("plausibility_score", "Plausibility Score", "#FF9800"),
+                ("overall_score", "Overall Score", "#1565C0"),
+                ("retrieval_score", "Retrieval Score", "#2E7D32"),
+                ("plausibility_score", "Plausibility Score", "#E65100"),
             ]
+            has_any_trace = False
             for key, label, color in trace_configs:
                 values = [s.get(key) for s in exp.snapshots if s.get(key) is not None]
                 t_vals = [s["tick"] for s in exp.snapshots if s.get(key) is not None]
                 if values:
-                    fig.add_trace(go.Scatter(x=t_vals, y=values, mode="lines+markers", name=label, line={"color": color, "width": 2}, marker={"size": 4}))
-            fig.update_layout(
-                title="Metrics over Simulation Ticks",
-                xaxis_title="Tick", yaxis_title="Score", yaxis={"range": [0, 1]},
-                height=280, margin={"l": 50, "r": 20, "t": 40, "b": 40},
-                template="plotly_white", font={"size": 12},
-            )
-            snapshot_section = [
-                html.H3("Snapshot Timeline", style={"marginTop": "24px", "marginBottom": "12px", "fontSize": "16px"}),
-                dcc.Graph(figure=fig, config={"displayModeBar": False}),
-            ]
-    elif exp.status not in ("validation_failed", "no_results"):
+                    has_any_trace = True
+                    fig.add_trace(go.Scatter(
+                        x=t_vals, y=values, mode="lines+markers",
+                        name=label,
+                        line={"color": color, "width": 2.5},
+                        marker={"size": 5},
+                    ))
+            if has_any_trace:
+                fig.update_layout(
+                    title="Metrics over Simulation Ticks",
+                    xaxis_title="Tick", yaxis_title="Score", yaxis={"range": [0, 1]},
+                    height=300, margin={"l": 50, "r": 20, "t": 40, "b": 40},
+                    template="plotly_white", font={"size": 12},
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                )
+                snapshot_section = [
+                    html.H3("Snapshot Timeline", style={"marginTop": "24px", "marginBottom": "12px", "fontSize": "16px"}),
+                    dcc.Graph(figure=fig, config={"displayModeBar": False}),
+                ]
+            else:
+                snapshot_section = [
+                    html.H3("Snapshot Timeline", style={"marginTop": "24px", "marginBottom": "12px", "fontSize": "16px"}),
+                    html.Div("No data", style={"color": "#adb5bd", "fontSize": "14px"}),
+                ]
+    else:
+        # No snapshots at all (VAL-TABLE-017)
         snapshot_section = [
             html.H3("Snapshot Timeline", style={"marginTop": "24px", "marginBottom": "12px", "fontSize": "16px"}),
-            html.Div("No snapshot data available", style={"color": "#adb5bd", "fontSize": "14px"}),
+            html.Div("No data", style={"color": "#adb5bd", "fontSize": "14px"}),
         ]
 
     # Assemble detail view

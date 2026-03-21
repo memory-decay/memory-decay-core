@@ -1022,6 +1022,12 @@ class TestDetailViewBuilder:
     def real_experiments_dir(self) -> str:
         return str(Path(__file__).resolve().parent.parent / "experiments")
 
+    @pytest.fixture
+    def app_module(self):
+        """Import dashboard.app module once per test class."""
+        import dashboard.app as app_module
+        return app_module
+
     def test_detail_view_known_experiment(self, real_experiments_dir: str):
         """Detail view can be built for a known experiment."""
         import dashboard.app as app_module
@@ -1044,3 +1050,166 @@ class TestDetailViewBuilder:
         assert isinstance(detail, list)
         assert len(detail) == 1
         assert "not found" in str(detail[0])
+
+    def test_detail_view_header_shows_experiment_id(self, app_module):
+        """VAL-TABLE-011: Detail view shows experiment ID prominently."""
+        detail = app_module._build_detail_view("exp_lme_0008")
+        detail_text = str(detail)
+        assert "exp_lme_0008" in detail_text
+
+    def test_detail_view_key_metrics_match_results(self, app_module):
+        """VAL-TABLE-011: Key metrics displayed match results.json values."""
+        # Load actual results.json for exp_lme_0008
+        results_path = Path(__file__).resolve().parent.parent / "experiments" / "exp_lme_0008" / "results.json"
+        with open(results_path) as f:
+            results = json.load(f)
+
+        detail_text = str(app_module._build_detail_view("exp_lme_0008"))
+
+        # Spot-check 5 metric values at 4 decimal places
+        for key in ["overall_score", "retrieval_score", "plausibility_score", "recall_mean", "precision_mean"]:
+            val = results[key]
+            formatted = f"{val:.4f}"
+            assert formatted in detail_text, f"{key}={formatted} not found in detail view"
+
+    def test_detail_view_key_metrics_4_decimal_places(self, app_module):
+        """VAL-TABLE-011: Metrics shown with 4 decimal places."""
+        detail_text = str(app_module._build_detail_view("exp_lme_0008"))
+        # overall_score for exp_lme_0008 is 0.3415, should show 0.3415 (4 decimals)
+        assert "0.3415" in detail_text, "Expected 4-decimal formatted overall_score"
+
+    def test_detail_view_later_era_metrics_na_for_old(self, app_module):
+        """VAL-TABLE-012: Later-era metrics show N/A for experiments without them."""
+        detail_text = str(app_module._build_detail_view("exp_lme_0008"))
+        # exp_lme_0008 has no strict_score or forgetting_depth
+        assert "N/A" in detail_text, "Expected N/A for missing later-era metrics"
+
+    def test_detail_view_later_era_metrics_shown_for_new(self, app_module):
+        """VAL-TABLE-012: Later-era metrics shown for experiments that have them."""
+        detail_text = str(app_module._build_detail_view("exp_lme_0059"))
+        # exp_lme_0059 has strict_score=0.458456, forgetting_depth=0.3675
+        assert "0.4585" in detail_text, "Expected strict_score for exp_lme_0059"
+        assert "0.3675" in detail_text, "Expected forgetting_depth for exp_lme_0059"
+
+    def test_detail_view_hypothesis_full_text(self, app_module):
+        """VAL-TABLE-013: Full hypothesis.txt text displayed, not truncated."""
+        hyp_path = Path(__file__).resolve().parent.parent / "experiments" / "exp_lme_0008" / "hypothesis.txt"
+        with open(hyp_path) as f:
+            full_hypothesis = f.read().strip()
+
+        detail_text = str(app_module._build_detail_view("exp_lme_0008"))
+        assert full_hypothesis in detail_text, "Full hypothesis text not found in detail view"
+
+    def test_detail_view_hypothesis_not_available(self, app_module):
+        """VAL-TABLE-013: Missing hypothesis shows 'not available'."""
+        detail_text = str(app_module._build_detail_view("exp_0360"))
+        assert "Hypothesis not available" in detail_text or "not available" in detail_text.lower()
+
+    def test_detail_view_params_all_keys(self, app_module):
+        """VAL-TABLE-013: All params.json key-value pairs shown."""
+        params_path = Path(__file__).resolve().parent.parent / "experiments" / "exp_lme_0008" / "params.json"
+        with open(params_path) as f:
+            params = json.load(f)
+
+        detail_text = str(app_module._build_detail_view("exp_lme_0008"))
+        for k, v in params.items():
+            assert str(k) in detail_text, f"Param key '{k}' not found in detail view"
+            assert str(v) in detail_text, f"Param value '{v}' not found in detail view"
+
+    def test_detail_view_params_not_available(self, app_module):
+        """VAL-TABLE-013: Missing params shows 'not available'."""
+        detail_text = str(app_module._build_detail_view("exp_0360"))
+        assert "Parameters not available" in detail_text or "not available" in detail_text.lower()
+
+    def test_detail_view_validation_failed_na_metrics(self, app_module):
+        """VAL-TABLE-014: validation_failed experiments show N/A for metrics."""
+        detail_text = str(app_module._build_detail_view("exp_lme_0063"))
+        # Error message should be shown prominently
+        assert "Insufficient decay" in detail_text, "Error message not shown"
+        # Metrics should show N/A
+        assert "N/A" in detail_text, "Expected N/A for metrics of validation_failed experiment"
+
+    def test_detail_view_cv_section_present(self, app_module):
+        """VAL-TABLE-015: CV section shows for experiments with cv_results.json."""
+        detail_text = str(app_module._build_detail_view("exp_lme_0008"))
+        assert "Cross-Validation" in detail_text
+        assert "k = 5" in detail_text
+        assert "0.3466" in detail_text, "Expected CV mean overall_score"
+        assert "0.0296" in detail_text, "Expected CV std overall_score"
+
+    def test_detail_view_cv_fold_deltas(self, app_module):
+        """VAL-TABLE-015: CV section shows fold deltas."""
+        detail_text = str(app_module._build_detail_view("exp_lme_0008"))
+        assert "Fold Deltas" in detail_text, "Expected fold_deltas section"
+
+    def test_detail_view_cv_fold_scores_chart(self, app_module):
+        """VAL-TABLE-015: CV section includes fold scores bar chart."""
+        detail = app_module._build_detail_view("exp_lme_0008")
+        detail_text = str(detail)
+        assert "Fold Scores" in detail_text, "Expected fold scores chart title"
+
+    def test_detail_view_cv_validation_failed_with_cv(self, app_module):
+        """VAL-TABLE-015: exp_lme_0056 (validation_failed with CV data) shows CV."""
+        detail_text = str(app_module._build_detail_view("exp_lme_0056"))
+        assert "Cross-Validation" in detail_text, "CV section should show even for validation_failed with CV data"
+
+    def test_detail_view_snapshot_chart_present(self, app_module):
+        """VAL-TABLE-016: Snapshot mini-charts present for experiments with snapshots."""
+        detail = app_module._build_detail_view("exp_lme_0008")
+        detail_text = str(detail)
+        assert "Snapshot Timeline" in detail_text
+        assert "Metrics over Simulation Ticks" in detail_text
+
+    def test_detail_view_snapshot_three_distinguishable_lines(self, app_module):
+        """VAL-TABLE-016: Mini-charts have 3 distinguishable colored lines."""
+        import plotly.graph_objects as go
+        detail = app_module._build_detail_view("exp_lme_0008")
+        # Find the snapshot timeline graph (not the CV fold scores chart)
+        for item in detail:
+            if hasattr(item, 'figure') and item.figure is not None:
+                fig = item.figure
+                # Check if this is the snapshot chart (has Scatter traces)
+                scatter_traces = [t for t in fig.data if isinstance(t, go.Scatter)]
+                if len(scatter_traces) == 3:
+                    colors = [trace.line.color for trace in scatter_traces]
+                    assert len(set(colors)) == 3, "Expected 3 distinct colors for traces"
+                    return
+        pytest.fail("Could not find snapshot chart with 3 scatter traces")
+
+    def test_detail_view_snapshot_old_era(self, app_module):
+        """VAL-TABLE-017: Old-era experiments show available metrics only."""
+        detail = app_module._build_detail_view("exp_0001")
+        detail_text = str(detail)
+        assert "Snapshot Timeline" in detail_text
+
+    def test_detail_view_snapshot_no_data_for_no_results(self, app_module):
+        """VAL-TABLE-017: Experiments without snapshots show 'No data'."""
+        detail_text = str(app_module._build_detail_view("exp_0360"))
+        assert "No data" in detail_text, "Expected 'No data' for experiment without snapshots"
+
+    def test_detail_view_row_click_any_status(self, app_module):
+        """Row click works for any status including validation_failed, no_results."""
+        # These should all build without crashing
+        for exp_id in ["exp_lme_0063", "exp_0360", "exp_lme_0001", "exp_0000"]:
+            detail = app_module._build_detail_view(exp_id)
+            assert isinstance(detail, list), f"Failed to build detail for {exp_id}"
+            assert len(detail) > 1, f"Detail for {exp_id} is too short"
+
+    def test_detail_view_status_badge_shown(self, app_module):
+        """Detail view shows status badge."""
+        detail_text = str(app_module._build_detail_view("exp_lme_0008"))
+        # exp_lme_0008 has history status 'accepted_cv'
+        assert "accepted_cv" in detail_text, "Expected status badge text in detail view"
+
+    def test_build_metric_card(self, app_module):
+        """_build_metric_card helper formats correctly."""
+        card = app_module._build_metric_card("Test Score", 0.12345678)
+        card_text = str(card)
+        assert "Test Score" in card_text
+        assert "0.1235" in card_text, "Expected 4 decimal place formatting"
+
+    def test_build_metric_card_na(self, app_module):
+        """_build_metric_card shows N/A for None values."""
+        card = app_module._build_metric_card("Missing Score", None)
+        card_text = str(card)
+        assert "N/A" in card_text
