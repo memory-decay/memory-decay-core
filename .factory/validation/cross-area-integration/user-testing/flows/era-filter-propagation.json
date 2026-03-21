@@ -1,0 +1,149 @@
+{
+  "groupId": "era-filter-propagation",
+  "testedAt": "2026-03-21T12:00:00Z",
+  "isolation": {
+    "appUrl": "http://localhost:8050",
+    "browserSession": "9333c6e3c4c4__era",
+    "missionDir": "/home/roach/.factory/missions/ab06734e-fa45-49b3-9115-00c7fc9bfd7a"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-CROSS-001",
+      "title": "Era Filter Propagation — All Views",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Navigate to http://localhost:8050",
+          "expected": "Dashboard loads with Leaderboard showing all experiments",
+          "observed": "Dashboard loaded with 472 experiments (era=All) across 10 pages of 50"
+        },
+        {
+          "action": "Set era to LongMemEval using sidebar dropdown",
+          "expected": "Leaderboard filters to show only exp_lme_* experiments",
+          "observed": "Leaderboard shows 114 experiments, all exp_lme_*. No exp_* visible. Pagination: Page 1 of 3."
+        },
+        {
+          "action": "Screenshot Leaderboard page",
+          "expected": "Only exp_lme_* experiment IDs visible",
+          "observed": "Confirmed: all visible IDs are exp_lme_0102, exp_lme_0098, exp_lme_0108, etc."
+        },
+        {
+          "action": "Navigate to Timeline & Metrics tab",
+          "expected": "Phase timeline shows only LME phases (7, 8, 9) with data; metric charts show only LME data",
+          "observed": "Phase timeline bar chart shows Phase 7 (1 exp), Phase 8 (45 exps), Phase 9 (68 exps). Phases 0-6 show 0.5 height (gray, no experiments). Metric progression x-axis ranges from 0 to 31 (LME internal indices). No old-era data present."
+        },
+        {
+          "action": "Navigate to Threshold Heatmap tab",
+          "expected": "Heatmaps show only exp_lme_* experiments",
+          "observed": "Both recall and precision heatmaps have x-axis labels: exp_lme_0000, exp_lme_0002, exp_lme_0003, etc. Shape: 9 thresholds × 104 experiments. No exp_* entries."
+        },
+        {
+          "action": "Navigate to Parameter Sweep tab",
+          "expected": "Parameter sweep experiment dropdown shows only exp_lme_* experiments",
+          "observed": "Experiment dropdown contains 104 entries, all exp_lme_*. First entries: exp_lme_0102, exp_lme_0098, exp_lme_0108, etc. No exp_* entries."
+        },
+        {
+          "action": "Set era to memories_500",
+          "expected": "Leaderboard shows only exp_* experiments",
+          "observed": "Leaderboard shows 358 experiments, all exp_*. No exp_lme_* visible. Sample IDs: exp_0147, exp_0169, exp_0171."
+        },
+        {
+          "action": "Set era back to All",
+          "expected": "Both eras present, total count matches initial (472)",
+          "observed": "Leaderboard shows 472 experiments with both exp_* and exp_lme_* visible. Count matches initial."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "cross-area-integration/era-filter-propagation/VAL-CROSS-001-01-initial-all-era-leaderboard.png",
+          "cross-area-integration/era-filter-propagation/VAL-CROSS-001-02-longmemeval-leaderboard.png",
+          "cross-area-integration/era-filter-propagation/VAL-CROSS-001-03-longmemeval-timeline-metrics.png",
+          "cross-area-integration/era-filter-propagation/VAL-CROSS-001-04-longmemeval-heatmap.png",
+          "cross-area-integration/era-filter-propagation/VAL-CROSS-001-05-longmemeval-param-sweep.png",
+          "cross-area-integration/era-filter-propagation/VAL-CROSS-001-06-memories500-leaderboard.png",
+          "cross-area-integration/era-filter-propagation/VAL-CROSS-001-07-all-era-restored-leaderboard.png"
+        ],
+        "consoleErrors": "none",
+        "network": "No API calls — all filtering handled client-side via Dash callbacks on dcc.Store"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-004",
+      "title": "Era Switching — Hide and Restore Data",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Record initial state: era=All, row count",
+          "expected": "472 experiments total",
+          "observed": "472 experiments (era=All, Page 1 of 10)"
+        },
+        {
+          "action": "Cycle 1: All → LongMemEval",
+          "expected": "Only exp_lme_* experiments visible (114)",
+          "observed": "114 experiments, all exp_lme_*"
+        },
+        {
+          "action": "Cycle 1: LongMemEval → memories_500",
+          "expected": "Only exp_* experiments visible (358)",
+          "observed": "358 experiments, all exp_*"
+        },
+        {
+          "action": "Cycle 1: memories_500 → All",
+          "expected": "472 experiments restored",
+          "observed": "472 experiments — matches initial count"
+        },
+        {
+          "action": "Cycle 2: All → LongMemEval → memories_500 → All",
+          "expected": "Same counts: 472 → 114 → 358 → 472",
+          "observed": "Counts: 472 → 114 → 358 → 472 — all match"
+        },
+        {
+          "action": "Cycle 3: All → LongMemEval → memories_500 → All",
+          "expected": "Same counts: 472 → 114 → 358 → 472",
+          "observed": "Counts: 472 → 114 → 358 → 472 — all match"
+        },
+        {
+          "action": "Verify final state after 3 cycles",
+          "expected": "Row count matches initial (472), no data leaks",
+          "observed": "Final count: 472. Both exp_* and exp_lme_* present. Era dropdown shows 'All'."
+        },
+        {
+          "action": "Check browser console for JavaScript errors",
+          "expected": "No errors",
+          "observed": "No console errors detected after 9 era switches (3 full cycles)"
+        },
+        {
+          "action": "Check for rendering artifacts",
+          "expected": "No visual glitches, ghost rows, or stale data",
+          "observed": "No rendering artifacts observed. Leaderboard renders cleanly after each toggle."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "cross-area-integration/era-filter-propagation/VAL-CROSS-004-final-state-after-3-cycles.png"
+        ],
+        "consoleErrors": "none",
+        "network": "No API calls — all filtering client-side"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "The status filter dropdown button and era dropdown button have similar appearance and close proximity — clicking the wrong one is easy. The era dropdown is the first button, status is the second.",
+      "resolved": true,
+      "resolution": "Used agent-browser refs to target specific buttons by index rather than text matching",
+      "affectedAssertions": ["VAL-CROSS-001", "VAL-CROSS-004"]
+    },
+    {
+      "description": "JavaScript variable declarations persist between eval calls in the same session, causing 'Identifier already declared' errors when re-running code with same variable names",
+      "resolved": true,
+      "resolution": "Wrapped code in IIFE (function(){...})() to create fresh scope each time",
+      "affectedAssertions": ["VAL-CROSS-001"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 2 assertions: both passed. VAL-CROSS-001: Era filter propagates consistently across all views (Leaderboard, Timeline & Metrics, Threshold Heatmap, Parameter Sweep) — all views show only the selected era's data with correct experiment counts. VAL-CROSS-004: Three complete cycles of era switching (All→LongMemEval→memories_500→All) × 3 produced clean state with matching counts (472→114→358→472), no console errors, no rendering artifacts."
+}
