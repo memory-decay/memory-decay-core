@@ -32,8 +32,19 @@ def run_kfold(
     Stratifies by memory type (fact / episode) so each fold has a
     representative mix.  Returns per-fold scores plus mean/std summaries.
     """
+    import json as _json
     from memory_decay.cache_builder import load_raw_dataset
     from memory_decay.runner import run_experiment_with_split
+
+    # Detect reactivation policy from experiment params
+    params_path = exp_dir / "params.json"
+    with open(params_path) as _f:
+        exp_params = _json.load(_f)
+    reactivation_policy = (
+        "retrieval_consolidation"
+        if "retrieval_consolidation_mode" in exp_params
+        else "scheduled_query"
+    )
 
     dataset = load_raw_dataset(cache_dir / "dataset.json")
     rng = random.Random(seed)
@@ -66,6 +77,7 @@ def run_kfold(
             train_items,
             test_items,
             cache_dir=str(cache_dir),
+            reactivation_policy=reactivation_policy,
             seed=seed,
         )
         fold_scores.append(result)
