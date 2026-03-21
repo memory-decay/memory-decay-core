@@ -13,3 +13,9 @@ services:
     healthcheck: curl -sf http://localhost:8050
     port: 8050
     depends_on: []
+  memory-decay-server:
+    start: cd /home/roach/.openclaw/workspace/memory-decay && uv run python -m memory_decay.server --port 8100 --persistence-dir ~/.openclaw/memory/decay
+    stop: lsof -ti :8100 | xargs kill 2>/dev/null; echo "stopped"
+    healthcheck: curl -sf http://localhost:8100/health
+    port: 8100
+    depends_on: []

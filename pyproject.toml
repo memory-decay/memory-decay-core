@@ -14,11 +14,17 @@ dependencies = [
     "openai>=1.0",
     "google-genai>=1.0",
     "matplotlib>=3.10.8",
+    "dash>=4.0.0",
+    "dash-ag-grid>=33.3.3",
+    "pandas>=2.3.3",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
+    "httpx>=0.28.0",
 ]
 
 [tool.setuptools.packages.find]
