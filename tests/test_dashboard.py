@@ -636,7 +636,8 @@ class TestIntegration:
             ):
                 fs_count += 1
         assert len(exps) == fs_count
-        assert fs_count == 434
+        # Verify count is reasonable (should be > 400 experiments)
+        assert fs_count > 400, f"Expected >400 experiments but found {fs_count}"
 
     def test_load_old_and_new_era_real(self, real_experiments_dir: str):
         """Load exp_0000 and exp_lme_0059 in same batch, verify field differences."""
@@ -706,10 +707,17 @@ class TestPerformance:
 
     def test_cold_load_performance(self, real_experiments_dir: str):
         """Full load under 5 seconds."""
+        # Count experiment dirs in filesystem for dynamic assertion
+        fs_count = sum(
+            1 for entry in os.listdir(real_experiments_dir)
+            if entry.startswith("exp_") and os.path.isdir(
+                os.path.join(real_experiments_dir, entry)
+            )
+        )
         start = time.perf_counter()
         exps = load_all_experiments(real_experiments_dir)
         elapsed = time.perf_counter() - start
-        assert len(exps) == 434
+        assert len(exps) == fs_count
         assert elapsed < 5.0, f"Loading took {elapsed:.2f}s, exceeds 5s limit"
 
     def test_memory_efficiency(self, real_experiments_dir: str):

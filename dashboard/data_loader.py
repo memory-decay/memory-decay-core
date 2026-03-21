@@ -48,7 +48,7 @@ PHASE_RANGES: dict[int, list[tuple[str, int, int]]] = {
     2: [("old", 25, 50)],      # Reinforcement Redesign
     3: [("old", 51, 82)],      # Auto-Research First 25
     4: [("old", 83, 296)],     # Protocol Fixes & Extended
-    5: [("old", 297, 359)],    # Scoring Overhaul
+    5: [("old", 297, 9999)],   # Scoring Overhaul
     6: [],                     # Memory Chain (meta-infrastructure, no experiments)
     7: [("new", 0, 0)],        # LongMemEval Integration
     8: [("new", 1, 45)],       # LongMemEval Auto-Research
