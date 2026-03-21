@@ -1,0 +1,3 @@
+0138: Raise sigmoid_mid slightly with 0128 settings.
+- Keep all 0128 params except sigmoid_mid: 0.32 -> 0.34.
+- Goal: reserve strong floor protection for slightly more important memories, hoping to improve td/selectivity without the blunt recall hit from lowering floor_max.

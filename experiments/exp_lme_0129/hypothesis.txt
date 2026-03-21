@@ -1,0 +1,4 @@
+0128 neighborhood search:
+- Keep lambda_fact at 0.014 and min boost scale at 0.52.
+- Soften lambda_episode slightly less aggressively than 0127/0128: 0.070 -> 0.072.
+- Goal: see if a smaller episode-lambda change preserves td better while retaining some overall improvement.
