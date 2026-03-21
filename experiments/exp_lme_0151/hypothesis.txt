@@ -1,0 +1,4 @@
+Structural variant on top of exp_lme_0128:
+- Keep the 0128 decay, floor, and boost-scaling parameters unchanged.
+- Switch retrieval_consolidation to `stability_only_direct`, so successful recall reinforces stability directly without increasing activation.
+- Goal: test whether decoupling stability reinforcement from activation flattening improves the td/overall tradeoff.

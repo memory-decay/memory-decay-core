@@ -1,0 +1,4 @@
+Hybrid dual-state follow-up to exp_lme_0152:
+- Keep the exp_lme_0128 decay, floor, and importance-scaled retrieval settings.
+- Use retrieval_consolidation_mode=retrieval_with_storage_fraction with retrieval_storage_boost_scale=0.25.
+- Rationale: successful recall should strongly reinforce retrieval, weakly reinforce storage, and reinforce stability once. This should keep threshold discrimination above the single-score baseline while recovering more retrieval quality than pure retrieval_only.

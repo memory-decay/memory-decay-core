@@ -1,0 +1,4 @@
+Dual-state diagnostic built from exp_lme_0128:
+- Keep the 0128 decay, floor, and boost scaling configuration.
+- Use retrieval_consolidation_mode=retrieval_only so successful recall boosts retrieval/stability without directly inflating storage.
+- Goal: preserve threshold discrimination on storage while improving retrieval quality enough to beat 0128 on overall score.
