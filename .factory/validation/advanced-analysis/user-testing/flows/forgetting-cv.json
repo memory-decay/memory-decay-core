@@ -1,0 +1,168 @@
+{
+  "groupId": "forgetting-cv",
+  "testedAt": "2026-03-21T12:00:00Z",
+  "isolation": {
+    "appUrl": "http://localhost:8050",
+    "browserSession": "daac48305b45__u3",
+    "tab": "Forgetting & CV only (no era filter changes)"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-PARAMS-003",
+      "title": "Forgetting Depth & Strict Validation Analysis",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Navigate to http://localhost:8050 and click '🧪 Forgetting & CV' tab",
+          "expected": "Forgetting Depth & Cross-Validation Analysis page with two charts",
+          "observed": "Page displayed with 'Forgetting Depth & Strict Score' section (2 charts) and 'Cross-Validation Results' section"
+        },
+        {
+          "action": "Verify forgetting_depth chart shows experiments with data",
+          "expected": "Chart shows only experiments that have forgetting_depth data (~10-15 from exp_lme_0059+)",
+          "observed": "Chart shows 23 total experiments: 16 passed (green) + 7 failed (red). Includes both old-era (exp_0025-exp_0040) and new-era (exp_lme_0059-exp_lme_0069) experiments that have forgetting_depth. 7 new-era experiments shown (exp_lme_0059, 0060, 0061, 0062, 0064, 0065, 0069)."
+        },
+        {
+          "action": "Verify pass/fail classification visible",
+          "expected": "Green bars for passed, red bars for failed",
+          "observed": "Passed experiments shown in green (#4CAF50), Failed experiments shown in red (#EF5350). Barmode is 'group' with separate trace names 'Passed' and 'Failed'."
+        },
+        {
+          "action": "Verify distribution chart excludes experiments without forgetting_depth",
+          "expected": "exp_0000 and exp_lme_0008 NOT shown in the distribution",
+          "observed": "Confirmed: exp_0000 and exp_lme_0008 are NOT present in either passed or failed x-arrays."
+        },
+        {
+          "action": "Verify experiment IDs on x-axis",
+          "expected": "Experiment IDs displayed on x-axis",
+          "observed": "X-axis labeled 'Experiment' with experiment IDs (exp_0025, exp_0026, etc.)"
+        },
+        {
+          "action": "Verify tooltip shows forgetting_depth and strict_score",
+          "expected": "Hover shows forgetting_depth value and strict_score",
+          "observed": "Passed bars hovertemplate: '%{x}<br>Forgetting Depth: %{y:.4f}<br>Strict Score: %{customdata:.4f}'. Failed bars hovertemplate: '%{x}<br>Forgetting Depth: %{y:.4f}<br>Status: %{customdata}'."
+        },
+        {
+          "action": "Verify strict score chart exists",
+          "expected": "Separate chart for strict score below forgetting depth",
+          "observed": "Second chart titled 'Strict Score Distribution (Pass/Fail Classification)' with 16 'Passed (≥0.4)' and 7 'Failed (<0.4 / validation_failed)' experiments."
+        },
+        {
+          "action": "Verify values match results.json",
+          "expected": "exp_lme_0059: forgetting_depth=0.3675, strict_score=0.458456",
+          "observed": "Chart data confirmed: exp_lme_0059 forgetting_depth=0.3675 (exact match), strict_score=0.458456 (exact match)"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "advanced-analysis/forgetting-cv/VAL-PARAMS-003-forgetting-depth-overview.png",
+          "advanced-analysis/forgetting-cv/VAL-PARAMS-003-full-page.png"
+        ],
+        "consoleErrors": "none",
+        "chartDataVerified": {
+          "forgettingDepthChart": {
+            "title": "Forgetting Depth Distribution (Pass/Fail Classification)",
+            "totalExperiments": 23,
+            "passed": 16,
+            "failed": 7,
+            "exp_lme_0059_value": 0.3675,
+            "exp_0000_excluded": true,
+            "exp_lme_0008_excluded": true
+          },
+          "strictScoreChart": {
+            "title": "Strict Score Distribution (Pass/Fail Classification)",
+            "totalExperiments": 23,
+            "passed": 16,
+            "failed": 7,
+            "exp_lme_0059_value": 0.458456
+          }
+        }
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PARAMS-004",
+      "title": "Cross-Validation Results Visualization",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Navigate to Forgetting & CV tab, find CV experiment selector",
+          "expected": "Dropdown with experiments that have CV data",
+          "observed": "Dropdown 'Select experiment with CV data...' with 7 options: exp_0315, exp_lme_0008, exp_lme_0046, exp_lme_0049, exp_lme_0051, exp_lme_0056, exp_lme_0090"
+        },
+        {
+          "action": "Select exp_lme_0008 from dropdown",
+          "expected": "Fold scores bar chart and fold deltas chart displayed",
+          "observed": "Charts loaded with exp_lme_0008 data. Fold scores chart (5 bars) and fold deltas chart visible."
+        },
+        {
+          "action": "Verify fold scores bar chart shows k=5 folds with correct scores",
+          "expected": "5 folds matching cv_results.json fold_scores",
+          "observed": "Fold 1: 0.3852, Fold 2: 0.3366, Fold 3: 0.3069, Fold 4: 0.3639, Fold 5: 0.3404 — all match cv_results.json fold_scores overall_score values exactly."
+        },
+        {
+          "action": "Verify mean±std annotation visible",
+          "expected": "mean=0.3466, std=0.0296 for exp_lme_0008",
+          "observed": "Annotation text: 'Mean: 0.3466 ± 0.0296' at y=0.3466 with dashed blue mean line. Matches cv_results.json: mean.overall_score=0.3466, std.overall_score=0.0296."
+        },
+        {
+          "action": "Verify worst-fold highlighted in red",
+          "expected": "Fold with lowest score highlighted differently",
+          "observed": "Fold 3 (score 0.3069, the minimum) highlighted in red (#EF5350). Other folds shown in green (#4CAF50) and orange (#FF9800)."
+        },
+        {
+          "action": "Verify fold deltas chart shows deviation from mean",
+          "expected": "Fold deltas matching cv_results.json fold_deltas",
+          "observed": "Fold 1: +0.0668, Fold 2: -0.0291, Fold 3: +0.0037, Fold 4: -0.0898, Fold 5: +0.0484 — all match cv_results.json fold_deltas exactly."
+        },
+        {
+          "action": "Select exp_lme_0056 (validation_failed but has CV data)",
+          "expected": "CV data displays correctly despite validation_failed status",
+          "observed": "Charts updated to exp_lme_0056. Title: 'Cross-Validation Fold Scores — exp_lme_0056'. Fold scores: [0.3895, 0.3282, 0.3111, 0.3541, 0.3440]. Mean: 0.3454 ± 0.0296. All values match cv_results.json."
+        },
+        {
+          "action": "Verify fold deltas for exp_lme_0056",
+          "expected": "Fold deltas match cv_results.json",
+          "observed": "Fold deltas: [+0.0676, -0.0300, +0.0058, -0.0913, +0.0479] — match cv_results.json fold_deltas exactly."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "advanced-analysis/forgetting-cv/VAL-PARAMS-004-cv-exp_lme_0008-fold-scores.png",
+          "advanced-analysis/forgetting-cv/VAL-PARAMS-004-cv-exp_lme_0008-fold-deltas.png",
+          "advanced-analysis/forgetting-cv/VAL-PARAMS-004-cv-exp_lme_0056-fold-scores.png",
+          "advanced-analysis/forgetting-cv/VAL-PARAMS-004-cv-exp_lme_0056-full.png"
+        ],
+        "consoleErrors": "none",
+        "chartDataVerified": {
+          "exp_lme_0008": {
+            "foldScores": [0.3852, 0.3366, 0.3069, 0.3639, 0.3404],
+            "mean": 0.3466,
+            "std": 0.0296,
+            "worstFold": "Fold 3 (0.3069, red)",
+            "foldDeltas": [0.0668, -0.0291, 0.0037, -0.0898, 0.0484]
+          },
+          "exp_lme_0056": {
+            "foldScores": [0.3895, 0.3282, 0.3111, 0.3541, 0.3440],
+            "mean": 0.3454,
+            "std": 0.0296,
+            "worstFold": "Fold 4 (0.3541, red)",
+            "foldDeltas": [0.0676, -0.0300, 0.0058, -0.0913, 0.0479]
+          }
+        }
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "The Dash Radix dropdown (cv-exp-selector) does not respond to standard agent-browser click on options from the accessibility tree snapshot. The option click registers (returns success) but does not update the selection or trigger the Dash callback. Workaround: use JavaScript eval with setTimeout to open dropdown and click option programmatically.",
+      "resolved": true,
+      "resolution": "Used eval to call btn.click() then setTimeout to find and click the [role=option] element for exp_lme_0056.",
+      "affectedAssertions": ["VAL-PARAMS-004"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 2 assertions: both PASSED. VAL-PARAMS-003: Forgetting depth and strict score charts display 23 experiments (16 passed, 7 failed) with correct pass/fail classification, exclusion of experiments without data, correct tooltip info, and values matching results.json. VAL-PARAMS-004: CV fold scores and fold deltas charts display correctly for exp_lme_0008 (k=5, mean=0.3466±0.0296, worst fold highlighted) and handle the exp_lme_0056 edge case (validation_failed but has CV data) correctly."
+}

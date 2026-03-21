@@ -1,0 +1,25 @@
+{
+  "milestone": "advanced-analysis",
+  "round": 1,
+  "status": "fail",
+  "assertionsSummary": {
+    "total": 7,
+    "passed": 5,
+    "failed": 2,
+    "blocked": 0
+  },
+  "passedAssertions": ["VAL-PARAMS-002", "VAL-PARAMS-003", "VAL-PARAMS-004", "VAL-PARAMS-005", "VAL-PARAMS-007"],
+  "failedAssertions": [
+    {
+      "id": "VAL-PARAMS-001",
+      "reason": "Parameter sweep chart empty by default (no dimensions pre-selected), requiring manual selection. Hover tooltips not supported by Plotly go.Parcoords (lines highlight but no value text shown). Chart renders correctly after dimension selection with Viridis colorscale mapping to overall_score."
+    },
+    {
+      "id": "VAL-PARAMS-006",
+      "reason": "Experiment detail selector dropdown exists but selecting an experiment does NOT open the detail view. The toggle_detail_view callback chain is broken — detail-view div remains hidden (display:none). This appears to be a broader issue affecting all detail view navigation including leaderboard row clicks, not just the parameter sweep."
+    }
+  ],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null
+}

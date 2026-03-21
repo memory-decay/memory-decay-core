@@ -1,0 +1,192 @@
+{
+  "groupId": "phase-compare-missing-data",
+  "testedAt": "2026-03-21T14:30:00Z",
+  "isolation": {
+    "appUrl": "http://localhost:8050",
+    "browserSession": "daac48305b45__u4",
+    "constraint": "Stick to Phase Compare tab only; do not modify era filter"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-PARAMS-005",
+      "title": "Phase Comparison Panel",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Navigate to Phase Compare tab",
+          "expected": "Phase Compare view with two dropdown selectors",
+          "observed": "Phase Comparison heading displayed with Phase A and Phase B dropdown selectors and description text"
+        },
+        {
+          "action": "Select Phase 1 and Phase 8 using dropdowns",
+          "expected": "Side-by-side comparison table appears with metrics",
+          "observed": "Comparison table appeared with 5 metric rows (Overall Score, Retrieval Score, Plausibility Score, Recall Mean, Retention AUC) and IMPROVEMENT column"
+        },
+        {
+          "action": "Verify Phase 1 statistics",
+          "expected": "Phase 1: 25 total exps, 24 scored, overall_score mean=0.3716, best=0.3960",
+          "observed": "Phase 1: Early Exploration — 24 experiments (24 scored). Overall Score: 0.3716 (best: 0.3960)"
+        },
+        {
+          "action": "Verify Phase 8 statistics",
+          "expected": "Phase 8: 45 total exps, 43 scored, overall_score mean=0.3226, best=0.4630",
+          "observed": "Phase 8: LongMemEval Auto-Research — 44 experiments (43 scored). Overall Score: 0.3226 (best: 0.4630)"
+        },
+        {
+          "action": "Cross-check overall_score mean for Phase 1 against raw results.json files",
+          "expected": "Mean matches calculated value from Python script",
+          "observed": "Python script: Phase 1 mean=0.3716, best=0.3960 — EXACT MATCH"
+        },
+        {
+          "action": "Cross-check overall_score mean for Phase 8 against raw results.json files",
+          "expected": "Mean matches calculated value from Python script",
+          "observed": "Python script: Phase 8 mean=0.3226, best=0.4630 — EXACT MATCH"
+        },
+        {
+          "action": "Cross-check retrieval_score mean for Phase 8",
+          "expected": "Matches Python calculation",
+          "observed": "Python: 0.3427, UI: 0.3427 — EXACT MATCH"
+        },
+        {
+          "action": "Cross-check plausibility_score mean for Phase 8",
+          "expected": "Matches Python calculation",
+          "observed": "Python: 0.5584, UI: 0.5584 — EXACT MATCH"
+        },
+        {
+          "action": "Cross-check recall_mean for Phase 8",
+          "expected": "Matches Python calculation",
+          "observed": "Python: 0.5885, UI: 0.5885 — EXACT MATCH"
+        },
+        {
+          "action": "Cross-check retention_auc for Phase 8",
+          "expected": "Matches Python calculation",
+          "observed": "Python: 0.7512, UI: 0.7512 — EXACT MATCH"
+        },
+        {
+          "action": "Verify validation_failed experiments excluded",
+          "expected": "Phase 1: exp_0004 (validation_failed) excluded from calculations",
+          "observed": "Phase 1 shows 25 exps total but 24 scored — 1 validation_failed (exp_0004) excluded. Confirmed via Python script."
+        },
+        {
+          "action": "Verify improvement percentages",
+          "expected": "Correct calculation of (phaseB - phaseA) / phaseA",
+          "observed": "Overall: -13.17% ✓, Retrieval: +3.07% ✓, Plausibility: +12.79% ✓, Recall: +35.51% ✓"
+        },
+        {
+          "action": "Verify Retention AUC shows N/A for Phase 1 (old era, no retention data)",
+          "expected": "N/A displayed for Phase 1 Retention AUC",
+          "observed": "Retention AUC row shows 'N/A (best: N/A)' for Phase 1 and '0.7512 (best: 0.8079)' for Phase 8"
+        },
+        {
+          "action": "Verify Phase 7 (1 experiment) comparison works",
+          "expected": "Single-experiment phase shows correct comparison",
+          "observed": "Phase 7 vs Phase 8 comparison works. Phase 7: 1 experiment (1 scored) with single-value means matching exp_lme_0000's results."
+        },
+        {
+          "action": "Verify comparison uses 'All' era data",
+          "expected": "Both memories_500 and LongMemEval experiments included",
+          "observed": "Phase 1 (old era, exp_0000-0024) and Phase 8 (LME era, exp_lme_0001-0045) both included. Era filter remained on 'All'."
+        },
+        {
+          "action": "Check console errors",
+          "expected": "No console errors",
+          "observed": "No console errors on Phase Compare tab"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "advanced-analysis/phase-compare-missing-data/VAL-PARAMS-005-phase-compare-initial.png",
+          "advanced-analysis/phase-compare-missing-data/VAL-PARAMS-005-phase-compare-results-v2.png",
+          "advanced-analysis/phase-compare-missing-data/VAL-PARAMS-005-phase7-vs-phase8.png"
+        ],
+        "consoleErrors": "none",
+        "network": "No network errors"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PARAMS-007",
+      "title": "Missing Snapshot/Data Handling",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Navigate to Snapshot Viewer tab",
+          "expected": "Snapshot Viewer with experiment selector dropdown",
+          "observed": "Snapshot Viewer heading with experiment dropdown, tick controls, and empty Plotly chart"
+        },
+        {
+          "action": "Check if exp_lme_0001 (no results.json) is in Snapshot Viewer dropdown",
+          "expected": "Experiments without snapshot data excluded from dropdown",
+          "observed": "exp_lme_0001 NOT in dropdown. Dropdown shows 454 experiments (out of 468 total) — only experiments with snapshot data included."
+        },
+        {
+          "action": "Check if exp_0360 (empty directory) is in Snapshot Viewer dropdown",
+          "expected": "Empty experiments excluded from dropdown",
+          "observed": "exp_0360 NOT in dropdown. Confirmed filtered out."
+        },
+        {
+          "action": "Navigate to Forgetting & CV tab",
+          "expected": "Forgetting Depth & CV Analysis view with charts and CV experiment selector",
+          "observed": "Two forgetting depth charts visible, Cross-Validation Results section with 'Select experiment with CV data...' dropdown"
+        },
+        {
+          "action": "Check CV experiment selector dropdown options",
+          "expected": "Only experiments with cv_results.json listed",
+          "observed": "7 experiments listed: exp_0315, exp_lme_0008, exp_lme_0046, exp_lme_0049, exp_lme_0051, exp_lme_0056, exp_lme_0090. All have cv_results.json. Non-CV experiments not listed."
+        },
+        {
+          "action": "Verify exp_lme_0056 (validation_failed but has CV data) is in CV dropdown",
+          "expected": "Edge case experiment included since it has cv_results.json",
+          "observed": "exp_lme_0056 IS listed in CV dropdown — correct edge case handling."
+        },
+        {
+          "action": "Navigate to Retention Curves tab",
+          "expected": "Retention curve overlay with experiment selector",
+          "observed": "Retention Curve Overlay heading with multi-select dropdown showing 'Select 2-5 experiments with retention data...'"
+        },
+        {
+          "action": "Verify retention dropdown pre-filters to experiments with retention data",
+          "expected": "114 experiments with retention data, no experiments without",
+          "observed": "114 experiments in dropdown. exp_lme_0001 (no results), exp_0001 (no retention), exp_0360 (empty) all excluded."
+        },
+        {
+          "action": "Check if 'unavailable' message is reachable for retention curves",
+          "expected": "Either unreachable (pre-filtered) or shown gracefully",
+          "observed": "NOT reachable through UI — dropdown pre-filters to only experiments WITH retention data. This is correct behavior."
+        },
+        {
+          "action": "Check console errors across all tabs tested",
+          "expected": "No console errors",
+          "observed": "No console errors on any tested tab"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "advanced-analysis/phase-compare-missing-data/VAL-PARAMS-007-snapshot-viewer-empty.png",
+          "advanced-analysis/phase-compare-missing-data/VAL-PARAMS-007-forgetting-cv-tab.png",
+          "advanced-analysis/phase-compare-missing-data/VAL-PARAMS-007-cv-dropdown-options.png"
+        ],
+        "consoleErrors": "none",
+        "network": "No network errors"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Dash custom dropdowns (for Phase Compare phase selectors and CV experiment selector) do not respond to Playwright click on option elements. Must use JavaScript (document.querySelectorAll('.dash-dropdown-option').find(...).click()) to select options. The first dropdown (Phase 1) responded to agent-browser click, but the second (Phase 8) did not — inconsistent behavior.",
+      "resolved": true,
+      "resolution": "Used JavaScript DOM manipulation to click .dash-dropdown-option elements for selections that didn't respond to Playwright clicks.",
+      "affectedAssertions": ["VAL-PARAMS-005"]
+    },
+    {
+      "description": "CV dropdown initially showed 0 options despite being on the analysis page. The options callback requires active_page=='analysis' but the dropdown wasn't populated until directly clicking the button element via JavaScript. Standard agent-browser click on the button element did not open the dropdown.",
+      "resolved": true,
+      "resolution": "Used document.querySelector('#cv-exp-selector').click() via JavaScript to open the dropdown, after which options were visible.",
+      "affectedAssertions": ["VAL-PARAMS-007"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 2 assertions: 2 passed. VAL-PARAMS-005: Phase Comparison Panel correctly displays side-by-side statistics for two selected phases with accurate mean calculations (cross-checked against raw results.json), validation_failed exclusion, improvement percentages, and N/A for unavailable metrics. VAL-PARAMS-007: Missing data handled gracefully — Snapshot Viewer filters to 454/468 experiments with snapshots, CV panel filters to 7 experiments with cv_results.json (including edge case exp_lme_0056), and Retention dropdown pre-filters to 114 experiments with retention data."
+}

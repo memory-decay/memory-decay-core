@@ -1,0 +1,140 @@
+{
+  "groupId": "params-sweep",
+  "testedAt": "2026-03-21T12:00:00Z",
+  "isolation": {
+    "appUrl": "http://localhost:8050",
+    "browserSession": "daac48305b45__u1",
+    "testingTool": "agent-browser",
+    "concurrencyNote": "Stayed on Parameter Sweep tab only; did not modify era filter"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-PARAMS-001",
+      "title": "Parameter Sweep Visualization",
+      "status": "partial",
+      "steps": [
+        {
+          "action": "Navigate to http://localhost:8050 and click '🧬 Parameter Sweep' tab",
+          "expected": "Parameter Sweep view with parallel coordinates chart",
+          "observed": "Parameter Sweep view displayed with heading 'Parameter Sweep', dimension selector dropdown, experiment selector dropdown, and a Plotly chart area"
+        },
+        {
+          "action": "Check chart on initial load (no dimensions selected)",
+          "expected": "Chart should be visible with default dimensions",
+          "observed": "Chart area shows Plotly toolbar but the parallel coordinates plot is EMPTY — no data rendered. The dimension selector dropdown has initial value of [] (nothing selected). User must manually select dimensions."
+        },
+        {
+          "action": "Open dimension selector and click 'Select All'",
+          "expected": "All available dimensions selected, chart renders with parallel coordinates",
+          "observed": "9 dimensions selected: stability_weight, stability_decay, reinforcement_gain_direct, reinforcement_gain_assoc, stability_cap, lambda_fact, lambda_episode, alpha, floor_max. Chart renders as a parcoords (parallel coordinates) plot on canvas elements."
+        },
+        {
+          "action": "Verify chart type and color scale via Plotly internal data",
+          "expected": "go.Parcoords with Viridis colorscale mapping to overall_score",
+          "observed": "Confirmed: type='parcoords', colorscale=Viridis (10 steps from #440154 to #fde725), colorbar title='Overall Score', cmin=0, cmax=1"
+        },
+        {
+          "action": "Hover over the parallel coordinates chart",
+          "expected": "Tooltips showing param values and overall_score",
+          "observed": "No tooltips appear. Plotly go.Parcoords does not support hovertemplate — this is a known Plotly limitation. The hoverlayer remains empty after hovering at multiple positions. Lines highlight on hover but no text tooltip is displayed."
+        },
+        {
+          "action": "Verify >50% null filtering in 'All' era view (source code verification)",
+          "expected": "Params with >50% null hidden in 'All' view",
+          "observed": "Code in get_param_sweep_dimensions() correctly filters: 'if era == All: candidates = [k for k in candidates if param_count[k] / total > 0.50]'. 'All' era has 9 params (vs 16 for LongMemEval and 26 for memories_500)."
+        },
+        {
+          "action": "Verify era-specific dimensions programmatically",
+          "expected": "LME-era ~15 params including assoc_boost, floor_max, sigmoid_k; old-era ~10 params including beta_fact, beta_episode",
+          "observed": "LongMemEval: 16 params (lambda_fact, lambda_episode, stability_weight, stability_decay, reinforcement_gain_direct, reinforcement_gain_assoc, stability_cap, alpha, floor_max, jost_power, sigmoid_k, sigmoid_mid, activation_weight, retrieval_boost, test_reactivation_start_tick, test_reactivation_interval). memories_500: 26 params (includes lambda_fact, lambda_episode, base_floor, impact_floor_scale, etc.). NOTE: contract says 'beta_fact/beta_episode' for old-era but actual param names are 'lambda_fact/lambda_episode'. Contract says 'assoc_boost' for LME-era but it's not in available params (likely excluded due to low variance or coverage)."
+        },
+        {
+          "action": "Check for console errors",
+          "expected": "No errors",
+          "observed": "No console errors detected"
+        }
+      ],
+      "evidence": [
+        "evidence/advanced-analysis/params-sweep/VAL-PARAMS-001-param-sweep-all-eras.png — Chart area before selecting dimensions (empty)",
+        "evidence/advanced-analysis/params-sweep/VAL-PARAMS-001-dimension-selector-all-eras.png — Dimension selector dropdown showing 9 available options, all unchecked",
+        "evidence/advanced-analysis/params-sweep/VAL-PARAMS-001-param-sweep-all-eras-with-dims.png — Parcoords chart after selecting all 9 dimensions",
+        "evidence/advanced-analysis/params-sweep/VAL-PARAMS-001-parcoords-all-eras.png — Parcoords chart view",
+        "evidence/advanced-analysis/params-sweep/VAL-PARAMS-001-hover-center.png — Hover attempt at chart center (no tooltip)",
+        "evidence/advanced-analysis/params-sweep/VAL-PARAMS-001-hover-alternate.png — Hover attempt at alternate position (no tooltip)",
+        "Programmatic verification: get_param_sweep_dimensions returns 9 params for 'All', 16 for 'LongMemEval', 26 for 'memories_500'",
+        "Plotly internal data confirms: type='parcoords', colorscale='Viridis', colorbar title='Overall Score'"
+      ],
+      "issues": [
+        "MAJOR: Chart is empty by default. The dimension selector starts with value=[] (no dimensions selected), so users see an empty Plotly chart area when first navigating to Parameter Sweep. Dimensions should be pre-selected or the chart should show all available dimensions by default.",
+        "MODERATE: Hover tooltips not supported for go.Parcoords (Plotly limitation). The contract expects 'Interactive: hover for values' but Plotly's parallel coordinates trace type does not support hovertemplate. Lines highlight on hover but no param values or overall_score text is shown.",
+        "MINOR: Contract references 'beta_fact/beta_episode' for old-era and 'assoc_boost' for LME-era, but actual parameter names are 'lambda_fact/lambda_episode' and assoc_boost is not in available LME params. The dimension logic is correct but contract expectations need updating."
+      ]
+    },
+    {
+      "id": "VAL-PARAMS-006",
+      "title": "Parameter Sweep Interactive Navigation",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Navigate to Parameter Sweep tab and verify experiment selector dropdown exists",
+          "expected": "Experiment dropdown/selector for navigation to detail view",
+          "observed": "Dropdown with id='param-exp-detail-selector' exists with placeholder 'Select experiment to view details...'. Contains 100 experiment options sorted by overall_score descending."
+        },
+        {
+          "action": "Open dropdown and verify experiment options",
+          "expected": "List of experiments with scores",
+          "observed": "100 experiments listed with format 'exp_lme_0102 (overall: 0.6758)' etc., sorted by overall_score descending, top 100 experiments"
+        },
+        {
+          "action": "Select exp_lme_0008 from the experiment dropdown",
+          "expected": "Detail view opens showing exp_lme_0008 experiment data",
+          "observed": "Dropdown value changes to 'exp_lme_0008 (overall: 0.4630)' but NO detail view opens. The detail-view div remains display:none with 0 children. URL remains 'http://localhost:8050/' without experiment parameter."
+        },
+        {
+          "action": "Select exp_lme_0068 from the experiment dropdown (second attempt)",
+          "expected": "Detail view opens showing exp_lme_0068 experiment data",
+          "observed": "Same result: dropdown updates but detail view does not appear. URL unchanged."
+        },
+        {
+          "action": "Verify navigation via leaderboard row click (baseline check)",
+          "expected": "Clicking leaderboard row should open detail view",
+          "observed": "Clicking leaderboard row also does NOT open detail view. The toggle_detail_view callback does not fire. This appears to be a broader issue with the detail view mechanism, not specific to the parameter sweep."
+        },
+        {
+          "action": "Check for console errors",
+          "expected": "No errors",
+          "observed": "No console errors detected. Dash _dash-update-component requests return 200 status."
+        }
+      ],
+      "evidence": [
+        "evidence/advanced-analysis/params-sweep/VAL-PARAMS-006-exp-selector-result.png — State after selecting experiment from dropdown (detail view not visible)",
+        "JavaScript evaluation confirmed: detail-view div has display:none, 0 children after experiment selection",
+        "URL remains http://localhost:8050/ after experiment selection (no experiment parameter added)",
+        "Network requests show Dash callbacks return 200 but detail view state unchanged",
+        "The toggle_detail_view callback appears non-functional — does not fire from any input source (leaderboard click, param sweep selector)"
+      ],
+      "issues": [
+        "CRITICAL: Selecting an experiment from the parameter sweep dropdown does NOT navigate to the experiment detail view. The on_param_exp_detail_select callback sets selected-experiment store, but the toggle_detail_view callback does not fire or produce visible output. The detail-view div remains hidden (display:none) with no children.",
+        "CRITICAL: The detail view mechanism appears completely broken — even clicking rows in the leaderboard table does not open the detail view. The toggle_detail_view callback (prevent_initial_call='initial_duplicate') may have compatibility issues with Dash 4.0.0.",
+        "The experiment dropdown itself works correctly (options load, selection registers, value updates visually), but the downstream callback chain to show the detail view is non-functional."
+      ]
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Dash Radix-based dropdown components are difficult to interact with via agent-browser. Standard 'click option' and 'select value' commands don't work. Had to use JavaScript evaluation to find and click options by iterating through [role='option'] elements.",
+      "resolved": true,
+      "resolution": "Used agent-browser eval to open dropdown, find options via querySelectorAll, and click the target option by index.",
+      "affectedAssertions": ["VAL-PARAMS-006"]
+    },
+    {
+      "description": "Could not test era-specific dimension views (LongMemEval vs memories_500) interactively due to concurrency constraints — changing era filter would affect other validators sharing the dashboard.",
+      "resolved": true,
+      "resolution": "Verified era-specific dimensions programmatically via Python script calling get_param_sweep_dimensions() directly.",
+      "affectedAssertions": ["VAL-PARAMS-001"]
+    }
+  ],
+  "blockers": [],
+  "summary": "VAL-PARAMS-001: PARTIAL — Parallel coordinates plot renders correctly when dimensions are manually selected. Color scale (Viridis → overall_score) works. Parameter selector (multi-select dropdown with checkboxes) allows toggling dimensions. Code correctly filters >50% null params in 'All' view. However: (1) chart is empty by default (no dimensions pre-selected), (2) hover tooltips not supported by go.Parcoords (Plotly limitation). VAL-PARAMS-006: FAIL — Experiment detail selector dropdown exists and selections register visually, but the detail view does not open. The toggle_detail_view callback chain appears broken in Dash 4.0.0 — detail view is non-functional even from the leaderboard."
+}
