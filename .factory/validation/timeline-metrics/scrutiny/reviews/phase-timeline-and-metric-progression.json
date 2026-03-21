@@ -1,0 +1,73 @@
+{
+  "featureId": "phase-timeline-and-metric-progression",
+  "reviewedAt": "2026-03-21T06:30:00.000Z",
+  "commitId": "167acd4",
+  "transcriptSkeletonReviewed": false,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Solid implementation of all 4 timeline-milestone visualizations (phase timeline, metric progression, threshold heatmap, retention overlay) in an 802-line charts.py module and 567 lines of app.py additions. All 29 new unit tests pass (115 total). The implementation covers all expectedBehavior items including: 9-phase timeline with click-to-filter, 3 metric progression charts with phase shading and discontinuity indicator, validation_failed red X markers, non-contiguous ID gap handling, threshold heatmap with blank old-era cells, and retention curve overlay with multi-select. A few non-blocking quality issues noted below.",
+    "issues": [
+      {
+        "file": "dashboard/charts.py",
+        "line": 355,
+        "severity": "suggestion",
+        "description": "Unused variable `current_era` declared in `build_metric_progression`. Only `prev_exp_era` is used for contiguity checking. Dead code that could be removed for clarity."
+      },
+      {
+        "file": "dashboard/charts.py",
+        "line": 516,
+        "severity": "non_blocking",
+        "description": "`selected_phase` parameter accepted by `build_threshold_heatmap` but never used in the function body. The heatmap does not filter or highlight by phase. The parameter is harmless (caller always passes it) but misleading — a user reading the signature would expect phase filtering to affect the heatmap."
+      },
+      {
+        "file": "dashboard/app.py",
+        "line": 1566,
+        "severity": "suggestion",
+        "description": "The `leaderboard_phase_filter` callback is a no-op — it always returns `dash.no_update`. Its docstring says 'Phase filter is handled in the leaderboard callback' but the main `update_leaderboard` callback (line 1121) does not read `selected-phase` as input. The actual phase filtering is done via the separate `update_leaderboard_by_phase` callback (line 1583) which writes to the same `leaderboard-grid` output with `allow_duplicate`. This works but is a fragile two-callback pattern — if callbacks execute in unexpected order, the leaderboard could briefly show unfiltered data."
+      },
+      {
+        "file": "dashboard/charts.py",
+        "line": 94,
+        "severity": "suggestion",
+        "description": "`_phase_date_range` uses hardcoded date strings that won't update as the project evolves. These are approximate and documented as such, but could drift from reality. Not a functional issue since dates are only displayed in hover text."
+      },
+      {
+        "file": "dashboard/charts.py",
+        "line": 399,
+        "severity": "suggestion",
+        "description": "When a non-validation_failed experiment has `val is None` (missing metric), it does NOT break the line segment — only the `prev_num_id` tracker advances. This means two scored experiments with an unscored experiment between them will have a continuous line connecting them, which could be misleading. The line visually implies interpolation over the missing data point. This is a minor UX concern since null-metric experiments are relatively rare."
+      },
+      {
+        "file": "dashboard/app.py",
+        "line": 1583,
+        "severity": "suggestion",
+        "description": "The `update_leaderboard_by_phase` callback duplicates the filtering/sorting logic from `update_leaderboard`. If the filter logic changes in one place, it needs to be updated in both. Consider extracting shared filter+sort logic into a helper function."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The frontend-worker skill SKILL.md step 6 says 'For each verificationSteps item that starts with \"agent-browser:\", use the agent-browser skill to verify'. The worker was unable to verify Plotly chart click interactions and Dash 4.0 async dropdown interactions via agent-browser, as documented in skillFeedback.deviations. The skill should document this known limitation so future workers don't waste time attempting it.",
+      "evidence": "Handoff skillFeedback.deviations: 'Could not fully automate Plotly chart click testing (phase timeline click-to-filter) or Dash 4.0 async dropdown interactions'. DiscoveredIssues also lists both as non_blocking."
+    },
+    {
+      "area": "conventions",
+      "observation": "The pattern of using `allow_duplicate=True` with `prevent_initial_call=True` for shared outputs across multiple callbacks is becoming common in app.py (at least 4 callbacks use this pattern). AGENTS.md doesn't mention this Dash 4.0 callback pattern, but it's essential for the phase filter → leaderboard integration and other cross-component updates.",
+      "evidence": "dashboard/app.py: lines 1004, 1318, 1404, 1583 — all use allow_duplicate=True for outputs that have multiple callbacks writing to them."
+    },
+    {
+      "area": "services",
+      "observation": "The `typecheck` command in services.yaml only checks `app.py` and `data_loader.py` via py_compile, but doesn't include `charts.py`. The new charts.py module (802 lines) should also be type-checked.",
+      "evidence": ".factory/services.yaml typecheck command: 'py_compile dashboard/app.py && py_compile dashboard/data_loader.py' — charts.py is missing. The `lint` command does check 'dashboard/*.py' though."
+    },
+    {
+      "area": "conventions",
+      "observation": "The leaderboard's `update_leaderboard` callback (line 1121) does not take `selected-phase` as input, so it's unaware of phase filtering. Instead, a separate `update_leaderboard_by_phase` callback (line 1583) overwrites the leaderboard data when phase changes. This dual-callback pattern for the same output is not documented as a convention in AGENTS.md and should be either documented or refactored to a single callback.",
+      "evidence": "dashboard/app.py: update_leaderboard (line 1121) has no selected-phase input. update_leaderboard_by_phase (line 1583) writes to same 'leaderboard-grid' rowData with allow_duplicate=True."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "The phase-timeline-and-metric-progression feature is well-implemented with comprehensive coverage of all expectedBehavior items. The 802-line charts.py module provides clean, well-documented Plotly figure builders for all 4 visualizations, and the app.py integration adds proper navigation, callbacks, and era/phase filter propagation. All 115 tests pass (29 new). The implementation correctly handles: phase timeline with click-to-filter and toggle, 3 metric progression line charts with phase shading, Phase 4/5 scoring discontinuity indicator, validation_failed red X markers excluded from line interpolation, non-contiguous experiment ID gap handling, threshold heatmaps with blank old-era cells, and retention curve overlay with multi-select and max-5 enforcement. Minor issues: unused `selected_phase` param in heatmap builder, unused variable, no-op callback, and a dual-callback pattern for leaderboard phase filtering that could be fragile. None are blocking."
+}

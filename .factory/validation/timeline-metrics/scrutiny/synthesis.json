@@ -1,13 +1,12 @@
 {
   "milestone": "timeline-metrics",
-  "round": 1,
-  "status": "fail",
+  "round": 2,
+  "status": "pass",
   "validatorsRun": {
     "test": {
-      "passed": false,
+      "passed": true,
       "command": "cd /home/roach/.openclaw/workspace/memory-decay && dashboard/.venv/bin/python -m pytest tests/test_dashboard.py -v --tb=short",
-      "exitCode": 1,
-      "failure": "1 test failed: tests/test_dashboard.py::TestDetailViewBuilder::test_detail_view_key_metrics_4_decimal_places - AssertionError: Expected 4-decimal formatted overall_score. Test expects '0.3415' but actual exp_lme_0008 overall_score is 0.4630429519731301 (formatted as '0.4630'). This is a pre-existing test bug from experiment-detail-view feature (dashboard-shell milestone) — test has wrong hardcoded expected value."
+      "exitCode": 0
     },
     "typecheck": {
       "passed": true,
@@ -21,22 +20,48 @@
     }
   },
   "reviewsSummary": {
-    "total": 0,
-    "passed": 0,
+    "total": 1,
+    "passed": 1,
     "failed": 0,
-    "failedFeatures": [],
-    "skippedDueToValidatorFailure": ["phase-timeline-and-metric-progression"]
+    "failedFeatures": []
   },
-  "blockingIssues": [
+  "blockingIssues": [],
+  "appliedUpdates": [
     {
-      "featureId": "experiment-detail-view",
-      "severity": "blocking",
-      "description": "test_detail_view_key_metrics_4_decimal_places fails: test expects '0.3415' but exp_lme_0008 overall_score is 0.4630429519731301. Fix: change expected value in test from '0.3415' to '0.4630' (or better yet, compute it dynamically from results.json).",
-      "suggestedFix": "In tests/test_dashboard.py line 1079, change assert '0.3415' to assert '0.4630'. Or better: load the actual value from results.json and format it dynamically."
+      "target": "services.yaml",
+      "description": "Added charts.py to typecheck command. Previously only checked app.py and data_loader.py, but charts.py (802 lines) was not being type-checked despite lint catching it via wildcard.",
+      "sourceFeature": "phase-timeline-and-metric-progression"
     }
   ],
-  "appliedUpdates": [],
-  "suggestedGuidanceUpdates": [],
-  "rejectedObservations": [],
-  "previousRound": null
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Document the Dash 4.0 allow_duplicate=True callback pattern as an accepted convention. At least 4 callbacks in app.py use allow_duplicate=True with prevent_initial_call=True for shared outputs. This pattern is essential for cross-component updates (e.g., phase filter → leaderboard).",
+      "evidence": "dashboard/app.py lines 1004, 1318, 1404, 1583 all use allow_duplicate=True. The frontend-worker skill does not document this pattern.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Document or discourage the dual-callback pattern for the same output. Currently update_leaderboard and update_leaderboard_by_phase both write to 'leaderboard-grid' with allow_duplicate=True. This is fragile — callbacks could execute in unexpected order. Recommend extracting shared filter+sort logic into a helper and using a single callback that reads all inputs.",
+      "evidence": "dashboard/app.py: update_leaderboard (line 1121) has no selected-phase input; update_leaderboard_by_phase (line 1583) writes to same output. Feature review flagged this as fragile.",
+      "isSystemic": false
+    },
+    {
+      "target": "skills",
+      "suggestion": "Update frontend-worker skill to document known agent-browser limitations: Plotly chart click interactions and Dash 4.0 async dropdown interactions cannot be reliably automated. Workers should not spend time attempting these verifications.",
+      "evidence": "Phase timeline feature worker reported inability to automate Plotly chart click testing and Dash 4.0 async dropdown interactions via agent-browser. Both were documented as non_blocking discoveredIssues.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Unused variable current_era in build_metric_progression and unused selected_phase parameter in build_threshold_heatmap",
+      "reason": "Code quality suggestions, not shared state. Worker who maintains charts.py should clean up in future work."
+    },
+    {
+      "observation": "Hardcoded date ranges in _phase_date_range that won't update as project evolves",
+      "reason": "Already documented as approximate in code comments. Not actionable as guidance."
+    }
+  ],
+  "previousRound": ".factory/validation/timeline-metrics/scrutiny/synthesis.json"
 }
