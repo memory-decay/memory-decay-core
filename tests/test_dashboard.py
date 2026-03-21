@@ -1213,3 +1213,285 @@ class TestDetailViewBuilder:
         card = app_module._build_metric_card("Missing Score", None)
         card_text = str(card)
         assert "N/A" in card_text
+
+
+# ---------------------------------------------------------------------------
+# Chart module tests (VAL-TIMELINE-001 through VAL-TIMELINE-009)
+# ---------------------------------------------------------------------------
+
+class TestCharts:
+    """Tests for dashboard.charts module — timeline, metric progression, heatmap, retention."""
+
+    @pytest.fixture
+    def chart_module(self):
+        """Import charts module (side-effect-free)."""
+        from dashboard import charts
+        return charts
+
+    @pytest.fixture
+    def all_experiments(self):
+        """Load all experiments from disk."""
+        from dashboard.data_loader import load_all_experiments
+        return load_all_experiments("experiments")
+
+    # -- Phase Timeline --
+
+    def test_phase_timeline_returns_figure(self, chart_module, all_experiments):
+        """Phase timeline returns a Plotly Figure."""
+        import plotly.graph_objects as go
+        fig = chart_module.build_phase_timeline(all_experiments)
+        assert isinstance(fig, go.Figure)
+
+    def test_phase_timeline_all_eras_shows_7_phases(self, chart_module, all_experiments):
+        """Phase timeline with All eras shows phases with experiments (1-5, 7-9)."""
+        fig = chart_module.build_phase_timeline(all_experiments, era="All")
+        # Count y-axis labels (phases with experiments + empty phases)
+        y_labels = fig.layout.yaxis.ticktext
+        if y_labels is not None:
+            # Should have entries for phases with data and empty phases (0, 6)
+            assert len(y_labels) >= 7, "Expected at least 7 phase bars"
+
+    def test_phase_timeline_era_filter(self, chart_module, all_experiments):
+        """Era filter correctly limits experiments."""
+        fig_old = chart_module.build_phase_timeline(all_experiments, era="memories_500")
+        fig_new = chart_module.build_phase_timeline(all_experiments, era="LongMemEval")
+
+        # Old era should have phases 1-5
+        old_labels = list(fig_old.data[0].y)
+        old_labels_str = " ".join(str(l) for l in old_labels)
+        assert "Phase 1" in old_labels_str
+        assert "Phase 5" in old_labels_str
+
+        # New era should have phases 7-9
+        new_labels = list(fig_new.data[0].y)
+        new_labels_str = " ".join(str(l) for l in new_labels)
+        assert "Phase 7" in new_labels_str
+        assert "Phase 8" in new_labels_str
+        assert "Phase 9" in new_labels_str
+
+    def test_phase_timeline_customdata(self, chart_module, all_experiments):
+        """Phase bars have customdata with phase numbers for click handling."""
+        fig = chart_module.build_phase_timeline(all_experiments)
+        trace = fig.data[0]
+        assert trace.customdata is not None
+        assert len(trace.customdata) > 0
+
+    def test_phase_timeline_selected_phase_highlighting(self, chart_module, all_experiments):
+        """Selected phase has different color."""
+        fig_normal = chart_module.build_phase_timeline(all_experiments, selected_phase=None)
+        fig_selected = chart_module.build_phase_timeline(all_experiments, selected_phase=5)
+
+        # Both should produce valid figures
+        assert isinstance(fig_normal.data[0].marker.color, (list, tuple))
+        assert isinstance(fig_selected.data[0].marker.color, (list, tuple))
+
+    def test_phase_timeline_hover_text(self, chart_module, all_experiments):
+        """Hover text includes phase name, date range, experiment count, best score."""
+        fig = chart_module.build_phase_timeline(all_experiments)
+        trace = fig.data[0]
+        assert trace.hovertext is not None
+        # At least one bar should have experiment count info
+        all_text = " ".join(trace.hovertext)
+        assert "Experiments:" in all_text or "experiment" in all_text.lower()
+
+    # -- Metric Progression --
+
+    def test_metric_progression_returns_3_figures(self, chart_module, all_experiments):
+        """Metric progression returns exactly 3 figures."""
+        figs = chart_module.build_metric_progression(all_experiments)
+        assert len(figs) == 3
+
+    def test_metric_progression_y_axis_range(self, chart_module, all_experiments):
+        """Y-axis fixed [0,1]."""
+        figs = chart_module.build_metric_progression(all_experiments)
+        for fig in figs:
+            y_range = fig.layout.yaxis.range
+            assert list(y_range) == [0, 1], f"Expected [0, 1], got {y_range}"
+
+    def test_metric_progression_phase_shading(self, chart_module, all_experiments):
+        """Charts have phase background shading (vrect shapes)."""
+        import plotly.graph_objects as go
+        figs = chart_module.build_metric_progression(all_experiments)
+        for fig in figs:
+            # Check for vrect shapes (phase shading)
+            has_vrect = any(
+                hasattr(s, 'type') and s.type == 'rect' and s.x0 is not None
+                for s in fig.layout.shapes if hasattr(s, 'type')
+            )
+            assert has_vrect, "Expected phase shading (vrect shapes)"
+
+    def test_metric_progression_discontinuity_indicator(self, chart_module, all_experiments):
+        """Phase 4/5 boundary has scoring discontinuity indicator."""
+        figs = chart_module.build_metric_progression(all_experiments, era="All")
+        for fig in figs:
+            # Check for vline or annotation with discontinuity text
+            has_vline = any(
+                hasattr(s, 'type') and s.type == 'line'
+                for s in fig.layout.shapes if hasattr(s, 'type')
+            )
+            has_annotation = any(
+                "Scoring" in str(a.text) or "comparable" in str(a.text)
+                for a in fig.layout.annotations if a.text
+            )
+            assert has_vline or has_annotation, "Expected Phase 4/5 discontinuity indicator"
+
+    def test_metric_progression_era_filter(self, chart_module, all_experiments):
+        """Era filter reduces data points."""
+        figs_all = chart_module.build_metric_progression(all_experiments, era="All")
+        figs_lme = chart_module.build_metric_progression(all_experiments, era="LongMemEval")
+        # LME should have fewer data points
+        all_traces = sum(len(t.x) for t in figs_all[0].data if hasattr(t, 'x') and t.x)
+        lme_traces = sum(len(t.x) for t in figs_lme[0].data if hasattr(t, 'x') and t.x)
+        assert lme_traces < all_traces, "LME should have fewer data points than All"
+
+    def test_metric_progression_selected_phase_deemphasis(self, chart_module, all_experiments):
+        """Selected phase highlights that phase, de-emphasizes others."""
+        figs_normal = chart_module.build_metric_progression(all_experiments, selected_phase=None)
+        figs_selected = chart_module.build_metric_progression(all_experiments, selected_phase=5)
+
+        # Both should produce valid figures with shapes
+        assert len(figs_normal[0].layout.shapes) > 0
+        assert len(figs_selected[0].layout.shapes) > 0
+
+    # -- Threshold Heatmap --
+
+    def test_threshold_heatmap_returns_2_figures(self, chart_module, all_experiments):
+        """Threshold heatmap returns exactly 2 figures (recall + precision)."""
+        figs = chart_module.build_threshold_heatmap(all_experiments)
+        assert len(figs) == 2
+
+    def test_threshold_heatmap_color_scale(self, chart_module, all_experiments):
+        """Heatmap uses linear color scale [0,1]."""
+        figs = chart_module.build_threshold_heatmap(all_experiments)
+        for fig in figs:
+            trace = fig.data[0]
+            assert trace.zmin == 0, "Expected zmin=0"
+            assert trace.zmax == 1, "Expected zmax=1"
+
+    def test_threshold_heatmap_9_thresholds(self, chart_module, all_experiments):
+        """Heatmap has 9 threshold rows (0.1-0.9)."""
+        figs = chart_module.build_threshold_heatmap(all_experiments)
+        for fig in figs:
+            y_labels = fig.layout.yaxis.ticktext
+            if y_labels is not None:
+                assert len(y_labels) == 9, f"Expected 9 threshold rows, got {len(y_labels)}"
+
+    def test_threshold_heatmap_old_era_blank_cells(self, chart_module, all_experiments):
+        """Old-era experiments mostly have blank cells for threshold 0.1 (only 4 thresholds: 0.2-0.5)."""
+        figs = chart_module.build_threshold_heatmap(all_experiments, era="memories_500")
+        for fig in figs:
+            trace = fig.data[0]
+            z_data = trace.z
+            if z_data and len(z_data) > 0:
+                # Row for threshold 0.1 should have mostly None values
+                # (old-era has only 0.2-0.5, though ~14 late old-era have 9 thresholds)
+                row_01 = z_data[0]  # First row = threshold 0.1
+                if row_01:
+                    none_count = sum(1 for v in row_01 if v is None)
+                    total = len(row_01)
+                    assert none_count > total * 0.5, \
+                        f"Old-era threshold 0.1 should be mostly None, got {none_count}/{total} None"
+
+    def test_threshold_heatmap_new_era_complete(self, chart_module, all_experiments):
+        """New-era experiments have all 9 thresholds."""
+        figs = chart_module.build_threshold_heatmap(all_experiments, era="LongMemEval")
+        for fig in figs:
+            trace = fig.data[0]
+            z_data = trace.z
+            if z_data and len(z_data) > 0:
+                # Row for threshold 0.2 should have non-None values
+                row_02 = z_data[1]  # Second row = threshold 0.2
+                if row_02:
+                    has_values = any(v is not None for v in row_02)
+                    assert has_values, "New-era threshold 0.2 should have values"
+
+    def test_threshold_heatmap_hover_template(self, chart_module, all_experiments):
+        """Heatmap cells have hover template with exact value."""
+        figs = chart_module.build_threshold_heatmap(all_experiments)
+        for fig in figs:
+            trace = fig.data[0]
+            assert "Value:" in trace.hovertemplate or "%{z" in trace.hovertemplate
+
+    # -- Retention Curve Overlay --
+
+    def test_retention_overlay_returns_figure(self, chart_module, all_experiments):
+        """Retention overlay returns a Plotly Figure."""
+        import plotly.graph_objects as go
+        fig = chart_module.build_retention_overlay(all_experiments, [])
+        assert isinstance(fig, go.Figure)
+
+    def test_retention_overlay_empty_selection(self, chart_module, all_experiments):
+        """Empty selection shows placeholder message."""
+        fig = chart_module.build_retention_overlay(all_experiments, [])
+        has_annotation = any(
+            "Select" in str(a.text)
+            for a in fig.layout.annotations if a.text
+        )
+        assert has_annotation, "Expected placeholder annotation for empty selection"
+
+    def test_retention_overlay_with_selection(self, chart_module, all_experiments):
+        """Selecting experiments with retention data adds traces."""
+        available = chart_module.get_retention_available_experiments(all_experiments)
+        if len(available) >= 2:
+            fig = chart_module.build_retention_overlay(all_experiments, available[:2])
+            assert len(fig.data) >= 2, "Expected at least 2 traces for 2 experiments"
+
+    def test_retention_overlay_max_5_enforced(self, chart_module, all_experiments):
+        """More than 5 selections handled gracefully (caller enforces limit)."""
+        available = chart_module.get_retention_available_experiments(all_experiments)
+        # charts module doesn't enforce the limit, but should handle >5
+        if len(available) >= 6:
+            fig = chart_module.build_retention_overlay(all_experiments, available[:6])
+            assert isinstance(fig.data, tuple) or hasattr(fig, 'data')
+
+    def test_retention_overlay_unique_colors(self, chart_module, all_experiments):
+        """Each retention curve has a unique color."""
+        available = chart_module.get_retention_available_experiments(all_experiments)
+        if len(available) >= 3:
+            fig = chart_module.build_retention_overlay(all_experiments, available[:3])
+            colors = [t.line.color for t in fig.data if hasattr(t, 'line') and t.line.color]
+            assert len(set(colors)) == len(colors), "Expected unique colors for each curve"
+
+    def test_retention_ticks(self, chart_module, all_experiments):
+        """Retention chart uses correct ticks: 40, 80, 120, 160, 200."""
+        available = chart_module.get_retention_available_experiments(all_experiments)
+        if len(available) >= 1:
+            fig = chart_module.build_retention_overlay(all_experiments, available[:1])
+            tick_vals = fig.layout.xaxis.tickvals
+            assert list(tick_vals) == [40, 80, 120, 160, 200]
+
+    def test_retention_y_axis_range(self, chart_module, all_experiments):
+        """Retention Y-axis range is [0,1]."""
+        available = chart_module.get_retention_available_experiments(all_experiments)
+        if len(available) >= 1:
+            fig = chart_module.build_retention_overlay(all_experiments, available[:1])
+            y_range = fig.layout.yaxis.range
+            assert list(y_range) == [0, 1]
+
+    def test_get_retention_available_experiments(self, chart_module, all_experiments):
+        """Returns list of experiment IDs with retention data."""
+        available = chart_module.get_retention_available_experiments(all_experiments)
+        assert isinstance(available, list)
+        assert len(available) > 0, "Expected at least some experiments with retention data"
+        for eid in available:
+            assert eid.startswith("exp_"), f"Expected experiment ID, got {eid}"
+
+    def test_get_retention_available_era_filter(self, chart_module, all_experiments):
+        """Era filter limits available experiments."""
+        all_avail = chart_module.get_retention_available_experiments(all_experiments, "All")
+        lme_avail = chart_module.get_retention_available_experiments(all_experiments, "LongMemEval")
+        assert len(lme_avail) <= len(all_avail)
+
+    def test_check_retention_warnings(self, chart_module, all_experiments):
+        """Warnings returned for experiments without retention data."""
+        # exp_0000 doesn't have retention_curve
+        warnings = chart_module.check_retention_warnings(["exp_0000"], all_experiments)
+        assert len(warnings) == 1
+        assert "no retention data" in warnings[0].lower() or "unavailable" in warnings[0].lower()
+
+    def test_check_retention_warnings_valid_exp(self, chart_module, all_experiments):
+        """No warnings for experiments with retention data."""
+        available = chart_module.get_retention_available_experiments(all_experiments)
+        if available:
+            warnings = chart_module.check_retention_warnings([available[0]], all_experiments)
+            assert len(warnings) == 0

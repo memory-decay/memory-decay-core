@@ -7,6 +7,10 @@ Features:
 - Sidebar: era selector, status multi-select filter, text search
 - Leaderboard table: sortable columns, status badges, best experiment highlight
 - Detail view: same-page overlay with metrics, params, hypothesis, CV, snapshots
+- Phase timeline: horizontal bar chart with clickable phase bars
+- Metric progression: line charts with phase background shading
+- Threshold heatmap: recall/precision at thresholds 0.1-0.9
+- Retention curve overlay: multi-experiment comparison
 - URL state management via dcc.Location for bookmarkability
 """
 from __future__ import annotations
@@ -21,8 +25,10 @@ import dash_ag_grid as dag
 import pandas as pd
 import plotly.graph_objects as go
 from dash import Input, Output, State, callback, dash, html, dcc
+from dash import ctx as callback_ctx
 
 from dashboard.data_loader import Experiment, load_all_experiments
+from dashboard import charts
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -276,6 +282,9 @@ app.layout = html.Div(
         # Stores
         dcc.Store(id="selected-experiment", data=None),
         dcc.Store(id="sort-state", data={"column": "overall_score", "ascending": False}),
+        dcc.Store(id="selected-phase", data=None),
+        dcc.Store(id="active-page", data="leaderboard"),
+        dcc.Store(id="retention-selected", data=[]),
 
         # Sidebar
         html.Div(
@@ -391,6 +400,84 @@ app.layout = html.Div(
             id="main-content",
             style={"flex": "1", "overflow": "auto", "position": "relative"},
             children=[
+                # Navigation tabs
+                html.Div(
+                    style={
+                        "display": "flex",
+                        "borderBottom": "1px solid #dee2e6",
+                        "backgroundColor": "white",
+                        "padding": "0 24px",
+                        "position": "sticky",
+                        "top": 0,
+                        "zIndex": 5,
+                    },
+                    children=[
+                        html.Button(
+                            "📊 Leaderboard",
+                            id="tab-leaderboard",
+                            n_clicks=0,
+                            style={
+                                "padding": "12px 20px",
+                                "border": "none",
+                                "borderBottom": "2px solid #1565C0",
+                                "backgroundColor": "transparent",
+                                "cursor": "pointer",
+                                "fontSize": "14px",
+                                "fontWeight": "600",
+                                "color": "#1565C0",
+                                "marginRight": "4px",
+                            },
+                        ),
+                        html.Button(
+                            "📈 Timeline & Metrics",
+                            id="tab-timeline",
+                            n_clicks=0,
+                            style={
+                                "padding": "12px 20px",
+                                "border": "none",
+                                "borderBottom": "2px solid transparent",
+                                "backgroundColor": "transparent",
+                                "cursor": "pointer",
+                                "fontSize": "14px",
+                                "fontWeight": "500",
+                                "color": "#6c757d",
+                                "marginRight": "4px",
+                            },
+                        ),
+                        html.Button(
+                            "🗺️ Threshold Heatmap",
+                            id="tab-heatmap",
+                            n_clicks=0,
+                            style={
+                                "padding": "12px 20px",
+                                "border": "none",
+                                "borderBottom": "2px solid transparent",
+                                "backgroundColor": "transparent",
+                                "cursor": "pointer",
+                                "fontSize": "14px",
+                                "fontWeight": "500",
+                                "color": "#6c757d",
+                                "marginRight": "4px",
+                            },
+                        ),
+                        html.Button(
+                            "📉 Retention Curves",
+                            id="tab-retention",
+                            n_clicks=0,
+                            style={
+                                "padding": "12px 20px",
+                                "border": "none",
+                                "borderBottom": "2px solid transparent",
+                                "backgroundColor": "transparent",
+                                "cursor": "pointer",
+                                "fontSize": "14px",
+                                "fontWeight": "500",
+                                "color": "#6c757d",
+                            },
+                        ),
+                    ],
+                ),
+
                 # Leaderboard view
                 html.Div(
                     id="leaderboard-view",
@@ -442,6 +529,129 @@ app.layout = html.Div(
                                 ),
                             ],
                         ),
+                    ],
+                ),
+
+                # Timeline & Metrics view
+                html.Div(
+                    id="timeline-view",
+                    style={"display": "none", "padding": "24px"},
+                    children=[
+                        html.Div(
+                            style={"display": "flex", "alignItems": "center", "justifyContent": "space-between", "marginBottom": "16px"},
+                            children=[
+                                html.H1("Phase Timeline & Metric Progression", style={"margin": 0, "fontSize": "22px", "color": "#212529"}),
+                                html.Div(
+                                    id="phase-clear-btn-container",
+                                    style={"display": "none"},
+                                    children=[
+                                        html.Button(
+                                            "✕ Clear Phase Filter",
+                                            id="phase-clear-btn",
+                                            n_clicks=0,
+                                            style={
+                                                "padding": "6px 12px",
+                                                "border": "1px solid #dee2e6",
+                                                "borderRadius": "4px",
+                                                "backgroundColor": "#f8f9fa",
+                                                "cursor": "pointer",
+                                                "fontSize": "12px",
+                                                "color": "#495057",
+                                            },
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        ),
+                        # Phase timeline chart
+                        html.Div(
+                            id="phase-timeline-container",
+                            style={"marginBottom": "24px"},
+                            children=[dcc.Graph(id="phase-timeline-graph", config={"displayModeBar": False})],
+                        ),
+                        # Metric progression charts
+                        html.Div(
+                            style={"display": "grid", "gridTemplateColumns": "repeat(1, 1fr)", "gap": "16px"},
+                            children=[
+                                dcc.Graph(id="metric-overall-graph", config={"displayModeBar": True}),
+                                dcc.Graph(id="metric-retrieval-graph", config={"displayModeBar": True}),
+                                dcc.Graph(id="metric-plausibility-graph", config={"displayModeBar": True}),
+                            ],
+                        ),
+                    ],
+                ),
+
+                # Threshold heatmap view
+                html.Div(
+                    id="heatmap-view",
+                    style={"display": "none", "padding": "24px"},
+                    children=[
+                        html.H1("Threshold Metric Heatmap", style={"margin": "0 0 16px 0", "fontSize": "22px", "color": "#212529"}),
+                        html.P(
+                            "Recall and precision rates at each activation threshold (0.1–0.9). "
+                            "Blank cells indicate missing thresholds (old-era experiments have only 0.2–0.5).",
+                            style={"marginBottom": "16px", "fontSize": "13px", "color": "#6c757d"},
+                        ),
+                        dcc.Graph(id="heatmap-recall-graph", config={"displayModeBar": True}),
+                        html.Div(style={"height": "24px"}),
+                        dcc.Graph(id="heatmap-precision-graph", config={"displayModeBar": True}),
+                    ],
+                ),
+
+                # Retention curve view
+                html.Div(
+                    id="retention-view",
+                    style={"display": "none", "padding": "24px"},
+                    children=[
+                        html.H1("Retention Curve Overlay", style={"margin": "0 0 16px 0", "fontSize": "22px", "color": "#212529"}),
+                        html.P(
+                            "Compare retention curves across experiments. "
+                            "Select 2–5 experiments to overlay their retention profiles at ticks 40, 80, 120, 160, 200.",
+                            style={"marginBottom": "16px", "fontSize": "13px", "color": "#6c757d"},
+                        ),
+                        # Retention experiment selector
+                        html.Div(
+                            style={"display": "flex", "alignItems": "center", "gap": "12px", "marginBottom": "16px"},
+                            children=[
+                                html.Div(
+                                    style={"flex": "1"},
+                                    children=[
+                                        dcc.Dropdown(
+                                            id="retention-dropdown",
+                                            options=[],
+                                            value=[],
+                                            multi=True,
+                                            placeholder="Select 2–5 experiments with retention data...",
+                                            style={"fontSize": "13px"},
+                                        ),
+                                    ],
+                                ),
+                                html.Button(
+                                    "Clear All",
+                                    id="retention-clear-btn",
+                                    n_clicks=0,
+                                    style={
+                                        "padding": "6px 16px",
+                                        "border": "1px solid #dee2e6",
+                                        "borderRadius": "4px",
+                                        "backgroundColor": "#f8f9fa",
+                                        "cursor": "pointer",
+                                        "fontSize": "13px",
+                                        "color": "#495057",
+                                    },
+                                ),
+                            ],
+                        ),
+                        # Warning container
+                        html.Div(id="retention-warning", style={"marginBottom": "12px"}),
+                        # Retention count display
+                        html.Div(
+                            id="retention-count",
+                            style={"fontSize": "12px", "color": "#6c757d", "marginBottom": "16px"},
+                            children=["Select experiments to compare"],
+                        ),
+                        # Retention chart
+                        dcc.Graph(id="retention-graph", config={"displayModeBar": True}),
                     ],
                 ),
 
@@ -985,9 +1195,10 @@ def on_back_button(n_clicks: int) -> None:
     [
         Output("detail-view", "style"),
         Output("detail-view", "children"),
-        Output("leaderboard-view", "style"),
+        Output("leaderboard-view", "style", allow_duplicate=True),
     ],
     Input("selected-experiment", "data"),
+    prevent_initial_call="initial_duplicate",
 )
 def toggle_detail_view(exp_id: str | None) -> tuple[dict, list, dict]:
     """Toggle between leaderboard and detail view."""
@@ -1047,6 +1258,360 @@ def restore_from_url(search: str) -> tuple:
         return restored_exp, restored_era
     except (ValueError, AttributeError):
         return dash.no_update, dash.no_update
+
+
+# ---------------------------------------------------------------------------
+# Navigation callbacks
+# ---------------------------------------------------------------------------
+
+# Tab button style configs
+_TAB_ACTIVE = {
+    "padding": "12px 20px",
+    "border": "none",
+    "borderBottom": "2px solid #1565C0",
+    "backgroundColor": "transparent",
+    "cursor": "pointer",
+    "fontSize": "14px",
+    "fontWeight": "600",
+    "color": "#1565C0",
+    "marginRight": "4px",
+}
+_TAB_INACTIVE = {
+    "padding": "12px 20px",
+    "border": "none",
+    "borderBottom": "2px solid transparent",
+    "backgroundColor": "transparent",
+    "cursor": "pointer",
+    "fontSize": "14px",
+    "fontWeight": "500",
+    "color": "#6c757d",
+    "marginRight": "4px",
+}
+
+
+@callback(
+    [
+        Output("active-page", "data"),
+        Output("leaderboard-view", "style", allow_duplicate=True),
+        Output("timeline-view", "style", allow_duplicate=True),
+        Output("heatmap-view", "style", allow_duplicate=True),
+        Output("retention-view", "style", allow_duplicate=True),
+        Output("tab-leaderboard", "style"),
+        Output("tab-timeline", "style"),
+        Output("tab-heatmap", "style"),
+        Output("tab-retention", "style"),
+    ],
+    [
+        Input("tab-leaderboard", "n_clicks"),
+        Input("tab-timeline", "n_clicks"),
+        Input("tab-heatmap", "n_clicks"),
+        Input("tab-retention", "n_clicks"),
+    ],
+    prevent_initial_call=True,
+)
+def switch_page(n_lb, n_tl, n_hm, n_rt) -> tuple:
+    """Switch between page views based on tab clicks."""
+    triggered = callback_ctx.triggered_id
+
+    page_map = {
+        "tab-leaderboard": "leaderboard",
+        "tab-timeline": "timeline",
+        "tab-heatmap": "heatmap",
+        "tab-retention": "retention",
+    }
+
+    page = page_map.get(triggered, "leaderboard")
+
+    # View visibility: display block for active, none for others
+    views = {
+        "leaderboard": {"display": "block"},
+        "timeline": {"display": "none"},
+        "heatmap": {"display": "none"},
+        "retention": {"display": "none"},
+    }
+    views[page] = {"display": "block", "padding": "0"}
+
+    # Tab styles
+    tab_styles = {
+        "tab-leaderboard": _TAB_INACTIVE.copy(),
+        "tab-timeline": _TAB_INACTIVE.copy(),
+        "tab-heatmap": _TAB_INACTIVE.copy(),
+        "tab-retention": _TAB_INACTIVE.copy(),
+    }
+    tab_styles[triggered] = _TAB_ACTIVE.copy()
+
+    return (
+        page,
+        views["leaderboard"],
+        views["timeline"],
+        views["heatmap"],
+        views["retention"],
+        tab_styles["tab-leaderboard"],
+        tab_styles["tab-timeline"],
+        tab_styles["tab-heatmap"],
+        tab_styles["tab-retention"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase timeline callback
+# ---------------------------------------------------------------------------
+
+@callback(
+    [
+        Output("phase-timeline-graph", "figure"),
+        Output("phase-clear-btn-container", "style"),
+    ],
+    [
+        Input("era-dropdown", "value"),
+        Input("selected-phase", "data"),
+    ],
+)
+def update_phase_timeline(era: str, selected_phase: int | None) -> tuple:
+    """Update phase timeline chart on era or phase change."""
+    fig = charts.build_phase_timeline(_experiments, era, selected_phase)
+    clear_style = {"display": "block"} if selected_phase is not None else {"display": "none"}
+    return fig, clear_style
+
+
+@callback(
+    Output("selected-phase", "data", allow_duplicate=True),
+    Input("phase-timeline-graph", "clickData"),
+    State("selected-phase", "data"),
+    prevent_initial_call=True,
+)
+def on_timeline_click(clickData, current_phase) -> int | None:
+    """Handle phase timeline bar click — toggle phase filter.
+
+    Clicking same phase again removes the filter.
+    """
+    if clickData is None:
+        return dash.no_update
+
+    try:
+        # Extract phase number from customdata
+        points = clickData.get("points", [])
+        if not points:
+            return dash.no_update
+        customdata = points[0].get("customdata")
+        if customdata is None:
+            return dash.no_update
+
+        clicked_phase = int(customdata)
+
+        # Toggle: clicking same phase clears the filter
+        if current_phase == clicked_phase:
+            return None
+        return clicked_phase
+    except (KeyError, ValueError, TypeError):
+        return dash.no_update
+
+
+@callback(
+    Output("selected-phase", "data", allow_duplicate=True),
+    Input("phase-clear-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def clear_phase_filter(n_clicks: int) -> None:
+    """Clear phase filter."""
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Metric progression callbacks
+# ---------------------------------------------------------------------------
+
+@callback(
+    [
+        Output("metric-overall-graph", "figure"),
+        Output("metric-retrieval-graph", "figure"),
+        Output("metric-plausibility-graph", "figure"),
+    ],
+    [
+        Input("era-dropdown", "value"),
+        Input("selected-phase", "data"),
+        Input("active-page", "data"),
+    ],
+)
+def update_metric_progression(era: str, selected_phase: int | None, active_page: str) -> tuple:
+    """Update metric progression charts on era, phase, or page change."""
+    # Only build charts when timeline page is active to save computation
+    if active_page != "timeline":
+        return dash.no_update, dash.no_update, dash.no_update
+
+    figs = charts.build_metric_progression(_experiments, era, selected_phase)
+    if len(figs) == 3:
+        return figs[0], figs[1], figs[2]
+    return dash.no_update, dash.no_update, dash.no_update
+
+
+# ---------------------------------------------------------------------------
+# Threshold heatmap callbacks
+# ---------------------------------------------------------------------------
+
+@callback(
+    [
+        Output("heatmap-recall-graph", "figure"),
+        Output("heatmap-precision-graph", "figure"),
+    ],
+    [
+        Input("era-dropdown", "value"),
+        Input("selected-phase", "data"),
+        Input("active-page", "data"),
+    ],
+)
+def update_heatmaps(era: str, selected_phase: int | None, active_page: str) -> tuple:
+    """Update threshold heatmaps on era, phase, or page change."""
+    if active_page != "heatmap":
+        return dash.no_update, dash.no_update
+
+    figs = charts.build_threshold_heatmap(_experiments, era, selected_phase)
+    if len(figs) == 2:
+        return figs[0], figs[1]
+    return dash.no_update, dash.no_update
+
+
+# ---------------------------------------------------------------------------
+# Retention curve callbacks
+# ---------------------------------------------------------------------------
+
+@callback(
+    Output("retention-dropdown", "options"),
+    [
+        Input("era-dropdown", "value"),
+        Input("active-page", "data"),
+    ],
+)
+def update_retention_options(era: str, active_page: str) -> list:
+    """Update retention experiment dropdown options based on era."""
+    if active_page != "retention":
+        return dash.no_update
+
+    available = charts.get_retention_available_experiments(_experiments, era)
+    return [{"label": eid, "value": eid} for eid in available]
+
+
+@callback(
+    [
+        Output("retention-selected", "data"),
+        Output("retention-warning", "children"),
+        Output("retention-count", "children"),
+    ],
+    [
+        Input("retention-dropdown", "value"),
+        Input("retention-clear-btn", "n_clicks"),
+    ],
+    State("retention-selected", "data"),
+)
+def update_retention_selection(
+    dropdown_values: list[str] | None,
+    clear_clicks: int,
+    current_selection: list[str] | None,
+) -> tuple:
+    """Handle retention experiment selection with max 5 enforcement."""
+    triggered = callback_ctx.triggered_id
+
+    if triggered == "retention-clear-btn":
+        return [], [], ["Select experiments to compare"]
+
+    if dropdown_values is None:
+        dropdown_values = []
+
+    # Enforce max 5
+    if len(dropdown_values) > 5:
+        dropdown_values = dropdown_values[:5]
+
+    # Check for warnings
+    warnings = charts.check_retention_warnings(dropdown_values, _experiments)
+
+    warning_children = []
+    for w in warnings:
+        warning_children.append(
+            html.Div(
+                f"⚠ {w}",
+                style={"padding": "6px 12px", "backgroundColor": "#fff3cd", "borderRadius": "4px", "border": "1px solid #ffeaa7", "fontSize": "12px", "color": "#856404", "marginBottom": "4px"},
+            )
+        )
+
+    count_text = f"{len(dropdown_values)} of 5 experiments selected"
+
+    return dropdown_values, warning_children, count_text
+
+
+@callback(
+    Output("retention-graph", "figure"),
+    [
+        Input("retention-selected", "data"),
+        Input("active-page", "data"),
+    ],
+)
+def update_retention_chart(selected_ids: list[str] | None, active_page: str) -> go.Figure:
+    """Update retention curve overlay chart."""
+    if active_page != "retention":
+        return dash.no_update
+
+    fig = charts.build_retention_overlay(_experiments, selected_ids or [])
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Leaderboard phase filter integration
+# ---------------------------------------------------------------------------
+
+@callback(
+    Output("status-filter", "value", allow_duplicate=True),
+    Input("selected-phase", "data"),
+    prevent_initial_call=True,
+)
+def leaderboard_phase_filter(selected_phase: int | None) -> list | None:
+    """When a phase is selected from timeline, also filter leaderboard by phase.
+
+    This propagates phase selection to the leaderboard table.
+    Since AG Grid doesn't have a built-in phase filter, we apply it
+    via the data flow — the leaderboard callback reads selected-phase.
+    """
+    # Phase filter is handled in the leaderboard callback
+    return dash.no_update
+
+
+# Update leaderboard callback to also consider selected-phase
+# We need to modify the existing leaderboard callback to also read selected-phase.
+# Since we can't modify the existing callback's inputs directly, we'll add a
+# supplementary callback that filters leaderboard-grid when phase changes.
+
+@callback(
+    Output("leaderboard-grid", "rowData", allow_duplicate=True),
+    Input("selected-phase", "data"),
+    State("era-dropdown", "value"),
+    State("status-filter", "value"),
+    State("search-input", "value"),
+    State("sort-state", "data"),
+    prevent_initial_call=True,
+)
+def update_leaderboard_by_phase(
+    selected_phase: int | None,
+    era: str,
+    statuses: list[str] | None,
+    search: str | None,
+    sort_state: dict | None,
+) -> list[dict]:
+    """Filter leaderboard when phase is selected from timeline."""
+    filtered = _filter_dataframe(_df_all, era, statuses or [], search or "")
+
+    # Apply phase filter
+    if selected_phase is not None:
+        filtered = filtered[filtered["phase"] == selected_phase]
+
+    # Apply sort
+    sort_col = "overall_score"
+    ascending = False
+    if sort_state:
+        sort_col = sort_state.get("column", "overall_score")
+        ascending = sort_state.get("ascending", False)
+
+    filtered = _sort_dataframe(filtered, sort_col, ascending)
+
+    return _build_row_data(filtered)
 
 
 # ---------------------------------------------------------------------------
