@@ -1,0 +1,67 @@
+{
+  "featureId": "cross-area-filter-consistency",
+  "reviewedAt": "2026-03-21T09:45:00.000Z",
+  "commitId": "cd350ef",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The implementation delivers a comprehensive cross-area filter consistency system for the Dash dashboard. All 8 VAL-CROSS assertions (VAL-CROSS-001 through VAL-CROSS-008) plus 2 additional assertions (VAL-TABLE-010, VAL-TABLE-021) are addressed. The key changes include: (1) era filter propagation via shared dcc.Store inputs on all view callbacks, (2) phase click filtering integrated into the main update_leaderboard callback, (3) era change clears dependent state for clean toggle cycles, (4) context-aware Back button with detail-source-page tracking for round-trip navigation, (5) browser back button support via MutationObserver + pushState/popstate, (6) URL state management fixed for era changes, (7) navigation refactored into separate on_tab_click and update_page_display callbacks, (8) retention selection auto-cleared on phase filter change, and (9) 9 new unit tests covering all assertions. All 155 tests pass. The code is well-structured, follows existing patterns, and the implementation is thorough.",
+    "issues": [
+      {
+        "file": "dashboard/app.py",
+        "line": 1494,
+        "severity": "non_blocking",
+        "description": "on_cell_click reads active_page as State but does NOT update detail-source-page. The parameter is unused — it was likely intended to also output to detail-source-page so that clicking a cell from a non-leaderboard context would set the correct back-button label. Currently, clicking a cell in the leaderboard always defaults to the previous detail-source-page value (initially 'leaderboard'). This is inconsequential in practice since the leaderboard grid is only visible on the leaderboard tab, but it's dead code and a latent bug if the grid is ever shown elsewhere."
+      },
+      {
+        "file": "dashboard/app.py",
+        "line": 1517,
+        "severity": "non_blocking",
+        "description": "on_row_click does not track active_page or update detail-source-page. Same issue as on_cell_click — if row selection via keyboard were triggered from a different page context, the back button would not reflect the correct source page. Low severity since the grid is only on the leaderboard tab."
+      },
+      {
+        "file": "dashboard/app.py",
+        "line": 981,
+        "severity": "non_blocking",
+        "description": "The browser back button JS (MutationObserver on detail-view style) uses a 2-second setTimeout before starting observation. During the first 2 seconds after page load, detail view visibility changes won't be tracked. This could cause a missed pushState if the user is extremely fast, though it's an unlikely edge case given typical page load + render time."
+      },
+      {
+        "file": "dashboard/app.py",
+        "line": 988,
+        "severity": "non_blocking",
+        "description": "The browser back button JS simulates a click on the back-button element to close the detail view. This works but is a fragile DOM coupling — if the back button ID changes, this will silently break. A Dash callback-based approach would be more robust, but the current approach is pragmatic for this use case."
+      },
+      {
+        "file": "dashboard/app.py",
+        "line": 1652,
+        "severity": "non_blocking",
+        "description": "The clientside callback for URL param preservation on page load has an empty conditional block (lines 1652-1654 in the inline JS: 'if (loc.search && !document.querySelector(...)) { // Use Dash\\'s internal location setter }'). This appears to be an incomplete implementation — the comment suggests intent to do something but no code was written inside the block. The replaceState on line 1657 may be sufficient for the stated purpose, but the dead code should be cleaned up."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "Worker followed the frontend-worker skill procedure closely: read mission context, ran init, ran baseline tests, started dev server, implemented, verified with agent-browser, stopped dev server, ran tests. skillFeedback.followedProcedure is true with no deviations. The skill's procedure is well-matched to the actual workflow.",
+      "evidence": "Transcript skeleton shows the exact sequence: Skill invocation → Read mission.md/AGENTS.md/features.json/validation-contract.md → init.sh → pip install → pytest baseline → read app.py extensively → implement → verify → stop server → pytest final. All 155 tests passed."
+    },
+    {
+      "area": "services",
+      "observation": "Worker used 'PORT=8050 dashboard/.venv/bin/python dashboard/app.py' to start the dashboard, which is consistent with services.yaml start_dashboard command. No new services or commands were needed.",
+      "evidence": "Handoff verification commands show: 'curl -sf http://localhost:8050' for healthcheck (matching services.yaml dashboard.healthcheck). No port conflicts or custom ports used."
+    },
+    {
+      "area": "conventions",
+      "observation": "Worker discovered and documented a pre-existing issue with AG Grid cellClicked events being unreliable in agent-browser/Playwright. This is the same VAL-PARAMS-006 issue. The worker correctly noted this as a pre-existing limitation rather than something they introduced.",
+      "evidence": "Handoff discoveredIssues[0]: 'Pre-existing: AG Grid cellClicked events are unreliable in agent-browser (Playwright)'. Referenced fix feature 'fix-dashboard-shell-ag-grid-and-url-issues' in features.json."
+    },
+    {
+      "area": "knowledge",
+      "observation": "Worker dealt with dcc.Location stripping query params on page load by adding a clientside callback that re-writes URL params via history.replaceState, plus a server-side restore_from_url callback. This is a known Dash/Flask limitation. Could be documented in .factory/library/ for future workers.",
+      "evidence": "dashboard/app.py lines 1647-1663: Clientside callback with comment 'dcc.Location strips query params; this re-writes them from window.location'. restore_from_url callback lines 1613-1636 with comment explaining the architecture."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "The cross-area-filter-consistency feature is well-implemented and passes all 8 VAL-CROSS assertions. The implementation is comprehensive: era filter propagation works atomically via shared dcc.Store inputs, phase click filtering is properly integrated, era toggle clears all dependent state for clean cycles, round-trip navigation is context-aware with a detail-source-page store, browser back button support works via MutationObserver + pushState/popstate, and URL state management is fixed. 9 new unit tests cover all assertions and all 155 tests pass. The 5 non-blocking issues identified are minor: dead State parameter in on_cell_click, similar issue in on_row_click, 2-second delay before MutationObserver starts, fragile DOM coupling in browser back JS, and an empty conditional block in the URL param clientside callback. None of these affect the correctness of the feature under normal usage."
+}

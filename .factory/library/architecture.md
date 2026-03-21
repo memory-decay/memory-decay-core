@@ -27,6 +27,9 @@ Architectural decisions, patterns, and design choices for the experiment dashboa
 - Browser back: handled via dcc.Location pop
 - Parameter sweep → detail: sets selected_experiment in Store
 
+## Dash/Flask Limitations
+- `dcc.Location` strips query parameters on page load (Flask serves the page to the bare URL). To preserve URL params across refresh, use a clientside callback with `history.replaceState` to re-write params from `window.location`, combined with a server-side `restore_from_url` callback that reads the original params before the strip occurs.
+
 ## Plotly Limitations
 - `go.Parcoords` (parallel coordinates) does not support `clickData` callbacks. Workers must use a companion dropdown selector for experiment navigation when building parallel coordinates charts.
 
