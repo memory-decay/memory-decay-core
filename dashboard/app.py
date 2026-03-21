@@ -21,14 +21,31 @@ import os
 from pathlib import Path
 
 import dash
-import dash_ag_grid as dag
 import pandas as pd
 import plotly.graph_objects as go
 from dash import Input, Output, State, callback, dash, html, dcc
 from dash import ctx as callback_ctx
 
 from dashboard.data_loader import Experiment, load_all_experiments
+from dashboard.output_loader import load_output_records
 from dashboard import charts
+
+try:
+    import dash_ag_grid as dag
+except ModuleNotFoundError:
+    class AgGrid(html.Div):
+        """Fallback shell for environments without dash-ag-grid installed."""
+
+        def __init__(self, *args, **kwargs):
+            children = kwargs.pop("children", None)
+            component_id = kwargs.pop("id", None)
+            style = kwargs.pop("style", None)
+            super().__init__(children=children, id=component_id, style=style)
+
+    class _DagModule:
+        AgGrid = AgGrid
+
+    dag = _DagModule()
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -36,6 +53,7 @@ from dashboard import charts
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 EXPERIMENTS_DIR = str(PROJECT_ROOT / "experiments")
+OUTPUTS_DIR = str(PROJECT_ROOT / "outputs")
 
 # Status badge colors (distinct, colorblind-safe)
 STATUS_COLORS: dict[str, dict[str, str]] = {
@@ -62,6 +80,12 @@ ERA_OPTIONS = [
     {"label": "All", "value": "All"},
     {"label": "memories_500", "value": "memories_500"},
     {"label": "LongMemEval", "value": "LongMemEval"},
+]
+
+PIPELINE_RECORD_TYPE_OPTIONS = [
+    {"label": "All", "value": "All"},
+    {"label": "benchmark_run", "value": "benchmark_run"},
+    {"label": "human_calibration", "value": "human_calibration"},
 ]
 
 # AG Grid row height and pagination
@@ -179,6 +203,7 @@ app = dash.Dash(
 
 # Load data at module level
 _experiments = load_all_experiments(EXPERIMENTS_DIR)
+_pipeline_records = load_output_records(OUTPUTS_DIR)
 _cv_data = _load_cv_data(_experiments)
 _history_status = _load_history_status(_experiments)
 _best_exp_id = _find_best_experiment(_experiments, _cv_data)
@@ -293,6 +318,94 @@ _GRID_COLUMN_DEFS = [
     },
 ]
 
+_PIPELINE_GRID_COLUMN_DEFS = [
+    {
+        "headerName": "Type",
+        "field": "record_type",
+        "filter": True,
+        "sortable": True,
+        "minWidth": 150,
+    },
+    {
+        "headerName": "Dataset / Calibration",
+        "field": "display_name",
+        "filter": True,
+        "sortable": True,
+        "minWidth": 220,
+        "flex": 1,
+    },
+    {
+        "headerName": "Suite",
+        "field": "suite_name",
+        "filter": True,
+        "sortable": True,
+        "minWidth": 180,
+    },
+    {
+        "headerName": "Overall Delta",
+        "field": "delta_overall",
+        "filter": "agNumberColumnFilter",
+        "sortable": True,
+        "minWidth": 120,
+        "valueFormatter": {"function": "params.value !== null && params.value !== undefined ? d3.format('.4f')(params.value) : 'N/A'"},
+    },
+    {
+        "headerName": "Baseline Overall",
+        "field": "baseline_overall",
+        "filter": "agNumberColumnFilter",
+        "sortable": True,
+        "minWidth": 130,
+        "valueFormatter": {"function": "params.value !== null && params.value !== undefined ? d3.format('.4f')(params.value) : 'N/A'"},
+    },
+    {
+        "headerName": "Calibrated Overall",
+        "field": "calibrated_overall",
+        "filter": "agNumberColumnFilter",
+        "sortable": True,
+        "minWidth": 140,
+        "valueFormatter": {"function": "params.value !== null && params.value !== undefined ? d3.format('.4f')(params.value) : 'N/A'"},
+    },
+    {
+        "headerName": "NLL",
+        "field": "nll",
+        "filter": "agNumberColumnFilter",
+        "sortable": True,
+        "minWidth": 100,
+        "valueFormatter": {"function": "params.value !== null && params.value !== undefined ? d3.format('.4f')(params.value) : 'N/A'"},
+    },
+    {
+        "headerName": "Brier",
+        "field": "brier",
+        "filter": "agNumberColumnFilter",
+        "sortable": True,
+        "minWidth": 100,
+        "valueFormatter": {"function": "params.value !== null && params.value !== undefined ? d3.format('.4f')(params.value) : 'N/A'"},
+    },
+    {
+        "headerName": "ECE",
+        "field": "ece",
+        "filter": "agNumberColumnFilter",
+        "sortable": True,
+        "minWidth": 100,
+        "valueFormatter": {"function": "params.value !== null && params.value !== undefined ? d3.format('.4f')(params.value) : 'N/A'"},
+    },
+    {
+        "headerName": "Status",
+        "field": "status",
+        "filter": True,
+        "sortable": True,
+        "minWidth": 120,
+    },
+    {
+        "headerName": "Source",
+        "field": "source_dir",
+        "filter": True,
+        "sortable": True,
+        "minWidth": 280,
+        "flex": 1,
+    },
+]
+
 # Best experiment row style
 _best_exp_id_escaped = _best_exp_id.replace("'", "\\'") if _best_exp_id else ""
 _GRID_ROW_CLASS_RULES = {
@@ -322,6 +435,7 @@ app.layout = html.Div(
         dcc.Store(id="compare-phase-a", data=None),
         dcc.Store(id="compare-phase-b", data=None),
         dcc.Store(id="detail-source-page", data="leaderboard"),
+        dcc.Store(id="selected-pipeline-record", data=None),
 
         # Sidebar
         html.Div(
@@ -574,6 +688,22 @@ app.layout = html.Div(
                                 "fontSize": "14px",
                                 "fontWeight": "500",
                                 "color": "#6c757d",
+                            },
+                        ),
+                        html.Button(
+                            "🧾 Pipeline Benchmarks",
+                            id="tab-pipeline",
+                            n_clicks=0,
+                            style={
+                                "padding": "12px 20px",
+                                "border": "none",
+                                "borderBottom": "2px solid transparent",
+                                "backgroundColor": "transparent",
+                                "cursor": "pointer",
+                                "fontSize": "14px",
+                                "fontWeight": "500",
+                                "color": "#6c757d",
+                                "marginLeft": "4px",
                             },
                         ),
                     ],
@@ -947,6 +1077,77 @@ app.layout = html.Div(
                     ],
                 ),
 
+                html.Div(
+                    id="pipeline-view",
+                    style={"display": "none", "padding": "24px"},
+                    children=[
+                        html.H1("Pipeline Benchmarks", style={"margin": "0 0 16px 0", "fontSize": "22px", "color": "#212529"}),
+                        html.P(
+                            "Browse benchmark and calibration artifacts written under outputs/. Restart the dashboard to pick up new files.",
+                            style={"marginBottom": "16px", "fontSize": "13px", "color": "#6c757d"},
+                        ),
+                        html.Div(
+                            style={"display": "flex", "gap": "12px", "marginBottom": "16px"},
+                            children=[
+                                dcc.Dropdown(
+                                    id="pipeline-record-type-filter",
+                                    options=PIPELINE_RECORD_TYPE_OPTIONS,
+                                    value="All",
+                                    clearable=False,
+                                    style={"fontSize": "13px", "width": "260px"},
+                                ),
+                                dcc.Input(
+                                    id="pipeline-search-input",
+                                    type="text",
+                                    placeholder="Search dataset, suite, or source path...",
+                                    style={
+                                        "flex": "1",
+                                        "padding": "6px 10px",
+                                        "borderRadius": "4px",
+                                        "border": "1px solid #ced4da",
+                                        "fontSize": "13px",
+                                    },
+                                ),
+                            ],
+                        ),
+                        html.Div(
+                            id="pipeline-count",
+                            style={"fontSize": "12px", "color": "#6c757d", "marginBottom": "12px"},
+                            children=["Loading..."],
+                        ),
+                        html.Div(
+                            style={"height": "360px", "marginBottom": "20px"},
+                            children=[
+                                dag.AgGrid(
+                                    id="pipeline-grid",
+                                    columnDefs=_PIPELINE_GRID_COLUMN_DEFS,
+                                    rowData=[],
+                                    defaultColDef={
+                                        "resizable": True,
+                                        "filterParams": {"buttons": ["reset", "apply"]},
+                                    },
+                                    getRowId="params.data.record_id",
+                                    style={"height": "100%"},
+                                    dashGridOptions={
+                                        "suppressCellFocus": True,
+                                        "enableCellTextSelection": True,
+                                        "pagination": True,
+                                        "paginationPageSize": 25,
+                                        "paginationPageSizeSelector": [25, 50, 100],
+                                        "animateRows": False,
+                                        "rowSelection": "single",
+                                    },
+                                ),
+                            ],
+                        ),
+                        html.Div(
+                            id="pipeline-detail",
+                            style={"padding": "16px", "border": "1px solid #e9ecef", "borderRadius": "8px", "backgroundColor": "#fafafa"},
+                            children=[html.Div("Select a pipeline record to view details", style={"color": "#6c757d", "fontSize": "13px"})],
+                        ),
+                    ],
+                ),
+
                 # Detail view overlay
                 html.Div(
                     id="detail-view",
@@ -1147,6 +1348,65 @@ def _build_row_data(
     return rows
 
 
+def _filter_pipeline_records(
+    records: list[dict[str, object]],
+    record_type: str,
+    search: str,
+) -> list[dict[str, object]]:
+    """Apply record-type and text search filters to pipeline output records."""
+    filtered = records[:]
+
+    if record_type and record_type != "All":
+        filtered = [r for r in filtered if r.get("record_type") == record_type]
+
+    if search:
+        search_lower = search.lower()
+
+        def _matches(record: dict[str, object]) -> bool:
+            for key in ("dataset_name", "suite_name", "source_dir", "record_type"):
+                value = record.get(key)
+                if isinstance(value, str) and search_lower in value.lower():
+                    return True
+            return False
+
+        filtered = [r for r in filtered if _matches(r)]
+
+    return filtered
+
+
+def _build_pipeline_row_data(
+    records: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Convert pipeline records into AG Grid row data."""
+    rows: list[dict[str, object]] = []
+    for record in records:
+        row = dict(record)
+        row["display_name"] = record.get("dataset_name") or Path(
+            str(record.get("source_dir") or "unknown")
+        ).name
+        row["nll"] = record.get("calibration_test_nll", record.get("nll"))
+        row["brier"] = record.get("calibration_test_brier", record.get("brier"))
+        row["ece"] = record.get("calibration_test_ece", record.get("ece"))
+        rows.append(row)
+    return rows
+
+
+def _build_pipeline_table_state(
+    records: list[dict[str, object]],
+    record_type: str,
+    search: str,
+) -> tuple[list[dict[str, object]], list]:
+    filtered = _filter_pipeline_records(records, record_type, search)
+    row_data = _build_pipeline_row_data(filtered)
+    count_children = [
+        html.Span(
+            f"Showing {len(row_data)} pipeline records",
+            style={"fontWeight": "600", "color": "#495057"},
+        ),
+    ]
+    return row_data, count_children
+
+
 def _build_metric_card(
     name: str,
     val: float | None,
@@ -1164,6 +1424,71 @@ def _build_metric_card(
             html.Div(_format_score(val), style={"fontSize": font_size, "fontWeight": "700", "color": value_color, "marginTop": "4px"}),
         ],
     )
+
+
+def _build_pipeline_detail_view(record: dict[str, object] | None) -> list:
+    """Build detail content for a pipeline output record."""
+    if not record:
+        return [html.Div("Pipeline record not found", style={"color": "#856404"})]
+
+    header = record.get("dataset_name") or Path(str(record.get("source_dir") or "unknown")).name
+    status = str(record.get("status") or "unknown")
+
+    if record.get("record_type") == "benchmark_run":
+        metrics = html.Div(
+            style={"display": "grid", "gridTemplateColumns": "repeat(3, 1fr)", "gap": "12px", "marginTop": "16px"},
+            children=[
+                _build_metric_card("Baseline Overall", record.get("baseline_overall")),
+                _build_metric_card("Calibrated Overall", record.get("calibrated_overall")),
+                _build_metric_card("Overall Delta", record.get("delta_overall"), bg_color="#eef7ee", border_color="#cde6cd"),
+                _build_metric_card("Baseline Retrieval", record.get("baseline_retrieval")),
+                _build_metric_card("Calibrated Retrieval", record.get("calibrated_retrieval")),
+                _build_metric_card("Calibration NLL", record.get("calibration_test_nll")),
+                _build_metric_card("Calibration Brier", record.get("calibration_test_brier")),
+                _build_metric_card("Calibration ECE", record.get("calibration_test_ece")),
+            ],
+        )
+        artifacts = html.Div(
+            style={"marginTop": "20px", "fontSize": "13px", "color": "#495057"},
+            children=[
+                html.H3("Artifacts", style={"fontSize": "16px", "marginBottom": "8px"}),
+                html.Div(f"Baseline: {record.get('baseline_output_path') or 'Unavailable'}"),
+                html.Div(f"Calibrated: {record.get('calibrated_output_path') or 'Unavailable'}"),
+                html.Div(f"Best Params: {record.get('best_params_path') or 'Unavailable'}"),
+                html.Div(f"Source: {record.get('source_file') or 'Unavailable'}"),
+            ],
+        )
+        return [
+            html.H2(f"{header} benchmark", style={"margin": "0 0 8px 0", "fontSize": "20px"}),
+            html.Div(f"Suite: {record.get('suite_name') or 'standalone'} · Status: {status}", style={"fontSize": "13px", "color": "#6c757d"}),
+            metrics,
+            artifacts,
+        ]
+
+    metrics = html.Div(
+        style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "12px", "marginTop": "16px"},
+        children=[
+            _build_metric_card("NLL", record.get("nll")),
+            _build_metric_card("Brier", record.get("brier")),
+            _build_metric_card("ECE", record.get("ece")),
+            _build_metric_card("Events", record.get("num_events")),
+        ],
+    )
+    artifacts = html.Div(
+        style={"marginTop": "20px", "fontSize": "13px", "color": "#495057"},
+        children=[
+            html.H3("Artifacts", style={"fontSize": "16px", "marginBottom": "8px"}),
+            html.Div(f"Metrics: {record.get('source_file') or 'Unavailable'}"),
+            html.Div(f"Best Params: {record.get('best_params_path') or 'Unavailable'}"),
+            html.Div(f"Trials: {record.get('trials_path') or 'Unavailable'}"),
+        ],
+    )
+    return [
+        html.H2("Human calibration", style={"margin": "0 0 8px 0", "fontSize": "20px"}),
+        html.Div(f"Status: {status}", style={"fontSize": "13px", "color": "#6c757d"}),
+        metrics,
+        artifacts,
+    ]
 
 
 def _build_detail_view(exp_id: str, source_page: str = "leaderboard") -> list:
@@ -1526,6 +1851,64 @@ def update_leaderboard(
 
 
 @callback(
+    [
+        Output("pipeline-grid", "rowData"),
+        Output("pipeline-count", "children"),
+    ],
+    [
+        Input("pipeline-record-type-filter", "value"),
+        Input("pipeline-search-input", "value"),
+    ],
+)
+def update_pipeline_table(
+    record_type: str | None,
+    search: str | None,
+) -> tuple[list[dict[str, object]], list]:
+    """Update pipeline output table based on record-type and text search filters."""
+    return _build_pipeline_table_state(_pipeline_records, record_type or "All", search or "")
+
+
+@callback(
+    Output("selected-pipeline-record", "data", allow_duplicate=True),
+    Input("pipeline-grid", "cellClicked"),
+    prevent_initial_call=True,
+)
+def on_pipeline_cell_click(cell_clicked: dict | None) -> str | None:
+    """Track the selected pipeline record when a pipeline row is clicked."""
+    if not cell_clicked or not cell_clicked.get("data"):
+        return dash.no_update
+    return cell_clicked["data"].get("record_id")
+
+
+@callback(
+    Output("selected-pipeline-record", "data", allow_duplicate=True),
+    Input("pipeline-grid", "selectedRows"),
+    prevent_initial_call=True,
+)
+def on_pipeline_row_select(selected_rows: list[dict] | None) -> str | None:
+    """Track selected pipeline record when keyboard row selection changes."""
+    if not selected_rows:
+        return dash.no_update
+    return selected_rows[0].get("record_id")
+
+
+@callback(
+    Output("pipeline-detail", "children"),
+    Input("selected-pipeline-record", "data"),
+)
+def update_pipeline_detail(record_id: str | None) -> list:
+    """Render the selected pipeline record detail pane."""
+    if not record_id:
+        return [html.Div("Select a pipeline record to view details", style={"color": "#6c757d", "fontSize": "13px"})]
+
+    for record in _pipeline_records:
+        if record.get("record_id") == record_id:
+            return _build_pipeline_detail_view(record)
+
+    return _build_pipeline_detail_view(None)
+
+
+@callback(
     Output("selected-experiment", "data", allow_duplicate=True),
     Input("leaderboard-grid", "cellClicked"),
     State("active-page", "data"),
@@ -1773,6 +2156,7 @@ _TAB_INACTIVE = {
         Output("snapshots-view", "style", allow_duplicate=True),
         Output("analysis-view", "style", allow_duplicate=True),
         Output("compare-view", "style", allow_duplicate=True),
+        Output("pipeline-view", "style", allow_duplicate=True),
         Output("tab-leaderboard", "style"),
         Output("tab-timeline", "style"),
         Output("tab-heatmap", "style"),
@@ -1781,6 +2165,7 @@ _TAB_INACTIVE = {
         Output("tab-snapshots", "style"),
         Output("tab-analysis", "style"),
         Output("tab-compare", "style"),
+        Output("tab-pipeline", "style"),
     ],
     Input("active-page", "data"),
     State("selected-experiment", "data"),
@@ -1799,11 +2184,11 @@ def update_page_display(
     """
     # If detail view is open, don't interfere with page views
     if selected_exp is not None:
-        return tuple(dash.no_update for _ in range(15))
+        return tuple(dash.no_update for _ in range(18))
 
     page = active_page or "leaderboard"
 
-    all_views = ["leaderboard", "timeline", "heatmap", "retention", "params", "snapshots", "analysis", "compare"]
+    all_views = ["leaderboard", "timeline", "heatmap", "retention", "params", "snapshots", "analysis", "compare", "pipeline"]
     views = {v: {"display": "none"} for v in all_views}
     views[page] = {"display": "block", "padding": "0"}
 
@@ -1816,10 +2201,11 @@ def update_page_display(
         "tab-snapshots": "snapshots",
         "tab-analysis": "analysis",
         "tab-compare": "compare",
+        "tab-pipeline": "pipeline",
     }
     page_to_tab = {v: k for k, v in tab_to_page.items()}
 
-    all_tabs = ["tab-leaderboard", "tab-timeline", "tab-heatmap", "tab-retention", "tab-params", "tab-snapshots", "tab-analysis", "tab-compare"]
+    all_tabs = ["tab-leaderboard", "tab-timeline", "tab-heatmap", "tab-retention", "tab-params", "tab-snapshots", "tab-analysis", "tab-compare", "tab-pipeline"]
     tab_styles = {t: _TAB_INACTIVE.copy() for t in all_tabs}
     active_tab = page_to_tab.get(page)
     if active_tab:
@@ -1834,6 +2220,7 @@ def update_page_display(
         views["snapshots"],
         views["analysis"],
         views["compare"],
+        views["pipeline"],
         tab_styles["tab-leaderboard"],
         tab_styles["tab-timeline"],
         tab_styles["tab-heatmap"],
@@ -1842,6 +2229,7 @@ def update_page_display(
         tab_styles["tab-snapshots"],
         tab_styles["tab-analysis"],
         tab_styles["tab-compare"],
+        tab_styles["tab-pipeline"],
     )
 
 
@@ -1858,10 +2246,11 @@ def update_page_display(
         Input("tab-snapshots", "n_clicks"),
         Input("tab-analysis", "n_clicks"),
         Input("tab-compare", "n_clicks"),
+        Input("tab-pipeline", "n_clicks"),
     ],
     prevent_initial_call=True,
 )
-def on_tab_click(n_lb, n_tl, n_hm, n_rt, n_pm, n_sn, n_an, n_cp) -> tuple[str]:
+def on_tab_click(n_lb, n_tl, n_hm, n_rt, n_pm, n_sn, n_an, n_cp, n_pl) -> tuple[str]:
     """Record which tab was clicked — active-page triggers update_page_display."""
     triggered = callback_ctx.triggered_id
 
@@ -1874,6 +2263,7 @@ def on_tab_click(n_lb, n_tl, n_hm, n_rt, n_pm, n_sn, n_an, n_cp) -> tuple[str]:
         "tab-snapshots": "snapshots",
         "tab-analysis": "analysis",
         "tab-compare": "compare",
+        "tab-pipeline": "pipeline",
     }
     return (page_map.get(triggered, "leaderboard"),)
 
