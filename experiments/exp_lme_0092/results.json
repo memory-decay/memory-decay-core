@@ -1,0 +1,916 @@
+{
+  "status": "completed",
+  "tick": 200,
+  "recall_rate": 0.6535947712418301,
+  "precision_rate": 0.28888888888888886,
+  "activation_recall_correlation": 0.8766275311257802,
+  "fact_episode_delta": 0.231547619047619,
+  "forgetting_curve_smoothness": 0.01519666313344806,
+  "threshold_metrics": {
+    "0.1": {
+      "recall_rate": 0.6535947712418301,
+      "precision_rate": 0.28888888888888886
+    },
+    "0.2": {
+      "recall_rate": 0.6535947712418301,
+      "precision_rate": 0.28888888888888886
+    },
+    "0.3": {
+      "recall_rate": 0.6535947712418301,
+      "precision_rate": 0.28888888888888886
+    },
+    "0.4": {
+      "recall_rate": 0.6535947712418301,
+      "precision_rate": 0.28888888888888886
+    },
+    "0.5": {
+      "recall_rate": 0.6535947712418301,
+      "precision_rate": 0.28888888888888886
+    },
+    "0.6": {
+      "recall_rate": 0.6535947712418301,
+      "precision_rate": 0.2919418758256275
+    },
+    "0.7": {
+      "recall_rate": 0.6535947712418301,
+      "precision_rate": 0.29271523178807946
+    },
+    "0.8": {
+      "recall_rate": 0.6535947712418301,
+      "precision_rate": 0.29506008010680906
+    },
+    "0.9": {
+      "recall_rate": 0.6535947712418301,
+      "precision_rate": 0.3469387755102041
+    }
+  },
+  "recall_mean": 0.6535947712418301,
+  "precision_mean": 0.2967889341861294,
+  "threshold_discrimination": 0.0,
+  "threshold_summary": {
+    "threshold_auc": 0.6535947712418301,
+    "slope": 0.0
+  },
+  "corr_mean": 0.8766275311257802,
+  "corr_score": 0.8766275311257802,
+  "smoothness_score": 0.8480333686655194,
+  "retrieval_score": 0.38804045081684235,
+  "plausibility_score": 0.8623304498956498,
+  "overall_score": 0.3800272476739057,
+  "composite_score": 0.3800272476739057,
+  "mrr_mean": 0.41843379327039454,
+  "precision_strict": 0.1342936353783391,
+  "precision_lift": 0.003574681129973084,
+  "precision_associative": 0.2967889341861294,
+  "similarity_recall_rate": 0.6535947712418301,
+  "retention_curve": {
+    "40": 1.0,
+    "80": 1.0,
+    "120": 0.6363636363636364,
+    "160": 0.5539568345323741,
+    "200": 0.6535947712418301
+  },
+  "retention_auc": 0.7687830484275681,
+  "selectivity_score": 0.0,
+  "robustness_score": 0.0,
+  "eval_v2_score": 0.3459523717924056,
+  "snapshots": [
+    {
+      "tick": 0,
+      "recall_rate": 1.0,
+      "precision_rate": 0.2,
+      "activation_recall_correlation": 0.0,
+      "fact_episode_delta": 1.0,
+      "forgetting_curve_smoothness": 0.0,
+      "threshold_metrics": {
+        "0.1": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.2": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.3": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.4": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.5": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.6": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.7": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.8": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.9": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        }
+      },
+      "recall_mean": 1.0,
+      "precision_mean": 0.2,
+      "threshold_discrimination": 0.0,
+      "threshold_summary": {
+        "threshold_auc": 1.0,
+        "slope": 0.0
+      },
+      "corr_mean": 0.0,
+      "corr_score": 0.0,
+      "smoothness_score": 0.5,
+      "retrieval_score": 0.5,
+      "plausibility_score": 0.25,
+      "overall_score": 0.44375,
+      "composite_score": 0.44375,
+      "mrr_mean": 0.3333333333333333,
+      "precision_strict": 0.2,
+      "precision_lift": 0.0,
+      "precision_associative": 0.2,
+      "similarity_recall_rate": 1.0,
+      "retention_curve": {
+        "40": 0.0,
+        "80": 0.0,
+        "120": 0.0,
+        "160": 0.0,
+        "200": 0.0
+      },
+      "retention_auc": 0.0,
+      "selectivity_score": 0.2,
+      "robustness_score": 0.0,
+      "eval_v2_score": 0.06999999999999999
+    },
+    {
+      "tick": 20,
+      "recall_rate": 1.0,
+      "precision_rate": 0.2,
+      "activation_recall_correlation": 0.0,
+      "fact_episode_delta": 1.0,
+      "forgetting_curve_smoothness": 0.0,
+      "threshold_metrics": {
+        "0.1": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.2": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.3": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.4": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.5": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.6": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.7": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.8": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.5
+        },
+        "0.9": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.5
+        }
+      },
+      "recall_mean": 1.0,
+      "precision_mean": 0.2666666666666667,
+      "threshold_discrimination": 0.0,
+      "threshold_summary": {
+        "threshold_auc": 1.0,
+        "slope": 0.0
+      },
+      "corr_mean": 0.0,
+      "corr_score": 0.0,
+      "smoothness_score": 1.0,
+      "retrieval_score": 0.5700000000000001,
+      "plausibility_score": 0.5,
+      "overall_score": 0.52725,
+      "composite_score": 0.52725,
+      "mrr_mean": 0.5,
+      "precision_strict": 0.2666666666666667,
+      "precision_lift": 0.06666666666666671,
+      "precision_associative": 0.2666666666666667,
+      "similarity_recall_rate": 1.0,
+      "retention_curve": {
+        "40": 0.0,
+        "80": 0.0,
+        "120": 0.0,
+        "160": 0.0,
+        "200": 0.0
+      },
+      "retention_auc": 0.0,
+      "selectivity_score": 0.2666666666666667,
+      "robustness_score": 0.0,
+      "eval_v2_score": 0.09333333333333335
+    },
+    {
+      "tick": 40,
+      "recall_rate": 1.0,
+      "precision_rate": 0.2,
+      "activation_recall_correlation": 0.0,
+      "fact_episode_delta": 1.0,
+      "forgetting_curve_smoothness": 0.0,
+      "threshold_metrics": {
+        "0.1": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.2": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.3": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.4": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.5": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.6": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.2
+        },
+        "0.7": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.5
+        },
+        "0.8": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.5
+        },
+        "0.9": {
+          "recall_rate": 1.0,
+          "precision_rate": 1.0
+        }
+      },
+      "recall_mean": 1.0,
+      "precision_mean": 0.35555555555555557,
+      "threshold_discrimination": 0.0,
+      "threshold_summary": {
+        "threshold_auc": 1.0,
+        "slope": 0.0
+      },
+      "corr_mean": 0.0,
+      "corr_score": 0.0,
+      "smoothness_score": 1.0,
+      "retrieval_score": 0.7466666666666666,
+      "plausibility_score": 0.5,
+      "overall_score": 0.6906666666666665,
+      "composite_score": 0.6906666666666665,
+      "mrr_mean": 1.0,
+      "precision_strict": 0.35555555555555557,
+      "precision_lift": 0.15555555555555556,
+      "precision_associative": 0.35555555555555557,
+      "similarity_recall_rate": 1.0,
+      "retention_curve": {
+        "40": 1.0,
+        "80": 0.0,
+        "120": 0.0,
+        "160": 0.0,
+        "200": 0.0
+      },
+      "retention_auc": 0.2,
+      "selectivity_score": 0.35555555555555557,
+      "robustness_score": 0.0,
+      "eval_v2_score": 0.21444444444444444
+    },
+    {
+      "tick": 60,
+      "recall_rate": 1.0,
+      "precision_rate": 0.45,
+      "activation_recall_correlation": 0.0,
+      "fact_episode_delta": 1.0,
+      "forgetting_curve_smoothness": 0.0,
+      "threshold_metrics": {
+        "0.1": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.45
+        },
+        "0.2": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.45
+        },
+        "0.3": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.45
+        },
+        "0.4": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.45
+        },
+        "0.5": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.45
+        },
+        "0.6": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.5294117647058824
+        },
+        "0.7": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.5294117647058824
+        },
+        "0.8": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.6428571428571429
+        },
+        "0.9": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.6428571428571429
+        }
+      },
+      "recall_mean": 1.0,
+      "precision_mean": 0.5105042016806723,
+      "threshold_discrimination": 0.0,
+      "threshold_summary": {
+        "threshold_auc": 1.0,
+        "slope": 0.0
+      },
+      "corr_mean": 0.0,
+      "corr_score": 0.0,
+      "smoothness_score": 1.0,
+      "retrieval_score": 0.5643172268907564,
+      "plausibility_score": 0.5,
+      "overall_score": 0.5219934348739496,
+      "composite_score": 0.5219934348739496,
+      "mrr_mean": 0.5208333333333333,
+      "precision_strict": 0.22689075630252098,
+      "precision_lift": 0.02689075630252097,
+      "precision_associative": 0.5105042016806723,
+      "similarity_recall_rate": 1.0,
+      "retention_curve": {
+        "40": 1.0,
+        "80": 0.0,
+        "120": 0.0,
+        "160": 0.0,
+        "200": 0.0
+      },
+      "retention_auc": 0.2,
+      "selectivity_score": 0.0,
+      "robustness_score": 0.0,
+      "eval_v2_score": 0.09000000000000001
+    },
+    {
+      "tick": 80,
+      "recall_rate": 1.0,
+      "precision_rate": 0.48,
+      "activation_recall_correlation": 0.0,
+      "fact_episode_delta": 1.0,
+      "forgetting_curve_smoothness": 0.0,
+      "threshold_metrics": {
+        "0.1": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.48
+        },
+        "0.2": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.48
+        },
+        "0.3": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.48
+        },
+        "0.4": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.48
+        },
+        "0.5": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.48
+        },
+        "0.6": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.5
+        },
+        "0.7": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.5454545454545454
+        },
+        "0.8": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.5714285714285714
+        },
+        "0.9": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.6666666666666666
+        }
+      },
+      "recall_mean": 1.0,
+      "precision_mean": 0.5203944203944204,
+      "threshold_discrimination": 0.0,
+      "threshold_summary": {
+        "threshold_auc": 1.0,
+        "slope": 0.0
+      },
+      "corr_mean": 0.0,
+      "corr_score": 0.0,
+      "smoothness_score": 1.0,
+      "retrieval_score": 0.5511604136604137,
+      "plausibility_score": 0.5,
+      "overall_score": 0.5098233826358827,
+      "composite_score": 0.5098233826358827,
+      "mrr_mean": 0.487037037037037,
+      "precision_strict": 0.21683100849767514,
+      "precision_lift": 0.016831008497675132,
+      "precision_associative": 0.5203944203944204,
+      "similarity_recall_rate": 1.0,
+      "retention_curve": {
+        "40": 1.0,
+        "80": 1.0,
+        "120": 0.0,
+        "160": 0.0,
+        "200": 0.0
+      },
+      "retention_auc": 0.4,
+      "selectivity_score": 0.0,
+      "robustness_score": 0.0,
+      "eval_v2_score": 0.18000000000000002
+    },
+    {
+      "tick": 100,
+      "recall_rate": 1.0,
+      "precision_rate": 0.4666666666666667,
+      "activation_recall_correlation": 0.0,
+      "fact_episode_delta": 1.0,
+      "forgetting_curve_smoothness": 0.0,
+      "threshold_metrics": {
+        "0.1": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.4666666666666667
+        },
+        "0.2": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.4666666666666667
+        },
+        "0.3": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.4666666666666667
+        },
+        "0.4": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.4666666666666667
+        },
+        "0.5": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.4827586206896552
+        },
+        "0.6": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.5185185185185185
+        },
+        "0.7": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.5833333333333334
+        },
+        "0.8": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.5833333333333334
+        },
+        "0.9": {
+          "recall_rate": 1.0,
+          "precision_rate": 0.5833333333333334
+        }
+      },
+      "recall_mean": 1.0,
+      "precision_mean": 0.5131048673194267,
+      "threshold_discrimination": 0.0,
+      "threshold_summary": {
+        "threshold_auc": 1.0,
+        "slope": 0.0
+      },
+      "corr_mean": 0.0,
+      "corr_score": 0.0,
+      "smoothness_score": 1.0,
+      "retrieval_score": 0.5851372924648787,
+      "plausibility_score": 0.5,
+      "overall_score": 0.5412519955300127,
+      "composite_score": 0.5412519955300127,
+      "mrr_mean": 0.5972222222222222,
+      "precision_strict": 0.21990208599404001,
+      "precision_lift": 0.019902085994040003,
+      "precision_associative": 0.5131048673194267,
+      "similarity_recall_rate": 1.0,
+      "retention_curve": {
+        "40": 1.0,
+        "80": 1.0,
+        "120": 0.0,
+        "160": 0.0,
+        "200": 0.0
+      },
+      "retention_auc": 0.4,
+      "selectivity_score": 0.0,
+      "robustness_score": 0.0,
+      "eval_v2_score": 0.18000000000000002
+    },
+    {
+      "tick": 120,
+      "recall_rate": 0.6363636363636364,
+      "precision_rate": 0.18181818181818182,
+      "activation_recall_correlation": 0.4371062556658372,
+      "fact_episode_delta": 0.4,
+      "forgetting_curve_smoothness": 0.018365472910927456,
+      "threshold_metrics": {
+        "0.1": {
+          "recall_rate": 0.6363636363636364,
+          "precision_rate": 0.18181818181818182
+        },
+        "0.2": {
+          "recall_rate": 0.6363636363636364,
+          "precision_rate": 0.18181818181818182
+        },
+        "0.3": {
+          "recall_rate": 0.6363636363636364,
+          "precision_rate": 0.18181818181818182
+        },
+        "0.4": {
+          "recall_rate": 0.6363636363636364,
+          "precision_rate": 0.18181818181818182
+        },
+        "0.5": {
+          "recall_rate": 0.6363636363636364,
+          "precision_rate": 0.18181818181818182
+        },
+        "0.6": {
+          "recall_rate": 0.6363636363636364,
+          "precision_rate": 0.18181818181818182
+        },
+        "0.7": {
+          "recall_rate": 0.6363636363636364,
+          "precision_rate": 0.18518518518518517
+        },
+        "0.8": {
+          "recall_rate": 0.6363636363636364,
+          "precision_rate": 0.19230769230769232
+        },
+        "0.9": {
+          "recall_rate": 0.6363636363636364,
+          "precision_rate": 0.2
+        }
+      },
+      "recall_mean": 0.6363636363636364,
+      "precision_mean": 0.1853779964891076,
+      "threshold_discrimination": 0.0,
+      "threshold_summary": {
+        "threshold_auc": 0.6363636363636364,
+        "slope": 0.0
+      },
+      "corr_mean": 0.4371062556658372,
+      "corr_score": 0.4371062556658372,
+      "smoothness_score": 0.8163452708907255,
+      "retrieval_score": 0.38892937926271265,
+      "plausibility_score": 0.6267257632782813,
+      "overall_score": 0.3671527816852715,
+      "composite_score": 0.3671527816852715,
+      "mrr_mean": 0.44545454545454555,
+      "precision_strict": 0.1297645975423753,
+      "precision_lift": 0.0024918702696480333,
+      "precision_associative": 0.1853779964891076,
+      "similarity_recall_rate": 0.6363636363636364,
+      "retention_curve": {
+        "40": 1.0,
+        "80": 1.0,
+        "120": 0.6363636363636364,
+        "160": 0.0,
+        "200": 0.0
+      },
+      "retention_auc": 0.5272727272727272,
+      "selectivity_score": 0.07415119859564298,
+      "robustness_score": 0.0,
+      "eval_v2_score": 0.2632256467812023
+    },
+    {
+      "tick": 140,
+      "recall_rate": 0.6875,
+      "precision_rate": 0.3125,
+      "activation_recall_correlation": 0.31750322126619673,
+      "fact_episode_delta": 0.33333333333333337,
+      "forgetting_curve_smoothness": 0.01727077711249789,
+      "threshold_metrics": {
+        "0.1": {
+          "recall_rate": 0.6875,
+          "precision_rate": 0.3125
+        },
+        "0.2": {
+          "recall_rate": 0.6875,
+          "precision_rate": 0.3125
+        },
+        "0.3": {
+          "recall_rate": 0.6875,
+          "precision_rate": 0.3125
+        },
+        "0.4": {
+          "recall_rate": 0.6875,
+          "precision_rate": 0.3125
+        },
+        "0.5": {
+          "recall_rate": 0.6875,
+          "precision_rate": 0.3125
+        },
+        "0.6": {
+          "recall_rate": 0.6875,
+          "precision_rate": 0.3125
+        },
+        "0.7": {
+          "recall_rate": 0.6875,
+          "precision_rate": 0.3138075313807531
+        },
+        "0.8": {
+          "recall_rate": 0.6875,
+          "precision_rate": 0.32894736842105265
+        },
+        "0.9": {
+          "recall_rate": 0.6875,
+          "precision_rate": 0.3826530612244898
+        }
+      },
+      "recall_mean": 0.6875,
+      "precision_mean": 0.32226755122514394,
+      "threshold_discrimination": 0.0,
+      "threshold_summary": {
+        "threshold_auc": 0.6875,
+        "slope": 0.0
+      },
+      "corr_mean": 0.31750322126619673,
+      "corr_score": 0.31750322126619673,
+      "smoothness_score": 0.8272922288750211,
+      "retrieval_score": 0.40375459453949675,
+      "plausibility_score": 0.5723977250706089,
+      "overall_score": 0.3778576370687543,
+      "composite_score": 0.3778576370687543,
+      "mrr_mean": 0.4248842592592592,
+      "precision_strict": 0.14179772253906334,
+      "precision_lift": 0.004297722539063326,
+      "precision_associative": 0.32226755122514394,
+      "similarity_recall_rate": 0.6875,
+      "retention_curve": {
+        "40": 1.0,
+        "80": 1.0,
+        "120": 0.6363636363636364,
+        "160": 0.0,
+        "200": 0.0
+      },
+      "retention_auc": 0.5272727272727272,
+      "selectivity_score": 0.0,
+      "robustness_score": 0.0,
+      "eval_v2_score": 0.23727272727272725
+    },
+    {
+      "tick": 160,
+      "recall_rate": 0.5539568345323741,
+      "precision_rate": 0.25755395683453236,
+      "activation_recall_correlation": 0.31878585846868923,
+      "fact_episode_delta": 0.2395336512983572,
+      "forgetting_curve_smoothness": 0.015976349563149292,
+      "threshold_metrics": {
+        "0.1": {
+          "recall_rate": 0.5539568345323741,
+          "precision_rate": 0.25755395683453236
+        },
+        "0.2": {
+          "recall_rate": 0.5539568345323741,
+          "precision_rate": 0.25755395683453236
+        },
+        "0.3": {
+          "recall_rate": 0.5539568345323741,
+          "precision_rate": 0.25755395683453236
+        },
+        "0.4": {
+          "recall_rate": 0.5539568345323741,
+          "precision_rate": 0.25755395683453236
+        },
+        "0.5": {
+          "recall_rate": 0.5539568345323741,
+          "precision_rate": 0.25755395683453236
+        },
+        "0.6": {
+          "recall_rate": 0.5539568345323741,
+          "precision_rate": 0.25755395683453236
+        },
+        "0.7": {
+          "recall_rate": 0.5539568345323741,
+          "precision_rate": 0.2597968069666183
+        },
+        "0.8": {
+          "recall_rate": 0.5539568345323741,
+          "precision_rate": 0.2792511700468019
+        },
+        "0.9": {
+          "recall_rate": 0.5539568345323741,
+          "precision_rate": 0.28594249201277955
+        }
+      },
+      "recall_mean": 0.5539568345323741,
+      "precision_mean": 0.26336824555926597,
+      "threshold_discrimination": 0.0,
+      "threshold_summary": {
+        "threshold_auc": 0.5539568345323741,
+        "slope": 0.0
+      },
+      "corr_mean": 0.31878585846868923,
+      "corr_score": 0.31878585846868923,
+      "smoothness_score": 0.840236504368507,
+      "retrieval_score": 0.3203786329461402,
+      "plausibility_score": 0.5795111814185981,
+      "overall_score": 0.30017128801620313,
+      "composite_score": 0.30017128801620313,
+      "mrr_mean": 0.32681854516386893,
+      "precision_strict": 0.11329248551990771,
+      "precision_lift": 0.0025011186134328983,
+      "precision_associative": 0.26336824555926597,
+      "similarity_recall_rate": 0.5539568345323741,
+      "retention_curve": {
+        "40": 1.0,
+        "80": 1.0,
+        "120": 0.6363636363636364,
+        "160": 0.5539568345323741,
+        "200": 0.0
+      },
+      "retention_auc": 0.6380640941792021,
+      "selectivity_score": 0.0,
+      "robustness_score": 0.0,
+      "eval_v2_score": 0.28712884238064096
+    },
+    {
+      "tick": 180,
+      "recall_rate": 0.66,
+      "precision_rate": 0.2853333333333333,
+      "activation_recall_correlation": 0.6020790020254664,
+      "fact_episode_delta": 0.2081939799331104,
+      "forgetting_curve_smoothness": 0.016786757576187958,
+      "threshold_metrics": {
+        "0.1": {
+          "recall_rate": 0.66,
+          "precision_rate": 0.2853333333333333
+        },
+        "0.2": {
+          "recall_rate": 0.66,
+          "precision_rate": 0.2853333333333333
+        },
+        "0.3": {
+          "recall_rate": 0.66,
+          "precision_rate": 0.2853333333333333
+        },
+        "0.4": {
+          "recall_rate": 0.66,
+          "precision_rate": 0.2853333333333333
+        },
+        "0.5": {
+          "recall_rate": 0.66,
+          "precision_rate": 0.2853333333333333
+        },
+        "0.6": {
+          "recall_rate": 0.66,
+          "precision_rate": 0.28647925033467203
+        },
+        "0.7": {
+          "recall_rate": 0.66,
+          "precision_rate": 0.292749658002736
+        },
+        "0.8": {
+          "recall_rate": 0.66,
+          "precision_rate": 0.29315068493150687
+        },
+        "0.9": {
+          "recall_rate": 0.66,
+          "precision_rate": 0.34516129032258064
+        }
+      },
+      "recall_mean": 0.66,
+      "precision_mean": 0.2938008389175736,
+      "threshold_discrimination": 0.0,
+      "threshold_summary": {
+        "threshold_auc": 0.66,
+        "slope": 0.0
+      },
+      "corr_mean": 0.6020790020254664,
+      "corr_score": 0.6020790020254664,
+      "smoothness_score": 0.8321324242381204,
+      "retrieval_score": 0.38460479278781623,
+      "plausibility_score": 0.7171057131317934,
+      "overall_score": 0.3682844180005457,
+      "composite_score": 0.3682844180005457,
+      "mrr_mean": 0.3980987654320987,
+      "precision_strict": 0.1359172105272887,
+      "precision_lift": 0.003917210527288689,
+      "precision_associative": 0.2938008389175736,
+      "similarity_recall_rate": 0.66,
+      "retention_curve": {
+        "40": 1.0,
+        "80": 1.0,
+        "120": 0.6363636363636364,
+        "160": 0.5539568345323741,
+        "200": 0.0
+      },
+      "retention_auc": 0.6380640941792021,
+      "selectivity_score": 0.0,
+      "robustness_score": 0.0,
+      "eval_v2_score": 0.28712884238064096
+    },
+    {
+      "tick": 200,
+      "recall_rate": 0.6535947712418301,
+      "precision_rate": 0.28888888888888886,
+      "activation_recall_correlation": 0.7644387432558032,
+      "fact_episode_delta": 0.231547619047619,
+      "forgetting_curve_smoothness": 0.01519666313344806,
+      "threshold_metrics": {
+        "0.1": {
+          "recall_rate": 0.6535947712418301,
+          "precision_rate": 0.28888888888888886
+        },
+        "0.2": {
+          "recall_rate": 0.6535947712418301,
+          "precision_rate": 0.28888888888888886
+        },
+        "0.3": {
+          "recall_rate": 0.6535947712418301,
+          "precision_rate": 0.28888888888888886
+        },
+        "0.4": {
+          "recall_rate": 0.6535947712418301,
+          "precision_rate": 0.28888888888888886
+        },
+        "0.5": {
+          "recall_rate": 0.6535947712418301,
+          "precision_rate": 0.28888888888888886
+        },
+        "0.6": {
+          "recall_rate": 0.6535947712418301,
+          "precision_rate": 0.2919418758256275
+        },
+        "0.7": {
+          "recall_rate": 0.6535947712418301,
+          "precision_rate": 0.29271523178807946
+        },
+        "0.8": {
+          "recall_rate": 0.6535947712418301,
+          "precision_rate": 0.29506008010680906
+        },
+        "0.9": {
+          "recall_rate": 0.6535947712418301,
+          "precision_rate": 0.3469387755102041
+        }
+      },
+      "recall_mean": 0.6535947712418301,
+      "precision_mean": 0.2967889341861294,
+      "threshold_discrimination": 0.0,
+      "threshold_summary": {
+        "threshold_auc": 0.6535947712418301,
+        "slope": 0.0
+      },
+      "corr_mean": 0.7644387432558032,
+      "corr_score": 0.7644387432558032,
+      "smoothness_score": 0.8480333686655194,
+      "retrieval_score": 0.38804045081684235,
+      "plausibility_score": 0.8062360559606613,
+      "overall_score": 0.3767622135872812,
+      "composite_score": 0.3767622135872812,
+      "mrr_mean": 0.41843379327039454,
+      "precision_strict": 0.1342936353783391,
+      "precision_lift": 0.003574681129973084,
+      "precision_associative": 0.2967889341861294,
+      "similarity_recall_rate": 0.6535947712418301,
+      "retention_curve": {
+        "40": 1.0,
+        "80": 1.0,
+        "120": 0.6363636363636364,
+        "160": 0.5539568345323741,
+        "200": 0.6535947712418301
+      },
+      "retention_auc": 0.7687830484275681,
+      "selectivity_score": 0.0,
+      "robustness_score": 0.0,
+      "eval_v2_score": 0.3459523717924056
+    }
+  ],
+  "duration_seconds": 21.09
+}
