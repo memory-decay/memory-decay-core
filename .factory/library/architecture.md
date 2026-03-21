@@ -27,6 +27,9 @@ Architectural decisions, patterns, and design choices for the experiment dashboa
 - Browser back: handled via dcc.Location pop
 - Parameter sweep → detail: sets selected_experiment in Store
 
+## Plotly Limitations
+- `go.Parcoords` (parallel coordinates) does not support `clickData` callbacks. Workers must use a companion dropdown selector for experiment navigation when building parallel coordinates charts.
+
 ## Chart Conventions
 - All charts use Plotly (go.Figure)
 - Y-axis fixed [0,1] for score metrics

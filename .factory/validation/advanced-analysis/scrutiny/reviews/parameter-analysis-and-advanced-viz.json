@@ -1,0 +1,88 @@
+{
+  "featureId": "parameter-analysis-and-advanced-viz",
+  "reviewedAt": "2026-03-21T07:30:00.000Z",
+  "commitId": "798b7a3",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The implementation delivers all 5 advanced analysis views specified in the feature: Parameter Sweep (parallel coordinates), Snapshot Viewer (expanded multi-metric view), Forgetting Depth Analysis (distribution with pass/fail), CV Results (fold scores/deltas/worst-fold), and Phase Comparison (side-by-side statistics). The code is well-structured with clear separation between chart builders (charts.py) and app callbacks (app.py). All 31 unit tests pass. The implementation correctly handles edge cases: exp_lme_0056 (validation_failed + CV data), era-specific parameter dimensions, >50% null filtering for All era, validation_failed exclusion from phase comparison, and graceful missing data handling across all views.",
+    "issues": [
+      {
+        "file": "dashboard/charts.py",
+        "line": 520,
+        "severity": "non_blocking",
+        "description": "Phase comparison 'insufficient_data' flag uses AND logic (both phases must have 0 scored) rather than OR logic. The spec says 'Phase with 0 non-failed experiments shows insufficient data' which could be interpreted as per-phase. However, the UI implementation in app.py already shows 'insufficient data' per-metric-cell when a phase has 0 scored experiments (line 2224-2228), so the overall comparison is still functional and informative even when only one phase is empty. This is a reasonable design choice, not a blocking bug."
+      },
+      {
+        "file": "dashboard/charts.py",
+        "line": 463,
+        "severity": "non_blocking",
+        "description": "Parameter sweep uses a dropdown selector for experiment navigation (param-exp-detail-selector) instead of direct click-on-chart navigation. The code has a comment noting that go.Parcoords doesn't support clickData. The feature spec (VAL-PARAMS-006) says 'Click navigates to experiment detail', but the implementation achieves the same end result via a dropdown. This is a known Plotly limitation and the workaround is acceptable."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "Plotly go.Parcoords does not support clickData callbacks. Workers must use a companion dropdown selector for experiment navigation when building parallel coordinates charts. This is a platform limitation, not a codebase convention.",
+      "evidence": "dashboard/charts.py line 463 comment: 'Note: go.Parcoords doesn\\'t directly support clickData like scatter.' dashboard/app.py lines 1943-1946: on_param_exp_detail_select callback uses param-exp-detail-selector dropdown."
+    },
+    {
+      "area": "knowledge",
+      "observation": "Parameter dimension counts differ from spec estimates. Spec estimated ~10 params for old-era and ~15 for LME-era, but actual data has 26 old-era params and 16 LME-era params. The get_param_sweep_dimensions function correctly adapts to actual data coverage rather than hardcoded era-specific lists. The _COMMON_PARAMS and _OLD_ERA_EXTRA constants exist but are unused — dimension selection is purely data-driven based on coverage thresholds.",
+      "evidence": "dashboard/charts.py lines 380-393 (_COMMON_PARAMS, _OLD_ERA_EXTRA defined but never referenced in get_param_sweep_dimensions). Actual dimension counts verified: 26 for old era, 16 for LME era, 9 for All era (after >50% null filtering)."
+    },
+    {
+      "area": "knowledge",
+      "observation": "exp_lme_0056 edge case (validation_failed with CV data) is handled correctly by get_cv_available_experiments which checks only for cv_results.json file existence, not experiment status or overall_score. This means validation_failed experiments with CV data appear in the CV experiment selector. The build_cv_fold_scores function correctly parses fold data since each fold has its own overall_score field independent of the top-level experiment status.",
+      "evidence": "dashboard/charts.py get_cv_available_experiments checks os.path.exists(cv_path), not exp.status. Verified exp_lme_0056 appears in CV available list and CV fold scores chart renders correctly."
+    },
+    {
+      "area": "conventions",
+      "observation": "The snapshot viewer stepping controls use a TICK_STEP constant of 20 (hardcoded in app.py on_snapshot_step callback). The snapshot viewer also loops back to tick 0 after reaching max_tick during animation. These are UI behavior decisions not documented in architecture.md conventions.",
+      "evidence": "dashboard/app.py line 2099: TICK_STEP = 20, line 2137: if next_tick > max_tick: return 0 (loop back)."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "testCoverage": {
+    "summary": "31 new tests in TestAdvancedCharts class covering all 5 chart builders. Tests verify return types, era filtering, edge cases (no data, nonexistent experiments), visual elements (threshold lines, worst-fold highlighting, pass/fail colors), and data correctness (validation_failed exclusion, metric key presence, improvement percentage calculation). All 31 tests pass.",
+    "gaps": [
+      "No test for the animation loop-back behavior in snapshot viewer (tick wraps from 200 to 0)",
+      "No test verifying exp_lme_0056 specifically in the CV fold scores chart (edge case test uses synthetic data only)",
+      "No test for phase comparison per-phase 'insufficient data' display when one phase has 0 scored experiments",
+      "No test for snapshot_viewer with experiments that have snapshots but all metric values are None"
+    ]
+  },
+  "validationAssertions": {
+    "VAL-PARAMS-001": {
+      "status": "covered",
+      "notes": "Parameter sweep uses parallel coordinates with era-specific dimensions, >50% null filtering for All era, parameter toggle selector, color by overall_score, hover via Plotly tooltips. Navigation uses dropdown (Parcoords limitation)."
+    },
+    "VAL-PARAMS-002": {
+      "status": "covered",
+      "notes": "Snapshot viewer shows overall, recall, precision, plausibility, mrr over 11 ticks. Stepping controls (prev/next/first/last) and animation mode (play/pause via dcc.Interval). Expanded view distinct from detail view mini-charts."
+    },
+    "VAL-PARAMS-003": {
+      "status": "covered",
+      "notes": "Forgetting depth chart shows only 23 experiments with data, pass/fail classification based on strict_score >= 0.4 threshold and validation_failed status. Strict score chart has 0.4 threshold line. Both charts filter by era."
+    },
+    "VAL-PARAMS-004": {
+      "status": "covered",
+      "notes": "CV fold scores bar chart with mean±std line, worst-fold red highlighting. Fold deltas chart with zero reference line. exp_lme_0056 (validation_failed + CV data) correctly appears in CV available experiments and renders CV data."
+    },
+    "VAL-PARAMS-005": {
+      "status": "covered",
+      "notes": "Phase comparison shows mean/best/count/improvement for all 5 required metrics (overall, retrieval, plausibility, recall, retention_auc). validation_failed excluded from counts. Per-metric 'insufficient data' shown when phase has 0 scored experiments."
+    },
+    "VAL-PARAMS-006": {
+      "status": "covered_with_limitation",
+      "notes": "Navigation to experiment detail works via dropdown selector (not direct chart click) due to Plotly Parcoords limitation. End result is the same — correct experiment detail view opens."
+    },
+    "VAL-PARAMS-007": {
+      "status": "covered",
+      "notes": "All views handle missing data: snapshot viewer shows 'No snapshot data' annotation, forgetting depth shows 'No experiments with forgetting_depth data', CV shows 'Select an experiment' placeholder, fold scores/deltas show 'No fold data' annotation."
+    }
+  },
+  "summary": "The parameter-analysis-and-advanced-viz feature is well-implemented with all 5 advanced views (Parameter Sweep, Snapshot Viewer, Forgetting Depth, CV Results, Phase Comparison) correctly built and integrated into the dashboard. Code quality is good with clear separation of concerns between chart builders and app callbacks. Two non-blocking issues noted: phase comparison's insufficient_data logic uses AND instead of OR (but UI already handles per-phase), and parameter sweep navigation uses dropdown instead of direct click (Plotly limitation). All 31 unit tests pass. The implementation correctly handles all specified edge cases including exp_lme_0056 (validation_failed + CV data), era-specific parameter dimensions, and graceful missing data handling. Status: PASS."
+}
