@@ -1,0 +1,141 @@
+{
+  "groupId": "group1-era-status-search",
+  "testedAt": "2026-03-21T00:00:00Z",
+  "isolation": {
+    "dashboardUrl": "http://localhost:8050",
+    "browserSession": "49b7f20b6d87__u1"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-TABLE-001",
+      "title": "Era Filtering — memories_500",
+      "status": "pass",
+      "steps": [
+        { "action": "Navigate to http://localhost:8050", "expected": "Dashboard loaded", "observed": "Dashboard loaded with 451 experiments in All view" },
+        { "action": "Open era dropdown and select memories_500", "expected": "Only exp_NNNN experiments shown", "observed": "Only exp_NNNN experiments shown, count: 358" },
+        { "action": "Verify no exp_lme_NNNN visible on page 1", "expected": "0 exp_lme experiments", "observed": "0 exp_lme experiments in 50 visible rows" },
+        { "action": "Verify pagination count", "expected": "~358", "observed": "358 exactly" }
+      ],
+      "evidence": {
+        "screenshots": ["dashboard-shell/group1/VAL-TABLE-001-memories500-filter.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TABLE-002",
+      "title": "Era Filtering — LongMemEval",
+      "status": "pass",
+      "steps": [
+        { "action": "Open era dropdown and select LongMemEval", "expected": "Only exp_lme_NNNN experiments shown", "observed": "Only exp_lme_NNNN experiments shown, count: 93" },
+        { "action": "Verify no exp_NNNN visible", "expected": "0 exp_NNNN experiments", "observed": "0 exp_NNNN experiments in 50 visible rows" },
+        { "action": "Verify pagination count", "expected": "~78 (contract) or actual filesystem count", "observed": "93 (filesystem has 94 exp_lme_* dirs, dashboard shows 93)" }
+      ],
+      "evidence": {
+        "screenshots": ["dashboard-shell/group1/VAL-TABLE-002-LongMemEval-filter.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": "Count discrepancy: validation contract says ~78, user-testing.md says 78, but filesystem has 94 dirs and dashboard shows 93. The assertion passes because the filtering is correct (only exp_lme_* shown), but the expected count is outdated."
+    },
+    {
+      "id": "VAL-TABLE-003",
+      "title": "Era Filtering — All",
+      "status": "pass",
+      "steps": [
+        { "action": "Open era dropdown and select All", "expected": "Both era formats visible", "observed": "Both exp_lme_* and exp_NNNN visible in same table" },
+        { "action": "Verify both ID formats present on page 1", "expected": "Mixed exp_NNNN and exp_lme_NNNN", "observed": "First 6 rows: exp_lme_0077, exp_lme_0076, exp_lme_0068, exp_lme_0075, exp_lme_0008, exp_lme_0073, then exp_0147 etc." },
+        { "action": "Verify total count", "expected": "~436 (contract) or actual", "observed": "451 total (358 memories_500 + 93 LongMemEval)" }
+      ],
+      "evidence": {
+        "screenshots": ["dashboard-shell/group1/VAL-TABLE-003-All-filter.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TABLE-004",
+      "title": "Status Filtering",
+      "status": "pass",
+      "steps": [
+        { "action": "Open status filter dropdown", "expected": "List of status values shown", "observed": "10 statuses: accepted_cv, baseline, completed, improved, no_results, not_improved, recorded, rejected, rejected_cv, validation_failed" },
+        { "action": "Select 'improved'", "expected": "Only improved experiments visible", "observed": "3 results, all with status 'improved'" },
+        { "action": "Add 'not_improved' (multi-select via JS click)", "expected": "Both improved and not_improved visible (OR logic)", "observed": "56 results with both statuses (3 improved + 53 not_improved)" },
+        { "action": "Click 'Clear selection'", "expected": "Full era view restored", "observed": "451 experiments restored, button text reset to 'Filter by status...'" }
+      ],
+      "evidence": {
+        "screenshots": ["dashboard-shell/group1/VAL-TABLE-004-status-filter-open.png", "dashboard-shell/group1/VAL-TABLE-004-multi-status-filter.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": "Minor UX friction: clicking the option element closes the dropdown instead of toggling the checkbox. Multi-select requires programmatic checkbox click (JS click on input). This may be a dash-ag-grid VirtualizedSelect behavior."
+    },
+    {
+      "id": "VAL-TABLE-007",
+      "title": "Status Display — Distinct Visual Indicators",
+      "status": "fail",
+      "steps": [
+        { "action": "View experiment table with multiple statuses visible", "expected": "Each status has unique visual treatment (color, icon, badge)", "observed": "All status values rendered as plain text with no background color, no border radius, no different text color, no icons" },
+        { "action": "Inspect computed styles of status cells", "expected": "Different backgroundColor/color per status", "observed": "All status cells: backgroundColor=transparent, color=rgb(24,29,31), fontWeight=400, borderRadius=0px" },
+        { "action": "Check sidebar status legend", "expected": "Legend shows colored indicators", "observed": "Sidebar legend correctly shows 11 colored indicators with proper STATUS_COLORS mapping" }
+      ],
+      "evidence": {
+        "screenshots": ["dashboard-shell/group1/VAL-TABLE-007-status-display.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": "The AG Grid cellStyle function-based callback is not being applied. The column definition uses `{\"function\": \"...\"}` format for cellStyle (line 227 of app.py), but dash-ag-grid 33.3.3 does not execute this as a callback. Plain object cellStyle (e.g., on hypothesis column) works fine. The sidebar status legend (HTML-based) renders colors correctly. Root cause: cellStyle function syntax incompatible with dash-ag-grid."
+    },
+    {
+      "id": "VAL-TABLE-008",
+      "title": "Status Color Coding Consistent",
+      "status": "fail",
+      "steps": [
+        { "action": "Compare table badge colors with filter control colors", "expected": "Same color values used in both locations", "observed": "Table status cells have no color at all (transparent bg, default text color). Sidebar legend shows correct colors. Status filter dropdown has no color indicators." },
+        { "action": "Verify colors preserved after sort/filter operations", "expected": "Colors consistent", "observed": "N/A — no colors to preserve in table cells" }
+      ],
+      "evidence": {
+        "screenshots": ["dashboard-shell/group1/VAL-TABLE-008-sidebar-legend.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": "Same root cause as VAL-TABLE-007: cellStyle function not executing in dash-ag-grid. The STATUS_COLORS dict defines correct color mappings used in the sidebar legend, but the AG Grid column cellStyle callback fails to apply them to table cells."
+    },
+    {
+      "id": "VAL-TABLE-020",
+      "title": "Leaderboard Search",
+      "status": "pass",
+      "steps": [
+        { "action": "Type 'exp_lme_0008' in search box", "expected": "Experiments matching ID or hypothesis shown", "observed": "8 results: exp_lme_0008 (ID match) + 7 others referencing exp_lme_0008 in hypothesis" },
+        { "action": "Type 'sigmoid' in search box", "expected": "Experiments with 'sigmoid' in hypothesis shown", "observed": "48 results, all with 'sigmoid' in hypothesis text, none in IDs" },
+        { "action": "Set era=LongMemEval + search 'exp_lme_0008'", "expected": "AND logic: only LongMemEval experiments matching search", "observed": "8 results, all exp_lme_*, same set as All era (all references are in LME era)" },
+        { "action": "Set era=memories_500 + search 'exp_lme_0008'", "expected": "0 results (AND logic, no memories_500 references exp_lme_0008)", "observed": "0 results — correctly shows empty table" }
+      ],
+      "evidence": {
+        "screenshots": ["dashboard-shell/group1/VAL-TABLE-020-search-explme0008.png", "dashboard-shell/group1/VAL-TABLE-020-search-with-era-filter.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Status filter multi-select via agent-browser click on option element closes the dropdown instead of toggling the checkbox. Required using JavaScript click on the checkbox input directly.",
+      "resolved": true,
+      "resolution": "Used agent-browser eval to programmatically click the checkbox input element",
+      "affectedAssertions": ["VAL-TABLE-004"]
+    },
+    {
+      "description": "Validation contract expected ~78 LongMemEval experiments but actual filesystem has 94 directories (dashboard shows 93). The user-testing.md count (78) appears outdated.",
+      "resolved": true,
+      "resolution": "Noted the discrepancy; assertion passes on filtering correctness (all exp_lme_* shown) rather than exact count",
+      "affectedAssertions": ["VAL-TABLE-002"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 7 assertions: 5 passed, 2 failed. VAL-TABLE-007 and VAL-TABLE-008 fail due to AG Grid cellStyle function-based callback not executing in dash-ag-grid 33.3.3 — status badges in the table render as plain text without color/icon styling. The sidebar legend renders colors correctly. Era filtering (VAL-TABLE-001/002/003), status filtering (VAL-TABLE-004), and search (VAL-TABLE-020) all work correctly."
+}

@@ -1,0 +1,153 @@
+{
+  "groupId": "group4-detail-edge",
+  "testedAt": "2026-03-21T13:15:00Z",
+  "isolation": {
+    "dashboardUrl": "http://localhost:8050",
+    "browserSession": "49b7f20b6d87__u4"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-TABLE-014",
+      "title": "Detail View — validation_failed Handling",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Search for exp_lme_0063 in leaderboard",
+          "expected": "exp_lme_0063 appears with N/A metrics and validation_failed status",
+          "observed": "exp_lme_0063 shown with N/A for all metrics, validation_failed status badge"
+        },
+        {
+          "action": "Click exp_lme_0063 row to open detail view",
+          "expected": "Detail view opens with error message prominently and N/A for all metrics",
+          "observed": "Detail view opens. Prominent '⚠ Validation Error' heading shown. Error message: 'Insufficient decay: fact(impact=0.3) after 200 ticks = 0.4703 > 0.45. Moderate-impact items should show meaningful decay.' All Key Metrics show N/A. All Extended Metrics show N/A. Hypothesis and Parameters still displayed. Snapshot Timeline shows 'No data'."
+        },
+        {
+          "action": "Verify error message matches results.json",
+          "expected": "Error text matches exactly",
+          "observed": "Error text matches results.json error field exactly"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/group4/VAL-TABLE-014-detail-validation-failed.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TABLE-015",
+      "title": "Detail View — Cross-Validation Data",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Open detail view for exp_lme_0008",
+          "expected": "Cross-Validation Results section visible with k, mean, std, worst_fold, fold_deltas, and fold scores bar chart",
+          "observed": "CV Results section displayed with: k = 5 folds, CV MEAN (OVERALL) = 0.3466, CV STD (OVERALL) = 0.0296, WORST FOLD = 0.3639, FOLD DELTAS = +0.0668, -0.0291, +0.0037, -0.0898, +0.0484. Bar chart shows 5 fold scores: 0.3852, 0.3366, 0.3069, 0.3639, 0.3404."
+        },
+        {
+          "action": "Compare CV values against cv_results.json",
+          "expected": "All values match when rounded to 4 decimal places",
+          "observed": "k=5 ✓, mean.overall_score=0.3466044→0.3466 ✓, std.overall_score=0.0295753→0.0296 ✓, mean.retrieval=0.3857715→0.3858 ✓, mean.plausibility=0.3167454→0.3167 ✓, std.retrieval=0.0205525→0.0206 ✓, worst_fold=0.3639198→0.3639 ✓, fold_deltas all match ✓, fold_scores all match ✓"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/group4/VAL-TABLE-015-cv-section.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TABLE-016",
+      "title": "Snapshot Mini-Charts",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "View detail view for exp_lme_0008 and check Snapshot Timeline section",
+          "expected": "Time-series chart with X=tick (0,20,...,200), Y=metric values, at least 3 distinguishable lines",
+          "observed": "Snapshot Timeline renders a Plotly line chart with X-axis 'Tick' (0, 50, 100, 150, 200) and Y-axis 'Score' (0-1). Three distinguishable lines shown with legend: Overall Score (blue), Retrieval Score (orange), Plausibility Score (green). Title: 'Metrics over Simulation Ticks'."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/group4/VAL-TABLE-016-mini-charts.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TABLE-017",
+      "title": "Mini-Charts Handle Varying Structures",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Open detail view for exp_0001 (old-era experiment)",
+          "expected": "Mini-charts render with available metrics only (overall, retrieval, plausibility)",
+          "observed": "exp_0001 detail view shows Snapshot Timeline with 3 metric lines: Overall Score, Retrieval Score, Plausibility Score. Missing-era metrics (MRR MEAN, RETENTION AUC, SELECTIVITY SCORE) show N/A. Mini-charts render correctly with available data."
+        },
+        {
+          "action": "Open detail view for exp_lme_0001 (no results.json)",
+          "expected": "Snapshot Timeline shows 'No data' message",
+          "observed": "exp_lme_0001 detail view shows all Key Metrics as N/A and Snapshot Timeline displays 'No data'. Parameters and hypothesis still shown (loaded from separate files)."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/group4/VAL-TABLE-017a-old-era-charts.png",
+          "dashboard-shell/group4/VAL-TABLE-017b-no-snapshot-data.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TABLE-019",
+      "title": "Best Experiment Highlighted",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "View leaderboard for exp_lme_0008 (current best CV mean)",
+          "expected": "exp_lme_0008 row visually distinguished with highlight/badge/star in leaderboard",
+          "observed": "exp_lme_0008 row in the leaderboard has NO visual distinction. All rows have identical white background (rgb(255, 255, 255)), no border-left highlight, no star icon in the cell. The '.best-experiment' CSS class is NOT applied to the row element despite being configured via rowClassRules."
+        },
+        {
+          "action": "Open detail view for exp_lme_0008",
+          "expected": "Best indicator visible in detail view",
+          "observed": "Detail view header shows '⭐' star next to experiment ID. Sidebar shows '· Best: exp_lme_0008' text. These secondary indicators work correctly."
+        },
+        {
+          "action": "Verify rowClassRules configuration and CSS",
+          "expected": "rowClassRules applies .best-experiment class to exp_lme_0008 row",
+          "observed": "CSS for .best-experiment { background-color: #fffde7; border-left: 3px solid #ffd700; } is defined in index_string. rowClassRules dict maps 'best-experiment' to a function checking params.data.id === 'exp_lme_0008'. However, the class is never applied to the DOM element. This appears to be a dash-ag-grid integration issue where rowClassRules functions are not being evaluated or applied."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/group4/VAL-TABLE-019-full-leaderboard.png",
+          "dashboard-shell/group4/VAL-TABLE-019-leaderboard-highlight.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": "The .best-experiment CSS class defined in rowClassRules is not being applied to the exp_lme_0008 row in the AG Grid leaderboard. All rows render with identical white background and no visual distinction. The CSS rules exist in the HTML head and the rowClassRules configuration is correctly passed to the AgGrid component, but the class never appears on the DOM row element. The ⭐ star IS shown in the detail view header and sidebar 'Best: exp_lme_0008' text, but the leaderboard row itself lacks any visual highlight."
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Clicking an AG Grid row sometimes toggles row selection instead of opening the detail view. The cellClicked callback fires intermittently - sometimes a click opens the detail overlay, other times it just selects the row (shows 'Press SPACE to deselect'). This required multiple attempts and page reloads to open certain detail views reliably.",
+      "resolved": true,
+      "resolution": "Worked around by reloading the page and retrying the click. The issue appears to be related to AG Grid's internal event handling where some clicks are consumed as selection events rather than propagating as cellClicked events.",
+      "affectedAssertions": ["VAL-TABLE-017", "VAL-TABLE-019"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 5 assertions: 4 passed, 1 failed. VAL-TABLE-019 (Best Experiment Highlighted) failed because the .best-experiment CSS class is not being applied to the leaderboard row despite correct rowClassRules configuration - the row has no yellow background, gold border, or star icon in the leaderboard view. The star IS shown in the detail view and sidebar. All other assertions passed: validation_failed error display (VAL-TABLE-014), CV data accuracy (VAL-TABLE-015), snapshot mini-charts (VAL-TABLE-016), and varying structure handling (VAL-TABLE-017)."
+}

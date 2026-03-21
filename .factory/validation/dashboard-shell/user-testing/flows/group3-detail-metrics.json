@@ -1,0 +1,156 @@
+{
+  "groupId": "group3-detail-metrics",
+  "testedAt": "2026-03-21T12:00:00Z",
+  "isolation": {
+    "dashboardURL": "http://localhost:8050",
+    "browserSession": "49b7f20b6d87__u3"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-TABLE-009",
+      "title": "Row Click Opens Detail View",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Click exp_lme_0008 row (status: accepted_cv) on LongMemEval leaderboard",
+          "expected": "Detail view opens with exp_lme_0008 displayed prominently",
+          "observed": "Detail view opened with heading 'exp_lme_0008', status badge 'accepted_cv', and '← Back to Leaderboard' button"
+        },
+        {
+          "action": "Return to leaderboard, search for and click exp_lme_0063 row (status: validation_failed)",
+          "expected": "Detail view opens with exp_lme_0063 displayed prominently",
+          "observed": "Detail view opened with heading 'exp_lme_0063', status badge 'validation_failed', validation error message displayed, all metrics show N/A"
+        },
+        {
+          "action": "Return to leaderboard, search for and click exp_lme_0059 row (status: improved)",
+          "expected": "Detail view opens with exp_lme_0059 displayed prominently",
+          "observed": "Detail view opened with heading 'exp_lme_0059', status badge 'improved', full metrics displayed"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/group3/VAL-TABLE-009-exp_lme_0008-detail.png",
+          "dashboard-shell/group3/VAL-TABLE-009-exp_lme_0063-detail-v2.png",
+          "dashboard-shell/group3/VAL-TABLE-012-exp_lme_0059-detail.png"
+        ],
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TABLE-010",
+      "title": "Detail View Back Navigation",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Navigate to exp_lme_0059 detail view with era=LongMemEval and search=exp_lme_0059",
+          "expected": "Detail view displayed",
+          "observed": "Detail view displayed correctly"
+        },
+        {
+          "action": "Click '← Back to Leaderboard' in-app button",
+          "expected": "Return to leaderboard with era=LongMemEval and search=exp_lme_0059 preserved",
+          "observed": "Returned to leaderboard. Era=LongMemEval preserved, search text=exp_lme_0059 preserved, filtered results showing exp_lme_0059 and exp_lme_0060"
+        },
+        {
+          "action": "Navigate to exp_lme_0068 detail view, then press browser back button",
+          "expected": "Browser back button returns to leaderboard",
+          "observed": "Browser back button had no effect. Detail view remained open. The detail view is a same-page overlay (not a separate route), so there is no browser history entry to navigate back to."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/group3/VAL-TABLE-010-back-to-leaderboard.png"
+        ],
+        "consoleErrors": "none"
+      },
+      "issues": "Browser back button does not work because the detail view is implemented as a same-page overlay (Dash dcc.Store toggle), not as a separate URL route. The validation contract specifies 'Browser back button also returns to leaderboard' but this is architecturally impossible with the current same-page overlay approach. The in-app back button works correctly and preserves all filter state."
+    },
+    {
+      "id": "VAL-TABLE-011",
+      "title": "Detail View — Key Metrics Displayed",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Open exp_lme_0008 detail view and verify all 9 key metrics against results.json",
+          "expected": "All metrics displayed with values matching results.json at 4 decimal places",
+          "observed": "All 9 metrics displayed. Value comparison against results.json:\n- overall_score: displayed 0.4630 vs actual 0.4630429519731301 → matches at 4dp\n- retrieval_score: displayed 0.3656 vs actual 0.36556616353453963 → matches at 4dp\n- plausibility_score: displayed 0.5605 vs actual 0.5605197404117206 → matches at 4dp\n- recall_mean: displayed 0.6318 vs actual 0.6318082788671023 → matches at 4dp\n- precision_mean: displayed 0.2857 vs actual 0.28572214439589244 → matches at 4dp\n- mrr_mean: displayed 0.3744 vs actual 0.3743887678528202 → matches at 4dp\n- corr_score: displayed 0.2488 vs actual 0.24879540603743153 → matches at 4dp\n- retention_auc: displayed 0.7778 vs actual 0.7778111200878869 → matches at 4dp\n- selectivity_score: displayed 0.0000 vs actual 0.0 → matches"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/group3/VAL-TABLE-009-exp_lme_0008-detail.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A - same-page overlay, no API calls"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TABLE-012",
+      "title": "Detail View — Later-Era Metrics Conditional",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Open exp_lme_0008 detail view and check strict_score and forgetting_depth",
+          "expected": "Both shown as N/A (exp_lme_0008 does not have these fields)",
+          "observed": "STRICT SCORE: N/A, FORGETTING DEPTH: N/A, FORGETTING SCORE: N/A"
+        },
+        {
+          "action": "Open exp_lme_0059 detail view and check strict_score and forgetting_depth",
+          "expected": "Both shown with actual values from results.json",
+          "observed": "STRICT SCORE: 0.4585 (actual: 0.458456 → 0.4585 at 4dp), FORGETTING DEPTH: 0.3675 (actual: 0.3675 → exact), FORGETTING SCORE: 1.0000 (actual: 1.0 → exact)"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/group3/VAL-TABLE-009-exp_lme_0008-detail.png",
+          "dashboard-shell/group3/VAL-TABLE-012-exp_lme_0059-detail.png"
+        ],
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TABLE-013",
+      "title": "Detail View — Hypothesis and Parameters",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Open exp_lme_0008 detail view and verify hypothesis text against hypothesis.txt",
+          "expected": "Full hypothesis.txt text displayed, not truncated",
+          "observed": "Full hypothesis text displayed verbatim: 'Sharpen the sigmoid floor transition while keeping the successful exp_lme_0002 floor height fixed. Because LongMemEval answer-bearing memories carry higher impact than distractors, increasing sigmoid_k from 20 to 30 should keep target memories near the same floor while pushing low-importance distractors closer to zero floor. The intended outcome is better ranking selectivity and threshold separation without the broad recall loss seen when floor_max was reduced globally.' — matches hypothesis.txt exactly"
+        },
+        {
+          "action": "Verify all params.json key-value pairs displayed in structured format",
+          "expected": "All 12 params shown as key-value pairs",
+          "observed": "All 12 params displayed: alpha=1.5, floor_max=0.45, jost_power=4.0, lambda_episode=0.035, lambda_fact=0.008, reinforcement_gain_assoc=0.3, reinforcement_gain_direct=0.4, sigmoid_k=30.0, sigmoid_mid=0.3, stability_cap=2.0, stability_decay=0.005, stability_weight=1.0 — matches params.json exactly"
+        },
+        {
+          "action": "Check exp_lme_0063 detail view for parameters section with missing files",
+          "expected": "Parameters still displayed (exp_lme_0063 has params.json)",
+          "observed": "exp_lme_0063 has params.json, all 13 params displayed correctly (including activation_weight=0.3)"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/group3/VAL-TABLE-009-exp_lme_0008-detail.png",
+          "dashboard-shell/group3/VAL-TABLE-009-exp_lme_0063-detail-v2.png"
+        ],
+        "consoleErrors": "none"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Clicking a table row toggles selection state (select/deselect). If a row is already selected, clicking it again deselects it and does NOT open the detail view. To open the detail view for an already-selected row, you must first deselect (by clicking elsewhere or pressing Escape), then click the row again. This is because Dash DataTable's row click both fires cellClicked (opens detail) AND toggles selectedRows (which can fire on_row_click with empty array if deselecting).",
+      "resolved": true,
+      "resolution": "Used page reload to clear selection state before clicking rows. The first click always works; only subsequent clicks on the same or another previously-selected row exhibit this toggle behavior.",
+      "affectedAssertions": ["VAL-TABLE-009"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 5 assertions: 4 passed, 1 failed (VAL-TABLE-010: browser back button does not work because detail view is a same-page overlay, not a separate route). All key metrics, conditional metrics, hypothesis text, and parameter display verified correct against source files."
+}

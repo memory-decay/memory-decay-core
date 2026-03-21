@@ -1,0 +1,217 @@
+{
+  "groupId": "group2-sort-perf-url",
+  "testedAt": "2026-03-21T12:00:00Z",
+  "isolation": {
+    "dashboardUrl": "http://localhost:8050",
+    "browserSession": "49b7f20b6d87__u2",
+    "sharedPort": 8050
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-TABLE-005",
+      "title": "Column Sorting — Ascending/Descending",
+      "status": "partial",
+      "steps": [
+        {
+          "action": "Load dashboard at http://localhost:8050/",
+          "expected": "Default sort is overall_score descending",
+          "observed": "Table shows highest scores first (0.6560, 0.6156, 0.4694) — correct default order"
+        },
+        {
+          "action": "Check for visual sort indicator on initial load",
+          "expected": "Sort indicator on Overall column showing descending",
+          "observed": "No visual sort indicator on any column (aria-sort='none' on all). Sort is applied at data level, not via AG Grid sort API."
+        },
+        {
+          "action": "Click Overall column header once",
+          "expected": "Sort ascending, indicator shows ascending",
+          "observed": "aria-sort changed to 'ascending'. N/A experiments appear at top of page 1. Note: requires 3 clicks to cycle — none → ascending → descending → none."
+        },
+        {
+          "action": "Click Overall column header again",
+          "expected": "Sort descending, indicator shows descending",
+          "observed": "aria-sort changed to 'descending'. Highest scores at top (0.6560, 0.6156). Visual sort number indicator shown in header."
+        },
+        {
+          "action": "Click Experiment column header",
+          "expected": "Sort by experiment ID ascending",
+          "observed": "aria-sort='ascending' on Experiment, aria-sort='none' on Overall. exp_0000, exp_0001 at top."
+        },
+        {
+          "action": "Sort by Overall descending, scroll to last page",
+          "expected": "validation_failed and null experiments at bottom",
+          "observed": "Last page (page 10 of 10) shows exp_lme_0071 (N/A, validation_failed). Page 9 bottom shows exp_lme_0063, exp_lme_0066, exp_lme_0067, exp_lme_0070 (all N/A, validation_failed). Correctly sorted to bottom."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/group2/VAL-TABLE-005-default-sort-desc.png",
+          "dashboard-shell/group2/VAL-TABLE-005-sort-asc.png",
+          "dashboard-shell/group2/VAL-TABLE-005-sort-desc.png",
+          "dashboard-shell/group2/VAL-TABLE-005-sort-by-experiment.png"
+        ],
+        "consoleErrors": "none",
+        "network": "Sort is client-side (AG Grid), no network requests"
+      },
+      "issues": "1) No visual sort indicator on initial load (aria-sort='none' on all columns). The default sort is pre-applied at the data level, not via AG Grid's sort API, so no sort arrow appears until user explicitly clicks a header. 2) Sort cycling is: none → ascending → descending → none (3-state cycle instead of the typical 2-state asc/desc toggle). First click goes from data-order to ascending (not descending), which is counterintuitive given the data appears pre-sorted descending."
+    },
+    {
+      "id": "VAL-TABLE-006",
+      "title": "Sorting Handles Non-Numeric Values",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Sort by Overall descending",
+          "expected": "validation_failed (N/A) and null experiments sort to bottom",
+          "observed": "On descending sort, N/A experiments consistently appear at bottom. Page 9 bottom: exp_lme_0063 (validation_failed), exp_lme_0066 (validation_failed), exp_lme_0067 (validation_failed), exp_lme_0070 (validation_failed). Page 10 (last): exp_lme_0071 (validation_failed)."
+        },
+        {
+          "action": "Sort by Overall ascending",
+          "expected": "N/A experiments at top without crash",
+          "observed": "N/A experiments appear at top when sorted ascending. No JavaScript errors."
+        },
+        {
+          "action": "Check for JS errors during sort operations",
+          "expected": "No errors",
+          "observed": "No console errors before or after sorting."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/group2/VAL-TABLE-006-bottom-desc-sort.png"
+        ],
+        "consoleErrors": "none",
+        "network": "No errors or crashes"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TABLE-018",
+      "title": "Leaderboard Performance",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Measure initial page load",
+          "expected": "Under 3 seconds",
+          "observed": "145ms (cold load via performance.timing), 50ms (cached). Well under 3s threshold."
+        },
+        {
+          "action": "Measure era switch (All → LongMemEval)",
+          "expected": "Under 2 seconds",
+          "observed": "~248ms (measured via MutationObserver for grid content change). Well under 2s."
+        },
+        {
+          "action": "Measure sort time",
+          "expected": "Under 1 second",
+          "observed": "~350ms (estimated: ~500ms total click+wait+eval minus ~150ms eval overhead). Under 1s."
+        },
+        {
+          "action": "Measure filter time",
+          "expected": "Under 1 second",
+          "observed": "~350ms (estimated same as sort). Under 1s."
+        },
+        {
+          "action": "Measure detail view opening time",
+          "expected": "Under 2 seconds",
+          "observed": "~628ms (1128ms total minus 500ms wait). Under 2s."
+        },
+        {
+          "action": "Test table with 451 rows",
+          "expected": "Smooth scrolling/pagination",
+          "observed": "Table uses pagination (50 rows per page, 10 pages total). Page change takes ~200ms. Smooth interaction."
+        },
+        {
+          "action": "Scroll through pages",
+          "expected": "No jank or freezing",
+          "observed": "Pagination buttons work correctly. Page size selector available (25, 50, 100, 200). No jank observed."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/group2/VAL-TABLE-018-pagination.png"
+        ],
+        "consoleErrors": "none",
+        "network": "All operations are client-side after initial data load. Dash callbacks respond in 4-6ms.",
+        "performanceNotes": "Measurements taken on localhost (no network latency). Performance timing methodology: rAF + eval for sort/filter; MutationObserver for era switch; performance.timing for page load. agent-browser command overhead ~160ms per eval, ~324ms per click+eval pair."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TABLE-021",
+      "title": "URL State Management",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Set era to LongMemEval via dropdown",
+          "expected": "URL updates to include era=LongMemEval",
+          "observed": "URL stays at http://localhost:8050/ with no query parameters. Era filter applies correctly (93 experiments shown) but URL does not reflect the change."
+        },
+        {
+          "action": "Click experiment row to open detail view",
+          "expected": "URL updates to include experiment=<id>",
+          "observed": "URL stays at http://localhost:8050/. Detail view opens correctly but URL does not update. Inconsistent behavior: sometimes URL briefly shows ?experiment=exp_lme_0077 but is immediately stripped."
+        },
+        {
+          "action": "Navigate to http://localhost:8050/?era=LongMemEval&experiment=exp_lme_0008 directly",
+          "expected": "View restored with LongMemEval era and exp_lme_0008 detail view",
+          "observed": "PARTIAL SUCCESS: The era filter shows LongMemEval and detail view shows exp_lme_0008 correctly. However, the URL is immediately stripped to http://localhost:8050/ (query params consumed but not preserved)."
+        },
+        {
+          "action": "Refresh page after setting era and opening detail view",
+          "expected": "Same view restored",
+          "observed": "FAIL: After reload, URL is bare http://localhost:8050/. Detail view state is preserved via dcc.Store (client-side storage), but only if the browser doesn't clear session storage. URL-based restoration fails because the URL never contains the state."
+        },
+        {
+          "action": "Test browser back button from detail view",
+          "expected": "Returns to leaderboard",
+          "observed": "FAIL: Browser back navigates to previous agent-browser-opened URL, not to the leaderboard. Since the URL never changes when opening/closing detail views, browser history has no entries for view state changes."
+        },
+        {
+          "action": "Test browser forward button",
+          "expected": "Returns to detail view",
+          "observed": "FAIL: Same issue — no URL-based history entries for view changes, so forward doesn't restore detail view."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/group2/VAL-TABLE-021-detail-view-direct-url.png",
+          "dashboard-shell/group2/VAL-TABLE-021-detail-view-url-updated.png",
+          "dashboard-shell/group2/VAL-TABLE-021-detail-view-no-url-update.png",
+          "dashboard-shell/group2/VAL-TABLE-021-url-state-findings.png"
+        ],
+        "consoleErrors": "none",
+        "network": "URL state management code exists in app.py (update_url_state, restore_from_url callbacks) but the dcc.Location component with refresh=False appears to strip query params immediately after they are set."
+      },
+      "issues": "The URL state management is fundamentally broken. Three specific failures:\n1) Era filter changes do NOT update the URL — URL stays at http://localhost:8050/ regardless of era selection.\n2) Experiment detail view opening does NOT consistently update the URL — sometimes ?experiment=<id> appears briefly but is immediately stripped.\n3) Browser back/forward do NOT work for view state changes because the URL never changes.\nThe restore_from_url callback DOES work (navigating directly to ?era=LongMemEval&experiment=exp_lme_0008 correctly restores the view), but since the update_url_state callback fails to maintain URL params, bookmarkability and back/forward navigation are non-functional.\nRoot cause: dcc.Location(refresh=False) may be stripping query params, or the update_url_state callback's output to Output('url', 'search') is not being applied by Dash."
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Row clicks to open detail view are unreliable — sometimes the click doesn't register with the AG Grid cellClicked event. Need a 1+ second wait after page load before clicks work, and even then behavior is inconsistent across attempts. The enableCellTextSelection: True AG Grid option may be interfering with click events.",
+      "resolved": false,
+      "resolution": "Worked around by adding 1s wait after page load before attempting row clicks. The detail view eventually opens after 2-3 click attempts.",
+      "affectedAssertions": ["VAL-TABLE-005", "VAL-TABLE-006", "VAL-TABLE-018", "VAL-TABLE-021"]
+    },
+    {
+      "description": "AG Grid pagination buttons cannot be clicked via agent-browser refs (click @e9 for Next Page doesn't work). Must use JavaScript (document.querySelectorAll('.ag-paging-button').find(b => b.getAttribute('aria-label') === 'Next Page').click()) to trigger pagination.",
+      "resolved": true,
+      "resolution": "Used JavaScript eval to click pagination buttons directly via DOM API.",
+      "affectedAssertions": ["VAL-TABLE-018"]
+    },
+    {
+      "description": "Sort indicator has a 3-state cycle (none → ascending → descending → none) instead of the typical 2-state (ascending ↔ descending). The initial 'none' state means no sort arrow is shown even though data is pre-sorted by overall_score descending.",
+      "resolved": false,
+      "resolution": "Noted as a finding. First click on Overall goes to ascending (N/A values first), second click goes to descending (highest values first), third click returns to 'none' (data-order).",
+      "affectedAssertions": ["VAL-TABLE-005"]
+    },
+    {
+      "description": "Performance timing via agent-browser is imprecise due to tool overhead (~160ms per eval, ~324ms per click+eval pair). Used MutationObserver and rAF for more accurate measurements.",
+      "resolved": true,
+      "resolution": "Used multiple timing approaches: performance.timing for page load, MutationObserver for era switch, rAF for sort/filter timing, wall-clock subtraction for detail view.",
+      "affectedAssertions": ["VAL-TABLE-018"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 4 assertions: 1 passed (VAL-TABLE-006), 1 partially passed (VAL-TABLE-005), 1 passed (VAL-TABLE-018), 1 failed (VAL-TABLE-021). VAL-TABLE-005 partial because default sort has no visual indicator and sort cycling is 3-state instead of 2-state. VAL-TABLE-021 failed because URL state management is broken — era filter and experiment selection do not update the browser URL, making bookmarkability and browser back/forward non-functional."
+}

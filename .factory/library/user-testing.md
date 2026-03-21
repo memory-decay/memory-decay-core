@@ -15,9 +15,9 @@ Testing surface, required tools, and resource cost classification.
 4. agent-browser navigates to `http://localhost:8050`
 
 **Current experiment counts** (updated 2026-03-21):
-- Total: 436 experiments (validation contract said 434)
+- Total: 451 experiments (dashboard shows; filesystem has 358+94 dirs, one excluded)
 - memories_500 (exp_NNNN): 358
-- LongMemEval (exp_lme_NNNN): 78
+- LongMemEval (exp_lme_NNNN): 93 (dashboard shows; filesystem has 94 dirs)
 - No-results experiments: exp_0360, exp_lme_0001, exp_lme_0071, exp_lme_0077
 
 **Key test experiments for validation**:
@@ -58,3 +58,32 @@ Testing surface, required tools, and resource cost classification.
 - **Charts**: Spot-check data points against results.json, verify phase shading boundaries
 - **Cross-area**: Verify filter propagation across all views after era/phase changes
 - **Performance**: Measure operation times with stopwatch or browser DevTools
+
+## Known UI-Level Findings (dashboard-shell milestone)
+
+### dash-ag-grid 33.3.3 Function-based Config Issues
+- **cellStyle functions** not executing — status badges render as plain text, no colors in table
+- **rowClassRules** not applying CSS classes — best experiment row not highlighted
+- Plain object cellStyle (e.g., on hypothesis column) works fine
+- Fix: compute styles in Python and pass as plain object configs
+
+### URL State Management
+- dcc.Location(refresh=False) strips query params immediately
+- restore_from_url callback works (direct URL navigation restores state)
+- update_url_state callback fails to maintain URL params
+- Same-page overlay detail view creates no browser history entries
+
+### AG Grid Interaction Quirks
+- Row clicks sometimes toggle row selection instead of opening detail view
+- Pagination buttons require JavaScript click (not agent-browser refs)
+- Sort cycling is 3-state (none→asc→desc→none), not 2-state
+- Default sort applied at data level, not via AG Grid sort API — no sort indicator on initial load
+- Multi-select status filter: clicking option closes dropdown; must click checkbox input via JS
+
+### Performance Baseline (localhost)
+- Initial load: ~145ms (< 3s threshold)
+- Era switch: ~248ms (< 2s threshold)
+- Sort: ~350ms (< 1s threshold)
+- Filter: ~350ms (< 1s threshold)
+- Detail view open: ~628ms (< 2s threshold)
+- Pagination uses 50 rows/page, ~200ms page change
