@@ -1,0 +1,10 @@
+Retrieval consolidation policy test: same decay as exp_lme_0068 (best on cache_gemini2_batch)
+but with retrieval_consolidation reactivation instead of scheduled_query.
+
+retrieval_consolidation: train memories reactivated every 10 ticks + test memories
+reactivated every 20 ticks starting tick 80 + retrieval-induced facilitation boost
+for successfully recalled test memories after each evaluation.
+
+Hypothesis: the retrieval-induced facilitation should strengthen the correlation between
+activation and recall (frequently recalled = stronger activation), potentially improving
+the bottleneck correlation (~0.27).

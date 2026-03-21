@@ -1,0 +1,5 @@
+Retrieval consolidation policy test with MULTIPLICATIVE formula.
+Same decay as exp_lme_0068/0076 but with retrieval_consolidation policy.
+Evaluator reverted to multiplicative: overall = retrieval * (0.85 + 0.15 * plausibility)
+This is the fair comparison: does retrieval_consolidation beat scheduled_query (baseline 0.3449)?
+exp_lme_0076 with additive scored 0.6156 but CV=38% — was the additive formula inflating variance?
