@@ -31,10 +31,11 @@ retrieval_score = 0.55 * recall_mean + 0.45 * mrr_mean
 ### Pillar 2: Forgetting (weight 0.35)
 
 ```python
-forgetting_score = 1.0 - mean(storage_score of non-target memories)
+forgetting_score = max(0.0, 1.0 - mean(storage_score of non-target memories))
 ```
 
-- non-target = all typed graph nodes created before current tick, excluding test query expected_ids
+- non-target = all graph nodes where `type not in ("unknown", None)` and `created_tick <= current_tick`, excluding nodes whose id appears in test_queries expected_ids
+- Clamped to [0, 1] — storage scores can exceed 1.0 after reinforcement
 - Penalizes keeping irrelevant memories alive
 - Creates tension: boosting all storage helps retrieval but hurts forgetting
 - Optimal strategy: selectively retain targets, let non-targets decay
@@ -61,29 +62,33 @@ overall_score = 0.40 * retrieval_score + 0.35 * forgetting_score + 0.25 * plausi
 
 ### evaluator.py
 
-1. Add `_forgetting_score(self, test_queries, current_tick)` method:
+1. Add `_forgetting_score(self, test_queries)` method:
+   - Uses `self._engine.current_tick` internally (consistent with sibling methods like `_smoothness_score`)
    - Extract target_ids from test_queries
-   - Iterate graph nodes, collect storage_score of non-targets
-   - Return `1.0 - mean(non_target_storage)`, or 0.5 if empty
+   - Iterate graph nodes, collect storage_score of non-targets (same type/tick filter as `_candidate_pool_limit`)
+   - Return `max(0.0, 1.0 - mean(non_target_storage))`, or 0.5 if empty
 
 2. Modify `score_summary()`:
    - New retrieval_score formula: `0.55 * recall_mean + 0.45 * mrr_mean`
    - New plausibility_score: `corr_score` only
    - Compute and include forgetting_score
    - New overall_score: 3-pillar formula
-   - Keep old metrics in result dict as diagnostics (precision_lift, smoothness_score, etc.)
+   - Keep old metrics in result dict as diagnostics (precision_lift, smoothness_score, etc.) BUT remove `eval_v2_score` from output to prevent cross_validator key_metric hijack
    - Add new fields: `forgetting_score`, `non_target_mean_storage`
+   - Note: `retrieval_score` (pillar score) and `retrieval_std/iqr/gini` (spread metrics) are distinct dict keys — no collision
 
 ### program.md
 
-- Update overall_score, retrieval_score, plausibility_score descriptions
+- Replace the multiplicative overall_score formula (`retrieval_score * (0.85 + 0.15 * plausibility_score)`) with the new additive 3-pillar formula
+- Update retrieval_score definition (remove precision_lift, new weights)
+- Update plausibility_score definition (corr_score only, remove smoothness)
 - Add forgetting_score description
 - Note that old experiment scores are not comparable to new ones
 
 ### cross_validator.py
 
 - Add `"forgetting_score"` to METRICS list
-- No other changes needed (already calls score_summary with test_queries)
+- The `key_metric` selection (line 91) will correctly fall through to `"overall_score"` once `eval_v2_score` is removed from score_summary output
 
 ### No changes to
 
