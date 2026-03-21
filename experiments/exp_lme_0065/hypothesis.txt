@@ -1,0 +1,4 @@
+Hypothesis: sigmoid_k=40 (from 30) creates a sharper sigmoid floor transition.
+Items below sigmoid_mid=0.30 get essentially zero floor protection,
+while items above get near-maximum floor. This makes the decay more
+binary and selective — only truly high-importance items get floor protection.

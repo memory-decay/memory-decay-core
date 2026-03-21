@@ -1,0 +1,5 @@
+Hypothesis: stability_weight=0.5 (vs 1.0) makes impact the dominant factor in importance.
+With rho=0.5, stability contributes half as much as impact to the importance score.
+This means reinforced but low-impact memories get lower importance floors and decay faster,
+while high-impact memories still get strong floor protection from their impact score.
+Expected: improved selectivity, fewer false positives at retrieval time.

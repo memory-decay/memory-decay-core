@@ -1,0 +1,5 @@
+Hypothesis: sigmoid_mid=0.28 (from 0.30) lowers the sigmoid floor for moderate-importance items,
+allowing faster decay for items with impact=0.2-0.4. This should improve recall precision by making
+the system more selective — only high-importance items stay retrievable.
+
+Impact=0 items bypass the floor entirely (pure exponential), so this change doesn't affect them.

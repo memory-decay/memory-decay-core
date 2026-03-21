@@ -1,0 +1,5 @@
+Hypothesis: floor_max=0.40 (vs 0.45) sharpens the decay floor for all non-zero-impact items.
+The sigmoid floor at importance=1.0 goes from 0.45 to 0.40, meaning even highly stable/reinforced
+items decay to a lower floor. This improves selectivity: fewer false positives at retrieval time.
+
+Zero-impact items bypass the floor entirely (pure exponential), so strict validation still passes.

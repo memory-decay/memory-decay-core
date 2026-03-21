@@ -1,0 +1,10 @@
+Zero-impact memories must decay below 0.30 at tick 200 to pass strict validation.
+The current Jost's Law decay still keeps impact=0 items at ~0.42 because the sigmoid floor
+for zero importance is small but combined with the high activation start (0.5), the excess decay
+per tick is too slow (effective_lambda / retention = 0.009/1.0 = 0.009).
+
+Fix: bypass the sigmoid floor entirely for impact=0, use pure exponential with
+effective_lambda * 3.0 ≈ 0.027 for facts. This gives 0.5 * exp(-5.4) ≈ 0.0045 by tick 200,
+well below the 0.30 threshold.
+
+This preserves the Jost+sigmoid floor behavior for all items with impact > 0.

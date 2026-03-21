@@ -1,0 +1,12 @@
+Hypothesis: Higher reinforcement gains and stronger activation weighting will improve recall.
+
+exp_lme_0059 had weak activation-recall correlation (0.27) and recall dropped sharply at tick 120.
+This suggests recalled memories don't stay active enough between evaluations.
+
+Changes from exp_lme_0059:
+- reinforcement_gain_direct: 0.40 -> 0.55 (recalled memories harden more)
+- reinforcement_gain_assoc: 0.30 -> 0.45 (associated memories also benefit more)
+- stability_cap: 2.0 -> 1.5 (faster stability turnover, less accumulated stagnation)
+- activation_weight: 0.3 -> 0.5 (activation has stronger influence on similarity ranking)
+
+Expected: better retention of recalled memories, improved recall at later ticks.

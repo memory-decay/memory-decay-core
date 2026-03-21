@@ -1,0 +1,8 @@
+Hypothesis: jost_power=5.0 (vs 4.0) + floor_max=0.40 (vs 0.45) will sharpen the
+selectivity of the decay function. Higher jost_power makes decay more nonlinear:
+items near the floor decay very slowly (good for high-stability memories) while
+items well above the floor decay faster. Lower floor_max further reduces the floor
+for moderate-importance items.
+
+Zero-impact items bypass the floor entirely and use pure exponential (lambda*3.0),
+so they easily pass strict validation.
