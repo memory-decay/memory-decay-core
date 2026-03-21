@@ -1,0 +1,8 @@
+Lower reinforcement gains (direct=0.25, assoc=0.15) to improve activation-recall correlation.
+
+exp_lme_0068 identified activation-recall correlation (0.27) as the bottleneck on cache_gemini2_batch.
+Lower gains make the simulation less sticky: only strongly recalled memories receive enough
+reinforcement to stay active, while weakly recalled ones decay rapidly. This should sharpen
+the activation signal and improve correlation, which drives plausibility_score.
+
+If correlation improves from ~0.27 toward 0.35+, overall_score should improve meaningfully.
