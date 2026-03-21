@@ -481,6 +481,29 @@ def build_metric_progression(
                 annotation_borderwidth=1,
             )
 
+        # Add dual-state hybrid policy optimization marker (exp_lme_0198)
+        dual_state_idx = None
+        for i, exp in enumerate(sorted_exps):
+            if exp.id == "exp_lme_0198":
+                dual_state_idx = i
+                break
+
+        if dual_state_idx is not None and dual_state_idx > 0:
+            # Place between previous experiment and exp_lme_0198
+            boundary_x = dual_state_idx - 0.5
+            fig.add_vline(
+                x=boundary_x,
+                line_dash="dash",
+                line_color="#7B1FA2",  # Purple to differentiate from Phase 4/5 red
+                line_width=2,
+                annotation_text="⚠ Dual-state hybrid policy<br>(exp_lme_0198)",
+                annotation_position="top",
+                annotation_font={"size": 10, "color": "#7B1FA2"},
+                annotation_bgcolor="white",
+                annotation_bordercolor="#7B1FA2",
+                annotation_borderwidth=1,
+            )
+
         fig.update_layout(
             title=metric_name,
             yaxis_title="Score",
