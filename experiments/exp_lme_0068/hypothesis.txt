@@ -1,0 +1,4 @@
+Hypothesis: sigmoid_mid=0.32 (from 0.30) shifts the sigmoid floor rightward.
+For impact=0 items: importance=0, sigmoid is very small (~0.002), floor ~0.001 — still passes strict validator.
+For impact=0.3 items: importance=0.30, z=30*(0.30-0.32)=-0.60, sigmoid=0.13, floor=0.059 — much lower than 0.112.
+Lower floor means faster effective decay for moderate-impact items, improving recall precision.
