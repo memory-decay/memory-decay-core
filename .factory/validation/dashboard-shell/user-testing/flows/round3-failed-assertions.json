@@ -1,0 +1,205 @@
+{
+  "groupId": "round3-failed-assertions",
+  "testedAt": "2026-03-21T12:00:00Z",
+  "isolation": {
+    "dashboardUrl": "http://localhost:8050",
+    "browserSession": "eb9bb3066028__fv1",
+    "missionDir": "/home/roach/.factory/missions/ab06734e-fa45-49b3-9115-00c7fc9bfd7a"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-TABLE-005",
+      "title": "Column Sorting — Ascending/Descending",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Load dashboard at http://localhost:8050 and inspect sort indicators",
+          "expected": "Visual sort indicator visible on overall_score column showing descending sort (default)",
+          "observed": "All ag-sort-indicator-icon elements have 'ag-hidden' class. aria-sort='none' on overall_score header. Data IS correctly sorted descending (0.6758, 0.6744, 0.6681...) but NO visual indicator shown."
+        },
+        {
+          "action": "Click overall_score column header (label) - first click",
+          "expected": "Sort indicator appears showing ascending sort",
+          "observed": "Sort indicator DOES appear after click. aria-sort='ascending', ascHidden=false. Data sorted ascending with N/A values at top."
+        },
+        {
+          "action": "Click overall_score column header - second click",
+          "expected": "Sort indicator shows descending sort",
+          "observed": "Sort indicator shows descending correctly. aria-sort='descending', descHidden=false. Data sorted descending (0.6758, 0.6744...)."
+        },
+        {
+          "action": "Click overall_score column header - third click",
+          "expected": "Sort toggles back to ascending (2-state toggle)",
+          "observed": "Sort goes to 'none' (3-state cycling: asc→desc→none). All indicators hidden again. Data remains in last order. This is AG Grid default behavior but assertion requires 2-state toggle."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/round3-failed-assertions/VAL-TABLE-005-sort-asc.png",
+          "dashboard-shell/round3-failed-assertions/VAL-TABLE-005-sort-desc.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": "Two issues persist: (1) No visual sort indicator on initial load — all sort indicator icons have 'ag-hidden' class even though data is correctly sorted descending by overall_score. (2) Sort cycling is 3-state (asc→desc→none) instead of 2-state (asc↔desc) as required by the assertion. The initial indicator issue likely requires setting defaultColDef.sort or initial sort model with proper indicator rendering. The 3-state cycling requires configuring sortingOrder=['asc','desc'] in grid options."
+    },
+    {
+      "id": "VAL-TABLE-007",
+      "title": "Status Display — Distinct Visual Indicators",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Inspect status column cells in DOM on initial load",
+          "expected": "All status values render with unique visual treatment (colors, badges, backgrounds)",
+          "observed": "Status cells are plain text with NO styling. bgColor='rgba(0, 0, 0, 0)' (transparent), textColor='rgb(24, 29, 31)' (default black), fontWeight='400' (normal). Only class is 'ag-cell ag-cell-not-inline-editing ag-cell-normal-height'. Inner HTML is bare <span class='ag-cell-value'>completed</span> with no additional elements."
+        },
+        {
+          "action": "Check multiple status values (completed, not_improved, improved, accepted_cv)",
+          "expected": "Each status has unique colors/styling",
+          "observed": "All four status values checked have identical styling: transparent background, default black text, normal weight. No differentiation whatsoever."
+        },
+        {
+          "action": "Verify hypothesis column has working cellStyle for comparison",
+          "expected": "Hypothesis column has gray italic text (plain object cellStyle)",
+          "observed": "Hypothesis column has textColor='rgb(108, 117, 125)' (gray) confirming plain object cellStyle works. This confirms the issue is specifically with function-based cellStyle callbacks in dash-ag-grid 33.3.3."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/round3-failed-assertions/VAL-TABLE-007-status-display.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": "Status column uses function-based cellStyle (cellStyle.function) which does NOT execute in dash-ag-grid 33.3.3. The code in app.py line 227-247 defines a JavaScript function returning color/borderRadius/padding styles per status value, but the function is never called. All status cells render as plain unstyled text. Comparison: hypothesis column (line 254) uses plain object cellStyle {color: '#6c757d', fontSize: '12px'} which works correctly."
+    },
+    {
+      "id": "VAL-TABLE-008",
+      "title": "Status Color Coding Consistent",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Open sidebar status filter dropdown",
+          "expected": "Filter has colored indicator squares for each status",
+          "observed": "Sidebar filter DOES have colored 10x10px span indicators: green (#d4edda) for completed/improved, gray (#e2e3e5) for no_results/rejected_cv/recorded, red (#f8d7da) for validation_failed/rejected, yellow (#fff3cd) for not_improved, blue (#cce5ff) for baseline, cyan (#d1ecf1) for accepted_cv."
+        },
+        {
+          "action": "Compare filter colors with table status cell colors",
+          "expected": "Table cells should have matching colors",
+          "observed": "Table status cells have NO colors at all — transparent background, default black text. Cannot verify consistency because table cells have zero styling."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/round3-failed-assertions/VAL-TABLE-008-status-filter-open.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": "Same root cause as VAL-TABLE-007. Sidebar filter has colored indicator squares (defined in the dash-dropdown component configuration), but table cells have no styling because the function-based cellStyle in dash-ag-grid column definition doesn't execute. Colors defined in the cellStyle function match the filter colors, but the function never runs."
+    },
+    {
+      "id": "VAL-TABLE-010",
+      "title": "Detail View Back Navigation",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Click first experiment row to open detail view",
+          "expected": "Detail view opens with experiment data",
+          "observed": "Detail view opens correctly showing exp_lme_0102 with Key Metrics, Hypothesis, Parameters, Snapshot Timeline sections. URL updates to http://localhost:8050/?experiment=exp_lme_0102."
+        },
+        {
+          "action": "Use browser back button",
+          "expected": "Detail overlay closes, return to leaderboard",
+          "observed": "URL changes back to http://localhost:8050/ (no query params) but detail overlay REMAINS OPEN. Page still shows 'exp_lme_0102' heading, Key Metrics, Hypothesis sections, and '← Back to Leaderboard' button."
+        },
+        {
+          "action": "Use in-app '← Back to Leaderboard' button",
+          "expected": "Detail overlay closes, return to leaderboard",
+          "observed": "Works correctly. Detail view closes, only '📊 Memory Decay' and 'Experiment Leaderboard' headings visible."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/round3-failed-assertions/VAL-TABLE-010-detail-view-open.png",
+          "dashboard-shell/round3-failed-assertions/VAL-TABLE-010-after-browser-back.png",
+          "dashboard-shell/round3-failed-assertions/VAL-TABLE-010-overlay-still-open.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": "Browser back button changes URL but does NOT close the detail overlay. The dcc.Location href change triggers URL update but the callback that handles closing the detail view doesn't fire on browser back. The in-app back button works correctly. Root cause: the URL-based navigation (browser back) triggers a location change that strips the experiment query param but doesn't trigger the close-detail callback."
+    },
+    {
+      "id": "VAL-TABLE-019",
+      "title": "Best Experiment Highlighted",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Search for exp_lme_0008 in the leaderboard",
+          "expected": "exp_lme_0008 row is visually distinguished (highlighted)",
+          "observed": "exp_lme_0008 row has standard AG Grid classes only: 'ag-row-no-focus ag-row ag-row-level-0 ag-row-position-absolute ag-row-not-inline-editing ag-row-even ag-row-first'. No 'best-experiment' class applied. Background color is white (rgb(255, 255, 255)), identical to other rows."
+        },
+        {
+          "action": "Compare exp_lme_0008 row styling with neighboring row (exp_lme_0016)",
+          "expected": "exp_lme_0008 should have different styling (highlight color, border, etc.)",
+          "observed": "Both rows have identical styling: white background, same border colors. No visual distinction."
+        },
+        {
+          "action": "Check sidebar for 'Best' text",
+          "expected": "Sidebar shows best experiment indicator",
+          "observed": "Sidebar shows 'Best: exp_lme_0008' text in the era subtitle. This text indicator works but the table row highlight does not."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/round3-failed-assertions/VAL-TABLE-019-exp0008-search.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": "rowClassRules function callback not executing in dash-ag-grid 33.3.3. The code in app.py defines: _GRID_ROW_CLASS_RULES = {'best-experiment': {'function': \"return params.data.id === 'exp_lme_0008';\"}}. This is the same pattern as the cellStyle function issue — function-based callbacks don't execute. The row never gets the 'best-experiment' CSS class. Same root cause as VAL-TABLE-007/008."
+    },
+    {
+      "id": "VAL-TABLE-021",
+      "title": "URL State Management",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Change era dropdown from 'All' to 'LongMemEval'",
+          "expected": "URL updates to reflect era change (e.g., ?era=LongMemEval)",
+          "observed": "URL remains http://localhost:8050/ with no query parameters. Era change does not update URL."
+        },
+        {
+          "action": "Click experiment row to open detail view",
+          "expected": "URL updates with experiment parameter",
+          "observed": "URL updates correctly to http://localhost:8050/?experiment=exp_lme_0102. This part works."
+        },
+        {
+          "action": "Navigate directly to http://localhost:8050/?era=LongMemEval&experiment=exp_lme_0008",
+          "expected": "Dashboard restores era=LongMemEval and opens exp_lme_0008 detail view",
+          "observed": "dcc.Location strips query params immediately on load. URL changes from '?era=LongMemEval&experiment=exp_lme_0008' to just '/' with no query params. State is not restored because params are gone before restore_from_url callback can read them."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "dashboard-shell/round3-failed-assertions/VAL-TABLE-021-url-params-stripped.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": "Three sub-issues: (a) Era changes don't update URL because update_url_state callback has era as State (not Input), so it only fires on experiment selection change, not era change. (b) dcc.Location strips query params on initial page load, preventing restore_from_url from reading them. (c) The update_url_state callback (app.py line 1013) has Input('selected-experiment') + State('era-dropdown') — era needs to be an Input to trigger URL updates when era changes. Additionally, dcc.Location needs _refresh=False or similar configuration to preserve query params across page loads."
+    }
+  ],
+  "frictions": [
+    {
+      "description": "AG Grid sort click target requires clicking the specific header label element (.ag-header-cell-label), not the header cell container. Clicking the container div doesn't trigger sort.",
+      "resolved": true,
+      "resolution": "Used JavaScript to click the .ag-header-cell-label element inside the column header",
+      "affectedAssertions": ["VAL-TABLE-005"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 6 assertions: 0 passed, 6 failed. All failures are the same as rounds 1 and 2 — no fixes have been applied. Root causes: (1) VAL-TABLE-005: No sort indicator on initial load + 3-state sort cycling instead of 2-state. (2) VAL-TABLE-007/008: Function-based cellStyle callbacks don't execute in dash-ag-grid 33.3.3, leaving status cells as plain unstyled text. (3) VAL-TABLE-010: Browser back button changes URL but doesn't close detail overlay. (4) VAL-TABLE-019: rowClassRules function callback doesn't execute, so best experiment row gets no highlight class. (5) VAL-TABLE-021: Era not in URL state + dcc.Location strips query params on load. The common theme is that dash-ag-grid 33.3.3 does not support function-based callbacks (cellStyle functions, rowClassRules functions), and the URL state management has multiple gaps."
+}

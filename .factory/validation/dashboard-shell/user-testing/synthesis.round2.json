@@ -1,0 +1,64 @@
+{
+  "milestone": "dashboard-shell",
+  "round": 2,
+  "status": "fail",
+  "assertionsSummary": {
+    "total": 21,
+    "passed": 15,
+    "failed": 6,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-TABLE-001",
+    "VAL-TABLE-002",
+    "VAL-TABLE-003",
+    "VAL-TABLE-004",
+    "VAL-TABLE-006",
+    "VAL-TABLE-009",
+    "VAL-TABLE-011",
+    "VAL-TABLE-012",
+    "VAL-TABLE-013",
+    "VAL-TABLE-014",
+    "VAL-TABLE-015",
+    "VAL-TABLE-016",
+    "VAL-TABLE-017",
+    "VAL-TABLE-018",
+    "VAL-TABLE-020"
+  ],
+  "failedAssertions": [
+    {
+      "id": "VAL-TABLE-005",
+      "reason": "No visual sort indicator on initial load — data pre-sorted descending but all ag-sort-indicator-icon elements have 'ag-hidden' class with display:none. No initialSortModel prop set. Sort cycling is 3-state (desc→none→asc) instead of expected 2-state asc/desc toggle. Sorting data ordering works correctly."
+    },
+    {
+      "id": "VAL-TABLE-007",
+      "reason": "AG Grid cellStyle function-based callback ({\"function\": \"...\"} format) not executing in dash-ag-grid 33.3.3. Status badges render as plain <span class='ag-cell-value'> text with no styling — no badges, no background colors, no CSS classes. Sidebar status legend (HTML-based) renders colors correctly."
+    },
+    {
+      "id": "VAL-TABLE-008",
+      "reason": "Same root cause as VAL-TABLE-007: cellStyle function not applying colors to table cells. No color consistency to verify since table cells have no styling at all. Sidebar has colored indicator squares but table cells are plain text."
+    },
+    {
+      "id": "VAL-TABLE-010",
+      "reason": "Browser back button navigates URL but does not close detail overlay. history.back() reverts URL from /?experiment=exp_lme_0098 to / but detail overlay remains visible. Same-page overlay (dcc.Store toggle) is not connected to browser history. In-app '← Back to Leaderboard' button works correctly."
+    },
+    {
+      "id": "VAL-TABLE-019",
+      "reason": "Best experiment (exp_lme_0008) row not visually distinguished. The .best-experiment CSS class from rowClassRules is not applied to DOM. Row has only standard AG Grid classes (ag-row-even, ag-row-no-focus, etc.). rowClassRules function callback not executing in dash-ag-grid 33.3.3."
+    },
+    {
+      "id": "VAL-TABLE-021",
+      "reason": "URL state management broken in three ways: (1) Era changes do not update URL — update_url_state callback only has selected-experiment as Input. (2) dcc.Location(refresh=False) strips query params on page load. (3) Combined era+experiment URL state is incomplete. restore_from_url callback works for direct URL navigation but params are immediately stripped."
+    }
+  ],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": ".factory/validation/dashboard-shell/user-testing/synthesis.round1.json",
+  "rootCauseAnalysis": {
+    "dashAgGridIntegration": "Three failures (VAL-TABLE-007, VAL-TABLE-008, VAL-TABLE-019) share a common root cause: dash-ag-grid 33.3.3 does not properly support AG Grid function-based configurations (cellStyle functions, rowClassRules). Only plain object configurations work. Fix: convert function-based configs to value-based configs computed in Python before passing to the component.",
+    "urlStateManagement": "Three failures (VAL-TABLE-005 partial, VAL-TABLE-010, VAL-TABLE-021) share a related root cause: URL state management is incomplete. dcc.Location does not maintain URL query params. Fix: add initialSortModel prop for sort indicator, use clientside callback with history.pushState for detail overlay, add era dropdown as Input to update_url_state callback."
+  },
+  "flowReports": [
+    "round2-failed-assertions.json"
+  ]
+}
