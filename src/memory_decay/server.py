@@ -64,6 +64,7 @@ class StoreRequest(BaseModel):
     category: str = "other"
     mtype: str = "fact"
     associations: list[str] | None = None
+    created_tick: int | None = None
 
 
 class SearchRequest(BaseModel):
@@ -198,7 +199,7 @@ def create_app(
             mtype=req.mtype,
             content=req.text,
             impact=req.importance,
-            created_tick=_state.current_tick,
+            created_tick=req.created_tick if req.created_tick is not None else _state.current_tick,
             associations=associations,
         )
         _state.maybe_auto_save()
@@ -283,6 +284,19 @@ def create_app(
         _state.maybe_auto_save()
 
         return {"deleted": memory_id}
+
+    @app.post("/reset")
+    def reset():
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+
+        cleared = _state.graph.clear()
+        _state.engine.reset()
+        _state.current_tick = 0
+        _state._memory_counter = 0
+        _state.last_tick_time = time.time()
+
+        return {"status": "ok", "cleared": cleared}
 
     return app
 

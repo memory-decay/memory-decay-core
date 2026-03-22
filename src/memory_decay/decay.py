@@ -121,6 +121,18 @@ class DecayEngine:
     def set_params(self, new_params: dict) -> None:
         self._params.update(new_params)
 
+    def reset(self) -> None:
+        """Reset tick counter and cached arrays to initial state."""
+        self.current_tick = 0
+        self._tick_arrays_built = False
+        self._tick_nids = []
+        self._tick_retrieval = None
+        self._tick_storage = None
+        self._tick_stability = None
+        self._tick_impact = None
+        self._tick_created = None
+        self._tick_is_fact = None
+
     def _compute_decay(
         self,
         initial_activation: float,

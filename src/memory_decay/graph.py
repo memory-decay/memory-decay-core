@@ -43,6 +43,30 @@ class MemoryGraph:
         self._bm25_doc_tokens: dict[str, list[str]] | None = None
         self._bm25_avgdl: float = 0.0
 
+    def clear(self) -> int:
+        """Clear all nodes/edges and caches, preserving the embedding cache.
+
+        Returns the number of nodes that were removed.
+        """
+        count = self._graph.number_of_nodes()
+        self._graph.clear()
+        # Reset precomputed similarity matrix
+        self._emb_matrix = None
+        self._emb_nids = []
+        self._emb_nid_to_idx = {}
+        self._emb_created_ticks = None
+        self._emb_retrieval_scores = None
+        self._emb_node_count = 0
+        # Reset BM25 index
+        self._bm25_idf = None
+        self._bm25_doc_tokens = None
+        self._bm25_avgdl = 0.0
+        # Reset query stats
+        self._query_similarity_total_time = 0.0
+        self._query_similarity_call_count = 0
+        # NOTE: _embedding_cache is intentionally preserved
+        return count
+
     def _get_embedder(self) -> Callable:
         """Get the embedding function based on backend."""
         if self._custom_embedder is not None:
