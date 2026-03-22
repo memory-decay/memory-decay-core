@@ -370,7 +370,7 @@ def build_metric_progression(
 
         # Build segments (groups of contiguous IDs within same era)
         segments: list[list[tuple[float, float, str]]] = []
-        current_segment: list[tuple[float, float, str]] = []
+        current_segment: list[list[tuple[float, float, str]]] = []
 
         for i, exp in enumerate(sorted_exps):
             val = getattr(exp, metric_key, None)
@@ -1655,159 +1655,157 @@ def get_available_phases(
 
 
 # ---------------------------------------------------------------------------
-# Distribution Charts for Leaderboard
+# KPI Summary Panel Calculations
 # ---------------------------------------------------------------------------
 
-def build_score_distribution_histogram(
+def calculate_dashboard_kpis(
     experiments: list[Experiment],
     era: str = "All",
-    selected_phase: int | None = None,
-) -> go.Figure:
-    """Build histogram of overall_score distribution.
+    cv_data: dict[str, dict] | None = None,
+) -> dict[str, Any]:
+    """Calculate KPI metrics for the dashboard summary panel.
     
-    Shows distribution of scores with bins at 0.1 intervals.
-    Highlights the selected phase if applicable.
-    """
-    filtered = experiments
-    if era != "All":
-        filtered = [e for e in experiments if e.era == era]
-    if selected_phase is not None:
-        filtered = [e for e in filtered if e.phase == selected_phase]
-    
-    # Get scored experiments (exclude validation_failed)
-    scores = [e.overall_score for e in filtered 
-              if e.overall_score is not None and e.status != "validation_failed"]
-    
-    fig = go.Figure()
-    
-    if not scores:
-        fig.add_annotation(
-            text="No scored experiments to display",
-            xref="paper", yref="paper", x=0.5, y=0.5,
-            showarrow=False, font={"size": 12, "color": "#9E9E9E"},
-        )
-        fig.update_layout(template="plotly_white", height=200)
-        return fig
-    
-    # Create histogram
-    fig.add_trace(go.Histogram(
-        x=scores,
-        nbinsx=20,
-        marker_color="#1565C0",
-        marker_line_color="#0D47A1",
-        marker_line_width=1,
-        opacity=0.8,
-        hovertemplate="Score: %{x:.3f}<br>Count: %{y}<extra></extra>",
-    ))
-    
-    # Add mean line
-    mean_score = sum(scores) / len(scores)
-    fig.add_vline(
-        x=mean_score,
-        line_dash="dash",
-        line_color="#E65100",
-        line_width=2,
-        annotation_text=f"Mean: {mean_score:.4f}",
-        annotation_position="top",
-        annotation_font={"size": 10, "color": "#E65100"},
-    )
-    
-    # Add best score annotation
-    best_score = max(scores)
-    fig.add_vline(
-        x=best_score,
-        line_dash="dot",
-        line_color="#2E7D32",
-        line_width=2,
-        annotation_text=f"Best: {best_score:.4f}",
-        annotation_position="top",
-        annotation_font={"size": 10, "color": "#2E7D32"},
-    )
-    
-    fig.update_layout(
-        title="Overall Score Distribution",
-        xaxis_title="Overall Score",
-        yaxis_title="Count",
-        template="plotly_white",
-        height=250,
-        margin={"l": 50, "r": 20, "t": 40, "b": 40},
-        showlegend=False,
-        xaxis={"range": [0, 1]},
-    )
-    
-    return fig
-
-
-def build_phase_statistics_chart(
-    experiments: list[Experiment],
-    era: str = "All",
-) -> go.Figure:
-    """Build bar chart showing average overall_score by phase.
-    
-    Includes experiment count per phase as text labels.
+    Returns:
+        Dict with total_experiments, best_overall_score, avg_overall_score,
+        success_rate, phase_distribution, recent_trend, and era_breakdown.
     """
     filtered = experiments
     if era != "All":
         filtered = [e for e in experiments if e.era == era]
     
-    # Calculate stats per phase
-    phase_stats: dict[int, dict[str, Any]] = {}
+    total = len(filtered)
+    if total == 0:
+        return {
+            "total_experiments": 0,
+            "best_overall_score": None,
+            "best_experiment_id": None,
+            "avg_overall_score": None,
+            "success_rate": 0.0,
+            "phase_distribution": {},
+            "recent_trend": None,
+            "completed_count": 0,
+            "validation_failed_count": 0,
+        }
+    
+    # Best score (prefer CV mean, fallback to overall_score)
+    best_score = -1.0
+    best_id = None
+    if cv_data:
+        for exp_id, cv in cv_data.items():
+            exp = next((e for e in filtered if e.id == exp_id), None)
+            if exp is None:
+                continue
+            mean = cv.get("mean", {})
+            if isinstance(mean, dict):
+                score = mean.get("overall_score")
+            else:
+                score = mean
+            if score is not None and score > best_score:
+                best_score = score
+                best_id = exp_id
+    
+    # Fallback to overall_score
     for exp in filtered:
-        if exp.phase is None:
-            continue
-        if exp.phase not in phase_stats:
-            phase_stats[exp.phase] = {"scores": [], "count": 0}
-        phase_stats[exp.phase]["count"] += 1
-        if exp.overall_score is not None and exp.status != "validation_failed":
-            phase_stats[exp.phase]["scores"].append(exp.overall_score)
+        if exp.overall_score is not None and exp.overall_score > best_score:
+            best_score = exp.overall_score
+            best_id = exp.id
     
-    if not phase_stats:
+    # Average overall_score (excluding validation_failed and None)
+    scored = [e.overall_score for e in filtered 
+              if e.overall_score is not None and e.status != "validation_failed"]
+    avg_score = sum(scored) / len(scored) if scored else None
+    
+    # Success rate (completed / total)
+    completed = len([e for e in filtered if e.status == "completed"])
+    success_rate = (completed / total * 100) if total > 0 else 0.0
+    
+    # Phase distribution
+    phase_dist: dict[int, int] = {}
+    for exp in filtered:
+        if exp.phase is not None:
+            phase_dist[exp.phase] = phase_dist.get(exp.phase, 0) + 1
+    
+    # Recent trend: compare last 10 experiments vs previous 10
+    recent_trend = _calculate_recent_trend(filtered)
+    
+    # Validation failed count
+    vf_count = len([e for e in filtered if e.status == "validation_failed"])
+    
+    return {
+        "total_experiments": total,
+        "best_overall_score": best_score if best_id else None,
+        "best_experiment_id": best_id,
+        "avg_overall_score": avg_score,
+        "success_rate": success_rate,
+        "phase_distribution": phase_dist,
+        "recent_trend": recent_trend,
+        "completed_count": completed,
+        "validation_failed_count": vf_count,
+    }
+
+
+def _calculate_recent_trend(experiments: list[Experiment]) -> dict[str, Any] | None:
+    """Calculate trend from recent experiments vs previous batch.
+    
+    Compares average overall_score of last 10 experiments vs the 10 before that.
+    """
+    # Sort by ID (chronological within era)
+    sorted_exps = sorted(
+        [e for e in experiments if e.overall_score is not None and e.status != "validation_failed"],
+        key=lambda e: e.id
+    )
+    
+    if len(sorted_exps) < 20:
+        return None
+    
+    recent_10 = sorted_exps[-10:]
+    previous_10 = sorted_exps[-20:-10]
+    
+    recent_avg = sum(e.overall_score for e in recent_10) / len(recent_10)
+    previous_avg = sum(e.overall_score for e in previous_10) / len(previous_10)
+    
+    change = recent_avg - previous_avg
+    change_pct = (change / previous_avg * 100) if previous_avg != 0 else 0
+    
+    return {
+        "recent_avg": recent_avg,
+        "previous_avg": previous_avg,
+        "change": change,
+        "change_pct": change_pct,
+        "direction": "up" if change > 0.001 else "down" if change < -0.001 else "stable",
+    }
+
+
+def build_phase_distribution_chart(phase_dist: dict[int, int]) -> go.Figure:
+    """Build a small horizontal bar chart for phase distribution."""
+    if not phase_dist:
         fig = go.Figure()
-        fig.add_annotation(
-            text="No phase data available",
-            xref="paper", yref="paper", x=0.5, y=0.5,
-            showarrow=False, font={"size": 12, "color": "#9E9E9E"},
-        )
-        fig.update_layout(template="plotly_white", height=200)
+        fig.update_layout(template="plotly_white", height=80, margin=dict(l=0, r=0, t=0, b=0))
         return fig
     
-    # Prepare data
-    phases = sorted(phase_stats.keys())
-    avg_scores = []
-    counts = []
-    labels = []
-    colors = []
-    
-    for p in phases:
-        scores = phase_stats[p]["scores"]
-        avg = sum(scores) / len(scores) if scores else 0
-        count = phase_stats[p]["count"]
-        avg_scores.append(avg)
-        counts.append(count)
-        labels.append(f"P{p}: {PHASE_NAMES.get(p, 'Unknown')}")
-        colors.append(PHASE_COLORS.get(p, "#999"))
+    phases = sorted(phase_dist.keys())
+    counts = [phase_dist[p] for p in phases]
+    labels = [f"P{p}" for p in phases]
+    colors = [PHASE_COLORS.get(p, "#999") for p in phases]
     
     fig = go.Figure()
     fig.add_trace(go.Bar(
         y=labels,
-        x=avg_scores,
+        x=counts,
         orientation="h",
         marker_color=colors,
-        text=[f"{avg:.3f} (n={c})" for avg, c in zip(avg_scores, counts)],
+        text=counts,
         textposition="auto",
-        hovertemplate="%{y}<br>Avg: %{x:.4f}<br>Count: %{customdata}<extra></extra>",
-        customdata=counts,
+        hovertemplate="Phase %{y}: %{x} experiments<extra></extra>",
     ))
     
     fig.update_layout(
-        title="Average Score by Phase",
-        xaxis_title="Average Overall Score",
         template="plotly_white",
-        height=max(200, len(phases) * 35),
-        margin={"l": 180, "r": 20, "t": 40, "b": 40},
+        height=80 + len(phases) * 15,
+        margin=dict(l=30, r=10, t=10, b=20),
+        xaxis_title="Count",
         showlegend=False,
-        xaxis={"range": [0, 1]},
-        yaxis={"autorange": "reversed"},
+        yaxis=dict(autorange="reversed"),
     )
     
     return fig
