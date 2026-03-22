@@ -1,9 +1,10 @@
-"""Hebbian-Decay: distance-from-floor modulation added to effective_lambda.
+"""Linear excess decay with modest lambda softening and a tiny boost-floor nudge.
 
-Based on exp_lme_0292 decay function.
+Narrow follow-up to exp_lme_0118.
 """
 
 import math
+
 
 def compute_decay(activation, impact, stability, mtype, params):
     if activation <= 0:
@@ -41,10 +42,6 @@ def compute_decay(activation, impact, stability, mtype, params):
 
     retention = max(1.0 + alpha * impact + rho * stability, 1.0)
     effective_lambda = base_lambda / retention
-
-    distance_scale = params.get("distance_scale", 0.5)
-    distance_from_floor = max(activation - floor, 0.0)
-    effective_lambda *= (1.0 + distance_scale * (distance_from_floor / max(activation, 0.01)))
 
     excess = max(activation - floor, 0.0)
     jost_power = params.get("jost_power", 1.0)
