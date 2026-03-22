@@ -103,7 +103,15 @@ def build_cache(
         json.dump(rehearsal_targets, f, ensure_ascii=False, indent=2)
 
 
-def load_cache(cache_dir: str) -> tuple[Callable, list[dict], list[tuple[str, str]], list[str]]:
+def load_cache(
+    cache_dir: str,
+    fallback_embedder: Optional[Callable] = None,
+) -> tuple[Callable, list[dict], list[tuple[str, str]], list[str]]:
+    """Load embedding cache with optional fallback to live encoding.
+
+    If fallback_embedder is provided, texts not in the cache will be
+    encoded live and cached for subsequent calls.
+    """
     cache_path = Path(cache_dir)
 
     with open(cache_path / "embeddings.pkl", "rb") as f:
@@ -120,6 +128,10 @@ def load_cache(cache_dir: str) -> tuple[Callable, list[dict], list[tuple[str, st
 
     def cached_embedder(text: str) -> np.ndarray:
         if text not in embeddings:
+            if fallback_embedder is not None:
+                emb = np.array(fallback_embedder(text), dtype=np.float32)
+                embeddings[text] = emb
+                return emb.copy()
             raise KeyError(f"Text not in embedding cache: {text[:80]}...")
         return embeddings[text].copy()
 
@@ -132,8 +144,14 @@ def load_raw_dataset(path: Path) -> list[dict]:
         return json.load(f)
 
 
-def load_cached_embedder(cache_dir: str) -> Callable:
-    """Load only the cached embedder function from the cache directory.
+def load_cached_embedder(
+    cache_dir: str,
+    fallback_embedder: Optional[Callable] = None,
+) -> Callable:
+    """Load the cached embedder function from the cache directory.
+
+    If fallback_embedder is provided, texts not in the cache will be
+    encoded live and cached for subsequent calls.
 
     Note: Uses pickle for numpy array deserialization. The cache is always
     self-generated from the local dataset — never loaded from untrusted sources.
@@ -145,6 +163,10 @@ def load_cached_embedder(cache_dir: str) -> Callable:
 
     def cached_embedder(text: str) -> np.ndarray:
         if text not in embeddings:
+            if fallback_embedder is not None:
+                emb = np.array(fallback_embedder(text), dtype=np.float32)
+                embeddings[text] = emb
+                return emb.copy()
             raise KeyError(f"Text not in embedding cache: {text[:80]}...")
         return embeddings[text].copy()
 

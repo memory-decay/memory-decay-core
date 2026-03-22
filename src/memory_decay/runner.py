@@ -18,6 +18,19 @@ from .decay import DecayEngine
 from .evaluator import Evaluator
 
 
+# Lazy-loaded fallback embedder for texts not in cache
+_fallback_model = None
+
+
+def _get_fallback_embedder():
+    """Get the fallback embedder (lazy-loaded SentenceTransformer)."""
+    global _fallback_model
+    if _fallback_model is None:
+        from sentence_transformers import SentenceTransformer
+        _fallback_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+    return _fallback_model.encode
+
+
 def validate_decay_fn(fn_path: str, params: dict) -> tuple[bool, Optional[str]]:
     """Validate a decay function file before running a full experiment."""
     path = Path(fn_path)
@@ -148,14 +161,18 @@ def run_experiment(
             json.dump(result, f, indent=2)
         return result
 
-    cached_embedder, dataset, test_queries, rehearsal_targets = load_cache(cache_dir)
+    cached_embedder, dataset, test_queries, rehearsal_targets = load_cache(cache_dir, fallback_embedder=_get_fallback_embedder())
     graph = build_graph_from_dataset(dataset, embedder=cached_embedder)
     decay_fn = _load_decay_fn(fn_path)
     engine = DecayEngine(graph, custom_decay_fn=decay_fn, params=params)
     activation_weight = params.get("activation_weight", 0.5)
     assoc_boost = params.get("assoc_boost", 0.0)
     bm25_weight = params.get("bm25_weight", 0.0)
-    evaluator = Evaluator(graph, engine, activation_weight=activation_weight, assoc_boost=assoc_boost, bm25_weight=bm25_weight)
+    bm25_candidates = params.get("bm25_candidates", 20)
+    cross_encoder_weight = params.get("cross_encoder_weight", 0.0)
+    mmr_lambda = params.get("mmr_lambda", 0.0)
+    mmr_candidates = params.get("mmr_candidates", 15)
+    evaluator = Evaluator(graph, engine, activation_weight=activation_weight, assoc_boost=assoc_boost, bm25_weight=bm25_weight, bm25_candidates=bm25_candidates, cross_encoder_weight=cross_encoder_weight, mmr_lambda=mmr_lambda, mmr_candidates=mmr_candidates)
 
     t_sim_start = time.perf_counter()
     snapshots = run_simulation(
@@ -165,6 +182,7 @@ def run_experiment(
         reactivation_policy=reactivation_policy,
         rehearsal_targets=rehearsal_targets,
         seed=seed,
+        fast_eval=True,
     )
     t_sim_end = time.perf_counter()
 
@@ -224,7 +242,7 @@ def run_experiment_with_split(
         return {"status": "validation_failed", "error": error, "overall_score": 0.0}
 
     # Load cached embedder (no dataset/split — we supply our own)
-    cached_embedder = load_cached_embedder(cache_dir)
+    cached_embedder = load_cached_embedder(cache_dir, fallback_embedder=_get_fallback_embedder())
 
     # Build graph from ALL items (train + test) — the graph must contain
     # every memory so that associations and similarity search work correctly.
@@ -244,11 +262,19 @@ def run_experiment_with_split(
     activation_weight = params.get("activation_weight", 0.5)
     assoc_boost = params.get("assoc_boost", 0.0)
     bm25_weight = params.get("bm25_weight", 0.0)
+    bm25_candidates = params.get("bm25_candidates", 20)
+    cross_encoder_weight = params.get("cross_encoder_weight", 0.0)
+    mmr_lambda = params.get("mmr_lambda", 0.0)
+    mmr_candidates = params.get("mmr_candidates", 15)
     evaluator = Evaluator(
         graph, engine,
         activation_weight=activation_weight,
         assoc_boost=assoc_boost,
         bm25_weight=bm25_weight,
+        bm25_candidates=bm25_candidates,
+        cross_encoder_weight=cross_encoder_weight,
+        mmr_lambda=mmr_lambda,
+        mmr_candidates=mmr_candidates,
     )
 
     run_simulation(
