@@ -436,6 +436,7 @@ app.layout = html.Div(
         dcc.Store(id="compare-phase-b", data=None),
         dcc.Store(id="detail-source-page", data="leaderboard"),
         dcc.Store(id="selected-pipeline-record", data=None),
+        dcc.Store(id="kpi-data", data=None),
 
         # Sidebar
         html.Div(
@@ -713,6 +714,115 @@ app.layout = html.Div(
                 html.Div(
                     id="leaderboard-view",
                     children=[
+                        # KPI Panel
+                        html.Div(
+                            id="kpi-panel",
+                            style={
+                                "padding": "16px 24px",
+                                "backgroundColor": "#f8f9fa",
+                                "borderBottom": "1px solid #dee2e6",
+                            },
+                            children=[
+                                html.Div(
+                                    style={"display": "grid", "gridTemplateColumns": "repeat(auto-fit, minmax(160px, 1fr))", "gap": "16px"},
+                                    children=[
+                                        # Total Experiments
+                                        html.Div(
+                                            id="kpi-total",
+                                            style={
+                                                "padding": "12px 16px",
+                                                "backgroundColor": "white",
+                                                "borderRadius": "8px",
+                                                "border": "1px solid #e9ecef",
+                                                "boxShadow": "0 1px 3px rgba(0,0,0,0.08)",
+                                            },
+                                            children=[
+                                                html.Div("Total Experiments", style={"fontSize": "11px", "color": "#6c757d", "textTransform": "uppercase", "letterSpacing": "0.5px"}),
+                                                html.Div(id="kpi-total-value", style={"fontSize": "24px", "fontWeight": "700", "color": "#212529", "marginTop": "4px"}, children=["—"]),
+                                            ],
+                                        ),
+                                        # Best Overall Score
+                                        html.Div(
+                                            id="kpi-best",
+                                            style={
+                                                "padding": "12px 16px",
+                                                "backgroundColor": "#fffde7",
+                                                "borderRadius": "8px",
+                                                "border": "1px solid #ffe082",
+                                                "boxShadow": "0 1px 3px rgba(0,0,0,0.08)",
+                                            },
+                                            children=[
+                                                html.Div("⭐ Best Score", style={"fontSize": "11px", "color": "#856404", "textTransform": "uppercase", "letterSpacing": "0.5px"}),
+                                                html.Div(id="kpi-best-value", style={"fontSize": "24px", "fontWeight": "700", "color": "#212529", "marginTop": "4px"}, children=["—"]),
+                                                html.Div(id="kpi-best-id", style={"fontSize": "11px", "color": "#6c757d", "marginTop": "2px"}, children=[""]),
+                                            ],
+                                        ),
+                                        # Average Score
+                                        html.Div(
+                                            id="kpi-avg",
+                                            style={
+                                                "padding": "12px 16px",
+                                                "backgroundColor": "white",
+                                                "borderRadius": "8px",
+                                                "border": "1px solid #e9ecef",
+                                                "boxShadow": "0 1px 3px rgba(0,0,0,0.08)",
+                                            },
+                                            children=[
+                                                html.Div("Average Score", style={"fontSize": "11px", "color": "#6c757d", "textTransform": "uppercase", "letterSpacing": "0.5px"}),
+                                                html.Div(id="kpi-avg-value", style={"fontSize": "24px", "fontWeight": "700", "color": "#212529", "marginTop": "4px"}, children=["—"]),
+                                            ],
+                                        ),
+                                        # Success Rate
+                                        html.Div(
+                                            id="kpi-success",
+                                            style={
+                                                "padding": "12px 16px",
+                                                "backgroundColor": "#e8f5e9",
+                                                "borderRadius": "8px",
+                                                "border": "1px solid #a5d6a7",
+                                                "boxShadow": "0 1px 3px rgba(0,0,0,0.08)",
+                                            },
+                                            children=[
+                                                html.Div("Success Rate", style={"fontSize": "11px", "color": "#2e7d32", "textTransform": "uppercase", "letterSpacing": "0.5px"}),
+                                                html.Div(id="kpi-success-value", style={"fontSize": "24px", "fontWeight": "700", "color": "#2e7d32", "marginTop": "4px"}, children=["—"]),
+                                            ],
+                                        ),
+                                        # Recent Trend
+                                        html.Div(
+                                            id="kpi-trend",
+                                            style={
+                                                "padding": "12px 16px",
+                                                "backgroundColor": "white",
+                                                "borderRadius": "8px",
+                                                "border": "1px solid #e9ecef",
+                                                "boxShadow": "0 1px 3px rgba(0,0,0,0.08)",
+                                            },
+                                            children=[
+                                                html.Div("Recent Trend", style={"fontSize": "11px", "color": "#6c757d", "textTransform": "uppercase", "letterSpacing": "0.5px"}),
+                                                html.Div(id="kpi-trend-value", style={"fontSize": "24px", "fontWeight": "700", "color": "#212529", "marginTop": "4px"}, children=["—"]),
+                                                html.Div(id="kpi-trend-label", style={"fontSize": "11px", "color": "#6c757d", "marginTop": "2px"}, children=["vs previous 10"]),
+                                            ],
+                                        ),
+                                        # Phase Distribution Mini Chart
+                                        html.Div(
+                                            id="kpi-phases",
+                                            style={
+                                                "padding": "8px",
+                                                "backgroundColor": "white",
+                                                "borderRadius": "8px",
+                                                "border": "1px solid #e9ecef",
+                                                "boxShadow": "0 1px 3px rgba(0,0,0,0.08)",
+                                                "minWidth": "200px",
+                                            },
+                                            children=[
+                                                html.Div("Phase Distribution", style={"fontSize": "11px", "color": "#6c757d", "textTransform": "uppercase", "letterSpacing": "0.5px", "padding": "4px 8px"}),
+                                                dcc.Graph(id="kpi-phase-chart", config={"displayModeBar": False}, style={"height": "100%"}),
+                                            ],
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        ),
                         html.Div(
                             style={
                                 "padding": "16px 24px 0 24px",
