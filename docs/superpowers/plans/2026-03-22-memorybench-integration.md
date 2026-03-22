@@ -612,3 +612,114 @@ bun run src/index.ts run \
 bun run src/index.ts status -r decay-0292-full
 bun run src/index.ts show-failures -r decay-0292-full
 ```
+
+---
+
+## How to Test
+
+### Prerequisites
+
+1. `GEMINI_API_KEY` — for English embedding (Gemini 3072d)
+2. `OPENAI_API_KEY` — for GPT-4o judge (answer generation + evaluation)
+3. Both repos cloned:
+   - `memory-decay` at `/home/roach/.openclaw/workspace/memory-decay`
+   - `memorybench` at `/home/roach/.openclaw/workspace/memorybench`
+
+### Quick Smoke Test (5 questions, ~20 min)
+
+```bash
+# Terminal 1: Start memory-decay server
+cd /home/roach/.openclaw/workspace/memory-decay
+python -m memory_decay.server --port 8100 --experiment-dir experiments/exp_lme_0292
+
+# Terminal 2: Run benchmark
+cd /home/roach/.openclaw/workspace/memorybench
+bun run src/index.ts run -p memory-decay -b longmemeval -j gpt-4o -r smoke-5 --limit 5
+
+# View results
+bun run src/index.ts status -r smoke-5
+bun run src/index.ts show-failures -r smoke-5
+```
+
+### Full Evaluation (500 questions)
+
+```bash
+bun run src/index.ts run -p memory-decay -b longmemeval -j gpt-4o -r decay-0292-full
+```
+
+Estimated time: ~28 hours (3.5 min/question × 500 for first run; subsequent runs faster due to embedding cache).
+
+### Multi-Provider Comparison
+
+```bash
+bun run src/index.ts compare -p memory-decay,rag,filesystem -b longmemeval -j gpt-4o -r compare-1
+```
+
+### Resuming Failed Runs
+
+MemoryBench checkpoints each phase. If a run fails, fix the issue and re-run with the same `-r` run ID — it resumes from the last successful checkpoint.
+
+### Smoke Test Results (2026-03-22)
+
+5-question smoke test with 0292 decay parameters:
+
+| Metric | Value |
+|--------|-------|
+| Hit@10 | 100% |
+| Recall | 100% |
+| Precision | 24% |
+| MRR | 0.725 |
+| NDCG | 0.756 |
+| QA Accuracy | 1/5 (20%) |
+
+Retrieval quality is strong. QA accuracy is limited by temporal-reasoning and multi-session question types.
+
+---
+
+## Improvement Ideas
+
+### 1. Answer Prompt Enhancement (highest impact)
+
+Current QA accuracy is 20% despite 100% retrieval recall. The answer prompt is too simple — it doesn't help the LLM reason about temporal ordering or multi-session synthesis.
+
+**Fix:** Add question-type-specific prompts in `prompts.ts`:
+- **temporal-reasoning**: "Pay attention to dates and chronological order in the memories."
+- **multi-session**: "Combine information from multiple memories to answer."
+- **knowledge-update**: "If memories conflict, prefer the most recent one."
+
+### 2. Search Performance (batch embedding)
+
+Each search call re-ingests all messages via sequential Gemini API calls (~3.5 min/question). For 500 questions: ~28 hours.
+
+**Fix options:**
+- **Batch embedding endpoint**: Add `/store_batch` to server.py that accepts multiple messages and embeds them in one Gemini API batch call.
+- **Local embedding model**: Use `all-MiniLM-L6-v2` (384d) instead of Gemini (3072d) for faster local inference. Trade-off: lower embedding quality.
+- **Pre-warm cache**: Run all 500 questions once to populate the server's embedding cache; subsequent runs reuse cached embeddings (~6s/question).
+
+### 3. Multi-Graph Server Support
+
+Currently the provider defers ingest to search time (reset → store → tick → search per question). This is because the server has a single graph and MemoryBench batches phases.
+
+**Fix:** Add containerTag-based multi-graph support to server.py:
+```python
+# Maintain per-container graph/engine
+_containers: dict[str, ServerState] = {}
+
+# New endpoints: /container/{tag}/store, /container/{tag}/search, etc.
+```
+
+This would allow proper phase separation and enable concurrent question processing.
+
+### 4. Decay Parameter Tuning for LongMemEval
+
+The 0292 parameters were tuned on our internal Korean dataset CV metric. LongMemEval's per-question isolation model may benefit from different parameters:
+- **Lower decay rates**: Per-question haystacks are small (~500 messages), so aggressive decay isn't needed.
+- **Higher activation_weight**: Emphasize temporal relevance more.
+- **Experiment**: Run a parameter sweep on a 50-question LongMemEval subset.
+
+### 5. Importance Scoring Refinement
+
+Current: user=0.7, assistant=0.4 (flat). Better approach:
+- Detect factual statements (names, numbers, preferences) → higher importance
+- Detect chitchat/filler → lower importance
+- Use LLM extraction (like the RAG provider does) to pre-filter memories
