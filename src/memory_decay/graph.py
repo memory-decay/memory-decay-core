@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import math
 import os
+import re
 import time
+from collections import Counter
 from typing import Optional, Callable
 
 import networkx as nx
@@ -35,6 +38,10 @@ class MemoryGraph:
         self._emb_created_ticks: np.ndarray | None = None
         self._emb_retrieval_scores: np.ndarray | None = None
         self._emb_node_count: int = 0  # tracks when matrix needs rebuild
+        # BM25 global IDF index (built alongside embedding matrix)
+        self._bm25_idf: dict[str, float] | None = None
+        self._bm25_doc_tokens: dict[str, list[str]] | None = None
+        self._bm25_avgdl: float = 0.0
 
     def _get_embedder(self) -> Callable:
         """Get the embedding function based on backend."""
@@ -162,6 +169,44 @@ class MemoryGraph:
                         target_id, memory_id, weight=weight, created_tick=created_tick
                     )
 
+    @staticmethod
+    def _bm25_tokenize(text: str) -> list[str]:
+        return re.findall(r"[0-9A-Za-z가-힣]+", text.lower())
+
+    def _bm25_score_candidates(
+        self,
+        query_text: str,
+        candidate_nids: list[str],
+        k1: float = 1.2,
+        b: float = 0.75,
+    ) -> dict[str, float]:
+        """Score candidates against query using BM25 with pre-computed global IDF."""
+        if self._bm25_idf is None or self._bm25_doc_tokens is None:
+            return {}
+
+        query_terms = list(dict.fromkeys(self._bm25_tokenize(query_text)))
+        if not query_terms:
+            return {}
+
+        avgdl = max(self._bm25_avgdl, 1.0)
+        scores: dict[str, float] = {}
+
+        for nid in candidate_nids:
+            tokens = self._bm25_doc_tokens.get(nid, [])
+            tf = Counter(tokens)
+            dl = max(len(tokens), 1)
+            score = 0.0
+            for term in query_terms:
+                freq = tf.get(term, 0)
+                if freq == 0:
+                    continue
+                idf = self._bm25_idf.get(term, 0.0)
+                denom = freq + k1 * (1.0 - b + b * dl / avgdl)
+                score += idf * (freq * (k1 + 1.0)) / max(denom, 1e-9)
+            scores[nid] = score
+
+        return scores
+
     def _ensure_embedding_matrix(self) -> None:
         """Build or rebuild the precomputed embedding matrix if needed."""
         current_count = self._graph.number_of_nodes()
@@ -198,12 +243,32 @@ class MemoryGraph:
                 )), 0.0)
                 for nid in nids
             ], dtype=np.float64)
+            # Build BM25 global IDF index
+            doc_freq: Counter[str] = Counter()
+            total_tokens = 0
+            bm25_doc_tokens: dict[str, list[str]] = {}
+            for nid in nids:
+                content = self._graph.nodes[nid].get("content", "")
+                tokens = self._bm25_tokenize(content)
+                bm25_doc_tokens[nid] = tokens
+                doc_freq.update(set(tokens))
+                total_tokens += len(tokens)
+
+            n_docs = len(nids)
+            self._bm25_avgdl = total_tokens / max(n_docs, 1)
+            self._bm25_idf = {}
+            for term, df in doc_freq.items():
+                self._bm25_idf[term] = math.log(1.0 + (n_docs - df + 0.5) / (df + 0.5))
+            self._bm25_doc_tokens = bm25_doc_tokens
         else:
             self._emb_matrix = None
             self._emb_nids = []
             self._emb_nid_to_idx = {}
             self._emb_created_ticks = None
             self._emb_retrieval_scores = None
+            self._bm25_idf = None
+            self._bm25_doc_tokens = None
+            self._bm25_avgdl = 0.0
 
         self._emb_node_count = current_count
 
@@ -211,6 +276,8 @@ class MemoryGraph:
         self, query_text: str, top_k: int = 5, current_tick: int | None = None,
         activation_weight: float = 0.0,
         assoc_boost: float = 0.0,
+        bm25_weight: float = 0.0,
+        bm25_candidates: int = 20,
     ) -> list[tuple[str, float]]:
         """Find memories matching query via embedding cosine similarity.
 
@@ -224,6 +291,12 @@ class MemoryGraph:
         memories whose neighbors are also active rank higher.
 
             score *= (1 + assoc_boost * mean_neighbor_activation)
+
+        When *bm25_weight* > 0, a two-stage retrieval is performed:
+        1. Fetch *bm25_candidates* results by cosine similarity
+        2. Re-rank using BM25 lexical matching with global IDF
+        3. Combined score = (1-bm25_weight)*cosine + bm25_weight*bm25
+        4. Return top *top_k* by combined score
         """
         t0 = time.perf_counter()
         self._ensure_embedding_matrix()
@@ -253,11 +326,12 @@ class MemoryGraph:
         if activation_weight > 0 and self._emb_retrieval_scores is not None:
             similarities = similarities * (self._emb_retrieval_scores ** activation_weight)
 
-        # Get top_k indices
-        if len(self._emb_nids) <= top_k:
+        # Get top candidates (fetch at least bm25_candidates when BM25 is active)
+        fetch_k = max(top_k, bm25_candidates) if bm25_weight > 0 else top_k
+        if len(self._emb_nids) <= fetch_k:
             top_indices = np.argsort(similarities)[::-1]
         else:
-            top_indices = np.argpartition(similarities, -top_k)[-top_k:]
+            top_indices = np.argpartition(similarities, -fetch_k)[-fetch_k:]
             top_indices = top_indices[np.argsort(similarities[top_indices])[::-1]]
 
         candidates = [
@@ -293,6 +367,27 @@ class MemoryGraph:
                         score *= (1.0 + assoc_boost * mean_neighbor_act)
                 boosted.append((nid, score))
             candidates = boosted
+
+        # BM25 re-ranking pass
+        if bm25_weight > 0 and len(candidates) > 0:
+            cand_nids = [nid for nid, _ in candidates]
+            bm25_scores = self._bm25_score_candidates(query_text, cand_nids)
+
+            if bm25_scores:
+                cos_scores = {nid: score for nid, score in candidates}
+                cos_vals = list(cos_scores.values())
+                cos_min, cos_max = min(cos_vals), max(cos_vals)
+                cos_range = cos_max - cos_min
+
+                bm25_max = max(bm25_scores.values())
+
+                combined = []
+                for nid in cand_nids:
+                    norm_cos = (cos_scores[nid] - cos_min) / max(cos_range, 1e-8)
+                    norm_bm25 = bm25_scores.get(nid, 0.0) / max(bm25_max, 1e-8)
+                    combined_score = (1.0 - bm25_weight) * norm_cos + bm25_weight * norm_bm25
+                    combined.append((nid, combined_score))
+                candidates = combined
 
         candidates.sort(key=lambda x: x[1], reverse=True)
         self._query_similarity_total_time += time.perf_counter() - t0

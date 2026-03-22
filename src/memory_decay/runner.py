@@ -154,7 +154,8 @@ def run_experiment(
     engine = DecayEngine(graph, custom_decay_fn=decay_fn, params=params)
     activation_weight = params.get("activation_weight", 0.5)
     assoc_boost = params.get("assoc_boost", 0.0)
-    evaluator = Evaluator(graph, engine, activation_weight=activation_weight, assoc_boost=assoc_boost)
+    bm25_weight = params.get("bm25_weight", 0.0)
+    evaluator = Evaluator(graph, engine, activation_weight=activation_weight, assoc_boost=assoc_boost, bm25_weight=bm25_weight)
 
     t_sim_start = time.perf_counter()
     snapshots = run_simulation(
@@ -242,10 +243,12 @@ def run_experiment_with_split(
     engine = DecayEngine(graph, custom_decay_fn=decay_fn, params=params)
     activation_weight = params.get("activation_weight", 0.5)
     assoc_boost = params.get("assoc_boost", 0.0)
+    bm25_weight = params.get("bm25_weight", 0.0)
     evaluator = Evaluator(
         graph, engine,
         activation_weight=activation_weight,
         assoc_boost=assoc_boost,
+        bm25_weight=bm25_weight,
     )
 
     run_simulation(

@@ -15,12 +15,13 @@ class Evaluator:
     Prevents single-metric gaming by using a composite score.
     """
 
-    def __init__(self, graph: MemoryGraph, engine: DecayEngine, activation_weight: float = 0.5, assoc_boost: float = 0.0):
+    def __init__(self, graph: MemoryGraph, engine: DecayEngine, activation_weight: float = 0.5, assoc_boost: float = 0.0, bm25_weight: float = 0.0):
         self._graph = graph
         self._engine = engine
         self._history: list[dict] = []
         self._activation_weight = activation_weight
         self._assoc_boost = assoc_boost
+        self._bm25_weight = bm25_weight
         self._query_result_cache: dict[tuple, list[tuple[str, float]]] = {}
 
     @staticmethod
@@ -49,6 +50,7 @@ class Evaluator:
             top_k,
             self._activation_weight,
             self._assoc_boost,
+            self._bm25_weight,
         )
         cached = self._query_result_cache.get(cache_key)
         if cached is not None:
@@ -60,6 +62,7 @@ class Evaluator:
             current_tick=current_tick,
             activation_weight=self._activation_weight,
             assoc_boost=self._assoc_boost,
+            bm25_weight=self._bm25_weight,
         )
         self._query_result_cache[cache_key] = list(results)
         return list(results)

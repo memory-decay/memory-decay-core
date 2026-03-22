@@ -1,0 +1,5 @@
+BM25 re-ranking sweep: bm25_weight=0.3
+
+Protocol change: BM25 lexical re-ranking in query_by_similarity() with global IDF.
+cosine top_k=20 → BM25 re-rank → final top_k=5.
+Goal: break precision_lift=0 ceiling by adding orthogonal lexical signal.
