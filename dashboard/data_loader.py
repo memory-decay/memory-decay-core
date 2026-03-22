@@ -442,3 +442,134 @@ def load_archive_history(archive_path: str) -> list[HistoryEntry]:
             entries[exp_key] = entry
 
     return list(entries.values())
+
+
+# ---------------------------------------------------------------------------
+# Percentile and Ranking Calculations
+# ---------------------------------------------------------------------------
+
+def calculate_experiment_percentiles(
+    experiment: Experiment,
+    all_experiments: list[Experiment],
+) -> dict[str, Any]:
+    """Calculate percentile rankings for an experiment.
+    
+    Returns percentiles for:
+    - overall_score (within era and globally)
+    - retrieval_score
+    - plausibility_score
+    """
+    result = {
+        "overall_era": None,
+        "overall_global": None,
+        "retrieval_era": None,
+        "retrieval_global": None,
+        "plausibility_era": None,
+        "plausibility_global": None,
+    }
+    
+    # Get scored experiments (exclude validation_failed)
+    def _is_scored(e: Experiment) -> bool:
+        return e.status != "validation_failed" and e.overall_score is not None
+    
+    all_scored = [e for e in all_experiments if _is_scored(e)]
+    era_scored = [e for e in all_scored if e.era == experiment.era]
+    
+    def _calc_percentile(value: float, values: list[float]) -> float:
+        """Calculate percentile (0-100) of value within values."""
+        if not values:
+            return 0.0
+        below = sum(1 for v in values if v < value)
+        equal = sum(1 for v in values if v == value)
+        return (below + equal / 2) / len(values) * 100
+    
+    # Overall score percentiles
+    if experiment.overall_score is not None:
+        all_overall = [e.overall_score for e in all_scored if e.overall_score is not None]
+        era_overall = [e.overall_score for e in era_scored if e.overall_score is not None]
+        result["overall_global"] = _calc_percentile(experiment.overall_score, all_overall)
+        result["overall_era"] = _calc_percentile(experiment.overall_score, era_overall)
+        result["overall_era_rank"] = len([v for v in era_overall if v > experiment.overall_score]) + 1 if era_overall else None
+        result["overall_era_total"] = len(era_overall)
+    
+    # Retrieval score percentiles
+    if experiment.retrieval_score is not None:
+        all_retrieval = [e.retrieval_score for e in all_scored if e.retrieval_score is not None]
+        era_retrieval = [e.retrieval_score for e in era_scored if e.retrieval_score is not None]
+        result["retrieval_global"] = _calc_percentile(experiment.retrieval_score, all_retrieval)
+        result["retrieval_era"] = _calc_percentile(experiment.retrieval_score, era_retrieval)
+    
+    # Plausibility score percentiles
+    if experiment.plausibility_score is not None:
+        all_plaus = [e.plausibility_score for e in all_scored if e.plausibility_score is not None]
+        era_plaus = [e.plausibility_score for e in era_scored if e.plausibility_score is not None]
+        result["plausibility_global"] = _calc_percentile(experiment.plausibility_score, all_plaus)
+        result["plausibility_era"] = _calc_percentile(experiment.plausibility_score, era_plaus)
+    
+    return result
+
+
+def get_adjacent_experiments(
+    experiment: Experiment,
+    all_experiments: list[Experiment],
+) -> dict[str, Experiment | None]:
+    """Get previous and next experiments in chronological order.
+    
+    For exp_NNNN or exp_lme_NNNN, finds the numerically adjacent experiments
+    within the same era.
+    """
+    same_era = [e for e in all_experiments if e.era == experiment.era]
+    
+    # Sort by ID
+    def _extract_num(exp: Experiment) -> int:
+        if exp.era == "memories_500":
+            return int(exp.id.split("_")[1])
+        else:
+            return int(exp.id.split("_")[2])
+    
+    sorted_exps = sorted(same_era, key=_extract_num)
+    
+    # Find index
+    current_idx = None
+    for i, e in enumerate(sorted_exps):
+        if e.id == experiment.id:
+            current_idx = i
+            break
+    
+    if current_idx is None:
+        return {"previous": None, "next": None}
+    
+    prev_exp = sorted_exps[current_idx - 1] if current_idx > 0 else None
+    next_exp = sorted_exps[current_idx + 1] if current_idx < len(sorted_exps) - 1 else None
+    
+    return {"previous": prev_exp, "next": next_exp}
+
+
+def calculate_score_deltas(
+    experiment: Experiment,
+    all_experiments: list[Experiment],
+) -> dict[str, float | None]:
+    """Calculate score changes compared to previous experiment.
+    
+    Returns delta (current - previous) for each metric.
+    """
+    adjacent = get_adjacent_experiments(experiment, all_experiments)
+    prev = adjacent.get("previous")
+    
+    if prev is None:
+        return {
+            "overall": None,
+            "retrieval": None,
+            "plausibility": None,
+        }
+    
+    def _calc_delta(current: float | None, previous: float | None) -> float | None:
+        if current is None or previous is None:
+            return None
+        return current - previous
+    
+    return {
+        "overall": _calc_delta(experiment.overall_score, prev.overall_score),
+        "retrieval": _calc_delta(experiment.retrieval_score, prev.retrieval_score),
+        "plausibility": _calc_delta(experiment.plausibility_score, prev.plausibility_score),
+    }
