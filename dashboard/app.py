@@ -760,6 +760,25 @@ app.layout = html.Div(
                                 ),
                             ],
                         ),
+                        # Distribution charts
+                        html.Div(
+                            style={
+                                "padding": "0 24px 24px 24px",
+                                "display": "grid",
+                                "gridTemplateColumns": "repeat(auto-fit, minmax(400px, 1fr))",
+                                "gap": "24px",
+                            },
+                            children=[
+                                html.Div(
+                                    style={"backgroundColor": "white", "borderRadius": "8px", "border": "1px solid #e9ecef", "padding": "16px"},
+                                    children=[dcc.Graph(id="score-distribution-graph", config={"displayModeBar": False})],
+                                ),
+                                html.Div(
+                                    style={"backgroundColor": "white", "borderRadius": "8px", "border": "1px solid #e9ecef", "padding": "16px"},
+                                    children=[dcc.Graph(id="phase-stats-graph", config={"displayModeBar": False})],
+                                ),
+                            ],
+                        ),
                     ],
                 ),
 
@@ -2956,6 +2975,36 @@ def update_phase_comparison(phase_a: int | None, phase_b: int | None) -> list:
     ))
 
     return children
+
+
+# ---------------------------------------------------------------------------
+# Distribution Charts Callbacks
+# ---------------------------------------------------------------------------
+
+@callback(
+    [
+        Output("score-distribution-graph", "figure"),
+        Output("phase-stats-graph", "figure"),
+    ],
+    [
+        Input("era-dropdown", "value"),
+        Input("selected-phase", "data"),
+        Input("active-page", "data"),
+    ],
+)
+def update_distribution_charts(
+    era: str,
+    selected_phase: int | None,
+    active_page: str,
+) -> tuple:
+    """Update distribution charts when filters change."""
+    if active_page != "leaderboard":
+        return dash.no_update, dash.no_update
+    
+    hist_fig = charts.build_score_distribution_histogram(_experiments, era, selected_phase)
+    phase_fig = charts.build_phase_statistics_chart(_experiments, era)
+    
+    return hist_fig, phase_fig
 
 
 # ---------------------------------------------------------------------------
