@@ -2105,6 +2105,74 @@ def update_leaderboard(
 
 @callback(
     [
+        Output("kpi-total-value", "children"),
+        Output("kpi-best-value", "children"),
+        Output("kpi-best-id", "children"),
+        Output("kpi-avg-value", "children"),
+        Output("kpi-success-value", "children"),
+        Output("kpi-trend-value", "children"),
+        Output("kpi-trend-label", "children"),
+        Output("kpi-phase-chart", "figure"),
+    ],
+    [
+        Input("era-dropdown", "value"),
+        Input("status-filter", "value"),
+        Input("search-input", "value"),
+        Input("selected-phase", "data"),
+    ],
+)
+def update_kpi_panel(
+    era: str,
+    statuses: list[str] | None,
+    search: str | None,
+    selected_phase: int | None,
+) -> tuple:
+    """Update KPI panel values based on current filters."""
+    # Apply same filters as leaderboard
+    filtered = _filter_dataframe(_df_all, era, statuses or [], search or "")
+    
+    # Apply phase filter
+    if selected_phase is not None:
+        filtered = filtered[filtered["phase"] == selected_phase]
+    
+    # Get experiment objects for this filtered set
+    filtered_ids = set(filtered["id"].values)
+    filtered_exps = [e for e in _experiments if e.id in filtered_ids]
+    
+    # Calculate KPIs
+    kpis = charts.calculate_dashboard_kpis(filtered_exps, era, _cv_data)
+    
+    # Format outputs
+    total_str = str(kpis["total_experiments"])
+    
+    if kpis["best_overall_score"] is not None:
+        best_str = f"{kpis['best_overall_score']:.4f}"
+        best_id_str = kpis["best_experiment_id"] or ""
+    else:
+        best_str = "N/A"
+        best_id_str = ""
+    
+    avg_str = f"{kpis['avg_overall_score']:.4f}" if kpis["avg_overall_score"] is not None else "N/A"
+    success_str = f"{kpis['success_rate']:.1f}%"
+    
+    # Trend formatting
+    trend = kpis.get("recent_trend")
+    if trend:
+        arrow = "↑" if trend["direction"] == "up" else "↓" if trend["direction"] == "down" else "→"
+        trend_str = f"{arrow} {abs(trend['change_pct']):.1f}%"
+        trend_label = f"{trend['recent_avg']:.4f} vs {trend['previous_avg']:.4f}"
+    else:
+        trend_str = "N/A"
+        trend_label = "Need 20+ experiments"
+    
+    # Phase chart
+    phase_chart = charts.build_phase_distribution_chart(kpis["phase_distribution"])
+    
+    return total_str, best_str, best_id_str, avg_str, success_str, trend_str, trend_label, phase_chart
+
+
+@callback(
+    [
         Output("pipeline-grid", "rowData"),
         Output("pipeline-count", "children"),
     ],
