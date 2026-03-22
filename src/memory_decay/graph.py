@@ -7,10 +7,7 @@ import os
 import re
 import time
 from collections import Counter
-from typing import TYPE_CHECKING, Optional, Callable
-
-if TYPE_CHECKING:
-    from sentence_transformers import CrossEncoder
+from typing import Optional, Callable
 
 import networkx as nx
 import numpy as np
@@ -30,7 +27,7 @@ class MemoryGraph:
         self._model = None
         self._embedding_backend = embedding_backend
         self._gemini_client = None
-        self._embedding_dim = 384  # default for all-MiniLM-L6-v2
+        self._embedding_dim = 768  # default for ko-sroberta
         self._embedding_cache: dict[tuple[str, str], np.ndarray] = {}
         self._query_similarity_total_time: float = 0.0
         self._query_similarity_call_count: int = 0
@@ -45,10 +42,6 @@ class MemoryGraph:
         self._bm25_idf: dict[str, float] | None = None
         self._bm25_doc_tokens: dict[str, list[str]] | None = None
         self._bm25_avgdl: float = 0.0
-        # Cross-encoder model for semantic reranking
-        self._cross_encoder_model: "CrossEncoder | None" = None
-        self._cross_encoder_model_name: str = "cross-encoder/ms-marco-MiniLM-L6-v2"
-        self._cross_encoder_device: str | None = None
 
     def _get_embedder(self) -> Callable:
         """Get the embedding function based on backend."""
@@ -81,8 +74,8 @@ class MemoryGraph:
         """Local sentence-transformers embedding (Korean-optimized)."""
         if self._model is None:
             from sentence_transformers import SentenceTransformer
-            self._model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-            self._embedding_dim = 384
+            self._model = SentenceTransformer("jhgan/ko-sroberta-multitask")
+            self._embedding_dim = 768
         return np.array(self._model.encode(text), dtype=np.float32)
 
     def _gemini_embed(self, text: str) -> np.ndarray:
@@ -214,55 +207,6 @@ class MemoryGraph:
 
         return scores
 
-    def _cross_encoder_score_candidates(
-        self,
-        query_text: str,
-        candidate_nids: list[str],
-    ) -> dict[str, float]:
-        """Score candidates using a pre-trained cross-encoder (joint query-document encoding).
-
-        Uses cross-encoder/ms-marco-MiniLM-L6-v2 — lightweight (22.7M params),
-        pre-trained on MS MARCO for relevance scoring. Returns raw scores (higher = more relevant).
-        The model is loaded lazily on first use.
-        """
-        if not candidate_nids:
-            return {}
-
-        # Lazy-load the cross-encoder model (GPU if available, else CPU)
-        if self._cross_encoder_model is None:
-            import torch
-            from sentence_transformers import CrossEncoder
-            device = self._cross_encoder_device or ("cuda" if torch.cuda.is_available() else "cpu")
-            self._cross_encoder_model = CrossEncoder(
-                self._cross_encoder_model_name,
-                max_length=512,
-                device=device,
-            )
-
-        # Build (query, memory_text) pairs
-        pairs: list[tuple[str, str]] = []
-        nid_to_idx: dict[str, int] = {}
-        for idx, nid in enumerate(candidate_nids):
-            node = self._graph.nodes.get(nid)
-            memory_text = node.get("content", "") if node else ""
-            pairs.append((query_text, memory_text))
-            nid_to_idx[idx] = nid
-
-        # Score all pairs at once
-        scores_raw = self._cross_encoder_model.predict(pairs, show_progress_bar=False)
-
-        # Handle different return types (numpy array, list, etc.)
-        if hasattr(scores_raw, "tolist"):
-            scores_list = scores_raw.tolist()
-        else:
-            scores_list = list(scores_raw)
-
-        scores: dict[str, float] = {}
-        for idx, nid in nid_to_idx.items():
-            scores[nid] = float(scores_list[idx])
-
-        return scores
-
     def _ensure_embedding_matrix(self) -> None:
         """Build or rebuild the precomputed embedding matrix if needed."""
         current_count = self._graph.number_of_nodes()
@@ -334,10 +278,6 @@ class MemoryGraph:
         assoc_boost: float = 0.0,
         bm25_weight: float = 0.0,
         bm25_candidates: int = 20,
-        cross_encoder_weight: float = 0.0,
-        ce_candidates: int = 30,
-        mmr_lambda: float = 0.0,
-        mmr_candidates: int = 15,
     ) -> list[tuple[str, float]]:
         """Find memories matching query via embedding cosine similarity.
 
@@ -356,17 +296,7 @@ class MemoryGraph:
         1. Fetch *bm25_candidates* results by cosine similarity
         2. Re-rank using BM25 lexical matching with global IDF
         3. Combined score = (1-bm25_weight)*cosine + bm25_weight*bm25
-
-        When *cross_encoder_weight* > 0, BM25 candidates are further
-        reranked using a pre-trained cross-encoder scoring (query, memory_text)
-        pairs jointly. This captures semantic matching beyond lexical overlap.
-        4. Combined score = (1-bm25_weight-ce_weight)*cosine + bm25_weight*bm25 + ce_weight*ce
-
-        When *mmr_lambda* > 0, a Maximal Marginal Relevance rerank is applied
-        on top of the BM25 results to increase diversity:
-        5. MMR score = mmr_lambda * relevance - (1-mmr_lambda) * redundancy
-           where redundancy = max cosine similarity to already-selected docs
-        6. Iteratively select top_k docs by MMR score
+        4. Return top *top_k* by combined score
         """
         t0 = time.perf_counter()
         self._ensure_embedding_matrix()
@@ -396,12 +326,8 @@ class MemoryGraph:
         if activation_weight > 0 and self._emb_retrieval_scores is not None:
             similarities = similarities * (self._emb_retrieval_scores ** activation_weight)
 
-        # Get top candidates (fetch at least bm25_candidates/ce_candidates when re-ranking is active)
-        fetch_k = top_k
-        if bm25_weight > 0:
-            fetch_k = max(fetch_k, bm25_candidates)
-        if cross_encoder_weight > 0:
-            fetch_k = max(fetch_k, ce_candidates)
+        # Get top candidates (fetch at least bm25_candidates when BM25 is active)
+        fetch_k = max(top_k, bm25_candidates) if bm25_weight > 0 else top_k
         if len(self._emb_nids) <= fetch_k:
             top_indices = np.argsort(similarities)[::-1]
         else:
@@ -443,92 +369,25 @@ class MemoryGraph:
             candidates = boosted
 
         # BM25 re-ranking pass
-        # Compute raw cosine scores for normalization (before BM25/CE combination)
-        cos_scores_raw = {nid: score for nid, score in candidates}
-        cos_vals = list(cos_scores_raw.values())
-        cos_min, cos_max = min(cos_vals), max(cos_vals)
-        cos_range = cos_max - cos_min
-
-        bm25_scores: dict[str, float] = {}
-        bm25_max = 1.0
         if bm25_weight > 0 and len(candidates) > 0:
             cand_nids = [nid for nid, _ in candidates]
             bm25_scores = self._bm25_score_candidates(query_text, cand_nids)
-            bm25_max = max(bm25_scores.values()) if bm25_scores else 1.0
 
-        # Cross-encoder scores (compute once, reuse)
-        # Note: MS MARCO cross-encoders output raw logits (can be negative).
-        # Normalize using ABSOLUTE value of max to handle negative scores correctly.
-        # CE is applied only to the top ce_candidates by cosine similarity to avoid O(N) scoring.
-        ce_scores: dict[str, float] = {}
-        ce_max_abs = 1.0
-        if cross_encoder_weight > 0 and len(candidates) > 0:
-            ce_pool = candidates[:ce_candidates]
-            cand_nids = [nid for nid, _ in ce_pool]
-            ce_scores = self._cross_encoder_score_candidates(query_text, cand_nids)
-            ce_max_abs = max(abs(v) for v in ce_scores.values()) if ce_scores else 1.0
+            if bm25_scores:
+                cos_scores = {nid: score for nid, score in candidates}
+                cos_vals = list(cos_scores.values())
+                cos_min, cos_max = min(cos_vals), max(cos_vals)
+                cos_range = cos_max - cos_min
 
-        # Combine all active scoring components
-        if bm25_weight > 0 or cross_encoder_weight > 0:
-            cand_nids = [nid for nid, _ in candidates]
-            combined = []
-            for nid in cand_nids:
-                norm_cos = (cos_scores_raw.get(nid, 0.0) - cos_min) / max(cos_range, 1e-8)
-                norm_bm25 = bm25_scores.get(nid, 0.0) / max(bm25_max, 1e-8)
-                norm_ce = ce_scores.get(nid, 0.0) / max(ce_max_abs, 1e-8)
-                weight_sum = bm25_weight + cross_encoder_weight
-                combined_score = (
-                    (1.0 - weight_sum) * norm_cos
-                    + bm25_weight * norm_bm25
-                    + cross_encoder_weight * norm_ce
-                )
-                combined.append((nid, combined_score))
-            candidates = combined
+                bm25_max = max(bm25_scores.values())
 
-        # MMR (Maximal Marginal Relevance) diversity reranking
-        if mmr_lambda > 0 and len(candidates) > top_k:
-            pool_size = min(mmr_candidates, len(candidates))
-            pool = candidates[:pool_size]
-            pool_nids = [nid for nid, _ in pool]
-            pool_scores = {nid: score for nid, score in pool}
-
-            # Build nid -> embedding index map for candidates in pool
-            nid_to_idx = {nid: i for i, nid in enumerate(self._emb_nids) if nid in pool_scores}
-            if len(nid_to_idx) >= 2 and self._emb_matrix is not None:
-                # Build NxN cosine similarity matrix between pool docs
-                n = len(pool_nids)
-                indices = [nid_to_idx[nid] for nid in pool_nids]
-                pool_embs = self._emb_matrix[indices]  # (n, emb_dim)
-                # Normalize
-                norms = np.linalg.norm(pool_embs, axis=1, keepdims=True)
-                norms[norms == 0] = 1.0
-                pool_embs_norm = pool_embs / norms
-                # Pairwise cosine similarity matrix
-                sim_matrix = pool_embs_norm @ pool_embs_norm.T  # (n, n)
-
-                # MMR iterative selection
-                selected_idx: list[int] = []
-                remaining = list(range(n))
-                for _ in range(min(top_k, n)):
-                    best_mmr = -float('inf')
-                    best_i = None
-                    for i in remaining:
-                        relevance = pool_scores[pool_nids[i]]
-                        # Redundancy = max similarity to already selected
-                        if selected_idx:
-                            redundancies = [sim_matrix[i, s] for s in selected_idx]
-                            max_redundancy = max(redundancies)
-                        else:
-                            max_redundancy = 0.0
-                        mmr_score = mmr_lambda * relevance - (1.0 - mmr_lambda) * max_redundancy
-                        if mmr_score > best_mmr:
-                            best_mmr = mmr_score
-                            best_i = i
-                    if best_i is not None:
-                        selected_idx.append(best_i)
-                        remaining.remove(best_i)
-
-                candidates = [(pool_nids[i], pool_scores[pool_nids[i]]) for i in selected_idx]
+                combined = []
+                for nid in cand_nids:
+                    norm_cos = (cos_scores[nid] - cos_min) / max(cos_range, 1e-8)
+                    norm_bm25 = bm25_scores.get(nid, 0.0) / max(bm25_max, 1e-8)
+                    combined_score = (1.0 - bm25_weight) * norm_cos + bm25_weight * norm_bm25
+                    combined.append((nid, combined_score))
+                candidates = combined
 
         candidates.sort(key=lambda x: x[1], reverse=True)
         self._query_similarity_total_time += time.perf_counter() - t0
