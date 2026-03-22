@@ -26,7 +26,7 @@ import plotly.graph_objects as go
 from dash import Input, Output, State, callback, dash, html, dcc
 from dash import ctx as callback_ctx
 
-from dashboard.data_loader import Experiment, load_all_experiments
+from dashboard.data_loader import Experiment, load_all_experiments, calculate_experiment_percentiles, get_adjacent_experiments, calculate_score_deltas
 from dashboard.output_loader import load_output_records
 from dashboard import charts
 
@@ -1434,14 +1434,52 @@ def _build_metric_card(
     label_color: str = "#6c757d",
     value_color: str = "#212529",
     font_size: str = "20px",
+    percentile: float | None = None,
+    delta: float | None = None,
 ) -> html.Div:
-    """Build a single metric card for the detail view."""
+    """Build a single metric card for the detail view.
+    
+    Args:
+        name: Metric name
+        val: Metric value
+        bg_color: Card background color
+        border_color: Card border color
+        label_color: Label text color
+        value_color: Value text color
+        font_size: Font size for the value
+        percentile: Optional percentile (0-100) to display below value
+        delta: Optional delta vs previous experiment
+    """
+    children = [
+        html.Div(name, style={"fontSize": "11px", "color": label_color, "textTransform": "uppercase", "letterSpacing": "0.5px"}),
+        html.Div(_format_score(val), style={"fontSize": font_size, "fontWeight": "700", "color": value_color, "marginTop": "4px"}),
+    ]
+    
+    # Add percentile badge if provided
+    if percentile is not None:
+        percentile_text = f"Top {percentile:.0f}%"
+        children.append(
+            html.Div(
+                percentile_text,
+                style={"fontSize": "10px", "color": "#1565C0", "marginTop": "4px", "fontWeight": "600"},
+            )
+        )
+    
+    # Add delta badge if provided
+    if delta is not None:
+        delta_icon = "📈" if delta > 0 else "📉" if delta < 0 else "➡️"
+        delta_color = "#2E7D32" if delta > 0 else "#D32F2F" if delta < 0 else "#6c757d"
+        delta_str = f"+{delta:.4f}" if delta > 0 else f"{delta:.4f}"
+        children.append(
+            html.Div(
+                f"{delta_icon} {delta_str}",
+                style={"fontSize": "10px", "color": delta_color, "marginTop": "2px", "fontWeight": "600"},
+            )
+        )
+    
     return html.Div(
         style={"padding": "12px", "backgroundColor": bg_color, "borderRadius": "6px", "border": f"1px solid {border_color}"},
-        children=[
-            html.Div(name, style={"fontSize": "11px", "color": label_color, "textTransform": "uppercase", "letterSpacing": "0.5px"}),
-            html.Div(_format_score(val), style={"fontSize": font_size, "fontWeight": "700", "color": value_color, "marginTop": "4px"}),
-        ],
+        children=children,
     )
 
 
@@ -1522,6 +1560,11 @@ def _build_detail_view(exp_id: str, source_page: str = "leaderboard") -> list:
     is_best = _best_exp_id == exp_id
     is_validation_failed = exp.status == "validation_failed"
 
+    # Calculate percentiles and rankings
+    percentiles = calculate_experiment_percentiles(exp, _experiments)
+    deltas = calculate_score_deltas(exp, _experiments)
+    adjacent = get_adjacent_experiments(exp, _experiments)
+
     # Error section (shown first, prominently, for validation_failed)
     error_section = []
     if exp.error:
@@ -1536,10 +1579,14 @@ def _build_detail_view(exp_id: str, source_page: str = "leaderboard") -> list:
         ]
 
     # Key metrics — show N/A for all when validation_failed (VAL-TABLE-014)
-    key_metrics = [
-        ("Overall Score", None if is_validation_failed else exp.overall_score),
-        ("Retrieval Score", None if is_validation_failed else exp.retrieval_score),
-        ("Plausibility Score", None if is_validation_failed else exp.plausibility_score),
+    # Include percentiles and deltas for the main scores
+    key_metrics_with_meta = [
+        ("Overall Score", None if is_validation_failed else exp.overall_score, percentiles.get("overall_era"), deltas.get("overall")),
+        ("Retrieval Score", None if is_validation_failed else exp.retrieval_score, percentiles.get("retrieval_era"), deltas.get("retrieval")),
+        ("Plausibility Score", None if is_validation_failed else exp.plausibility_score, percentiles.get("plausibility_era"), deltas.get("plausibility")),
+    ]
+    
+    other_metrics = [
         ("Recall Mean", None if is_validation_failed else exp.recall_mean),
         ("Precision Mean", None if is_validation_failed else exp.precision_mean),
         ("MRR Mean", None if is_validation_failed else exp.mrr_mean),
@@ -1553,8 +1600,11 @@ def _build_detail_view(exp_id: str, source_page: str = "leaderboard") -> list:
         html.Div(
             style={"display": "grid", "gridTemplateColumns": "repeat(auto-fill, minmax(200px, 1fr))", "gap": "12px"},
             children=[
+                _build_metric_card(name, val, percentile=perc, delta=delta_val)
+                for name, val, perc, delta_val in key_metrics_with_meta
+            ] + [
                 _build_metric_card(name, val)
-                for name, val in key_metrics
+                for name, val in other_metrics
             ],
         ),
     ]
@@ -1776,6 +1826,77 @@ def _build_detail_view(exp_id: str, source_page: str = "leaderboard") -> list:
     }
     back_label = page_labels.get(source_page, "← Back to Leaderboard")
 
+    # Helper functions for badges
+    def _format_percentile(p: float | None) -> str:
+        if p is None:
+            return "N/A"
+        return f"{p:.0f}th"
+    
+    def _format_delta(d: float | None) -> tuple[str, str]:
+        if d is None:
+            return "—", "#6c757d"
+        if d > 0:
+            return f"+{d:.4f}", "#2E7D32"  # Green
+        elif d < 0:
+            return f"{d:.4f}", "#D32F2F"  # Red
+        else:
+            return "0.0000", "#6c757d"  # Gray
+
+    # Build ranking and delta badges
+    header_badges = []
+    
+    # Ranking badge (blue background)
+    if percentiles.get("overall_era") is not None:
+        rank_str = f"#{percentiles.get('overall_era_rank', '?')}/{percentiles.get('overall_era_total', '?')}"
+        header_badges.append(
+            html.Div(
+                style={
+                    "padding": "8px 12px",
+                    "backgroundColor": "#e3f2fd",
+                    "borderRadius": "6px",
+                    "border": "1px solid #90caf9",
+                    "display": "inline-flex",
+                    "alignItems": "center",
+                    "gap": "8px",
+                },
+                children=[
+                    html.Span("🏆", style={"fontSize": "16px"}),
+                    html.Div(
+                        children=[
+                            html.Div(f"{rank_str} in {exp.era}", style={"fontSize": "13px", "fontWeight": "600", "color": "#1565C0"}),
+                            html.Div(f"Top {_format_percentile(percentiles['overall_era'])} percentile", style={"fontSize": "11px", "color": "#6c757d"}),
+                        ],
+                    ),
+                ],
+            )
+        )
+    
+    # Delta badge (vs previous experiment)
+    overall_delta, overall_delta_color = _format_delta(deltas.get("overall"))
+    if deltas.get("overall") is not None:
+        header_badges.append(
+            html.Div(
+                style={
+                    "padding": "8px 12px",
+                    "backgroundColor": "#f5f5f5",
+                    "borderRadius": "6px",
+                    "border": "1px solid #e0e0e0",
+                    "display": "inline-flex",
+                    "alignItems": "center",
+                    "gap": "8px",
+                },
+                children=[
+                    html.Span("📈" if deltas.get("overall", 0) > 0 else "📉" if deltas.get("overall", 0) < 0 else "➡️", style={"fontSize": "16px"}),
+                    html.Div(
+                        children=[
+                            html.Div("vs Previous", style={"fontSize": "11px", "color": "#6c757d"}),
+                            html.Div(overall_delta, style={"fontSize": "13px", "fontWeight": "600", "color": overall_delta_color}),
+                        ],
+                    ),
+                ],
+            )
+        )
+
     # Assemble detail view
     content = [
         # Header
@@ -1792,7 +1913,10 @@ def _build_detail_view(exp_id: str, source_page: str = "leaderboard") -> list:
                         _make_status_badge(display_status),
                     ],
                 ),
-                html.Span(f"{exp.era} · Phase {exp.phase}", style={"marginLeft": "auto", "fontSize": "13px", "color": "#6c757d"}),
+                html.Div(
+                    style={"display": "flex", "alignItems": "center", "gap": "12px", "marginLeft": "auto"},
+                    children=header_badges + [html.Span(f"{exp.era} · Phase {exp.phase}", style={"fontSize": "13px", "color": "#6c757d"})],
+                ),
             ],
         ),
     ] + error_section + metrics_html + later_html + hypothesis_section + params_section + cv_section + snapshot_section
