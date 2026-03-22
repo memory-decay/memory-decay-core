@@ -1652,3 +1652,162 @@ def get_available_phases(
          "value": p}
         for p, count in sorted(phases.items())
     ]
+
+
+# ---------------------------------------------------------------------------
+# Distribution Charts for Leaderboard
+# ---------------------------------------------------------------------------
+
+def build_score_distribution_histogram(
+    experiments: list[Experiment],
+    era: str = "All",
+    selected_phase: int | None = None,
+) -> go.Figure:
+    """Build histogram of overall_score distribution.
+    
+    Shows distribution of scores with bins at 0.1 intervals.
+    Highlights the selected phase if applicable.
+    """
+    filtered = experiments
+    if era != "All":
+        filtered = [e for e in experiments if e.era == era]
+    if selected_phase is not None:
+        filtered = [e for e in filtered if e.phase == selected_phase]
+    
+    # Get scored experiments (exclude validation_failed)
+    scores = [e.overall_score for e in filtered 
+              if e.overall_score is not None and e.status != "validation_failed"]
+    
+    fig = go.Figure()
+    
+    if not scores:
+        fig.add_annotation(
+            text="No scored experiments to display",
+            xref="paper", yref="paper", x=0.5, y=0.5,
+            showarrow=False, font={"size": 12, "color": "#9E9E9E"},
+        )
+        fig.update_layout(template="plotly_white", height=200)
+        return fig
+    
+    # Create histogram
+    fig.add_trace(go.Histogram(
+        x=scores,
+        nbinsx=20,
+        marker_color="#1565C0",
+        marker_line_color="#0D47A1",
+        marker_line_width=1,
+        opacity=0.8,
+        hovertemplate="Score: %{x:.3f}<br>Count: %{y}<extra></extra>",
+    ))
+    
+    # Add mean line
+    mean_score = sum(scores) / len(scores)
+    fig.add_vline(
+        x=mean_score,
+        line_dash="dash",
+        line_color="#E65100",
+        line_width=2,
+        annotation_text=f"Mean: {mean_score:.4f}",
+        annotation_position="top",
+        annotation_font={"size": 10, "color": "#E65100"},
+    )
+    
+    # Add best score annotation
+    best_score = max(scores)
+    fig.add_vline(
+        x=best_score,
+        line_dash="dot",
+        line_color="#2E7D32",
+        line_width=2,
+        annotation_text=f"Best: {best_score:.4f}",
+        annotation_position="top",
+        annotation_font={"size": 10, "color": "#2E7D32"},
+    )
+    
+    fig.update_layout(
+        title="Overall Score Distribution",
+        xaxis_title="Overall Score",
+        yaxis_title="Count",
+        template="plotly_white",
+        height=250,
+        margin={"l": 50, "r": 20, "t": 40, "b": 40},
+        showlegend=False,
+        xaxis={"range": [0, 1]},
+    )
+    
+    return fig
+
+
+def build_phase_statistics_chart(
+    experiments: list[Experiment],
+    era: str = "All",
+) -> go.Figure:
+    """Build bar chart showing average overall_score by phase.
+    
+    Includes experiment count per phase as text labels.
+    """
+    filtered = experiments
+    if era != "All":
+        filtered = [e for e in experiments if e.era == era]
+    
+    # Calculate stats per phase
+    phase_stats: dict[int, dict[str, Any]] = {}
+    for exp in filtered:
+        if exp.phase is None:
+            continue
+        if exp.phase not in phase_stats:
+            phase_stats[exp.phase] = {"scores": [], "count": 0}
+        phase_stats[exp.phase]["count"] += 1
+        if exp.overall_score is not None and exp.status != "validation_failed":
+            phase_stats[exp.phase]["scores"].append(exp.overall_score)
+    
+    if not phase_stats:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No phase data available",
+            xref="paper", yref="paper", x=0.5, y=0.5,
+            showarrow=False, font={"size": 12, "color": "#9E9E9E"},
+        )
+        fig.update_layout(template="plotly_white", height=200)
+        return fig
+    
+    # Prepare data
+    phases = sorted(phase_stats.keys())
+    avg_scores = []
+    counts = []
+    labels = []
+    colors = []
+    
+    for p in phases:
+        scores = phase_stats[p]["scores"]
+        avg = sum(scores) / len(scores) if scores else 0
+        count = phase_stats[p]["count"]
+        avg_scores.append(avg)
+        counts.append(count)
+        labels.append(f"P{p}: {PHASE_NAMES.get(p, 'Unknown')}")
+        colors.append(PHASE_COLORS.get(p, "#999"))
+    
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        y=labels,
+        x=avg_scores,
+        orientation="h",
+        marker_color=colors,
+        text=[f"{avg:.3f} (n={c})" for avg, c in zip(avg_scores, counts)],
+        textposition="auto",
+        hovertemplate="%{y}<br>Avg: %{x:.4f}<br>Count: %{customdata}<extra></extra>",
+        customdata=counts,
+    ))
+    
+    fig.update_layout(
+        title="Average Score by Phase",
+        xaxis_title="Average Overall Score",
+        template="plotly_white",
+        height=max(200, len(phases) * 35),
+        margin={"l": 180, "r": 20, "t": 40, "b": 40},
+        showlegend=False,
+        xaxis={"range": [0, 1]},
+        yaxis={"autorange": "reversed"},
+    )
+    
+    return fig
