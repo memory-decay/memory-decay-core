@@ -18,6 +18,29 @@ from typing import Callable, Optional
 import numpy as np
 
 
+def _candidate_cache_keys(text: str) -> list[str]:
+    """Return cache lookup candidates for a message text.
+
+    The memorybench bridge prefixes raw messages with "[User]" / "[Assistant]".
+    The LongMemEval cache stores the underlying message content without those
+    prefixes, so we try both forms before falling back to live embedding.
+    """
+    stripped = text.strip()
+    candidates = [text, stripped]
+
+    for prefix in ("[User] ", "[Assistant] "):
+        if stripped.startswith(prefix):
+            candidates.append(stripped[len(prefix):].strip())
+            break
+
+    unique_candidates: list[str] = []
+    for candidate in candidates:
+        if candidate and candidate not in unique_candidates:
+            unique_candidates.append(candidate)
+
+    return unique_candidates
+
+
 def build_cache(
     dataset_path: str,
     cache_dir: str,
@@ -127,13 +150,18 @@ def load_cache(
         rehearsal_targets = json.load(f)
 
     def cached_embedder(text: str) -> np.ndarray:
-        if text not in embeddings:
-            if fallback_embedder is not None:
-                emb = np.array(fallback_embedder(text), dtype=np.float32)
+        for candidate in _candidate_cache_keys(text):
+            if candidate in embeddings:
+                emb = embeddings[candidate]
                 embeddings[text] = emb
                 return emb.copy()
-            raise KeyError(f"Text not in embedding cache: {text[:80]}...")
-        return embeddings[text].copy()
+
+        if fallback_embedder is not None:
+            emb = np.array(fallback_embedder(text), dtype=np.float32)
+            embeddings[text] = emb
+            return emb.copy()
+
+        raise KeyError(f"Text not in embedding cache: {text[:80]}...")
 
     return cached_embedder, dataset, test_queries, rehearsal_targets
 
@@ -162,13 +190,18 @@ def load_cached_embedder(
         embeddings: dict[str, np.ndarray] = pickle.load(f)  # noqa: S301
 
     def cached_embedder(text: str) -> np.ndarray:
-        if text not in embeddings:
-            if fallback_embedder is not None:
-                emb = np.array(fallback_embedder(text), dtype=np.float32)
+        for candidate in _candidate_cache_keys(text):
+            if candidate in embeddings:
+                emb = embeddings[candidate]
                 embeddings[text] = emb
                 return emb.copy()
-            raise KeyError(f"Text not in embedding cache: {text[:80]}...")
-        return embeddings[text].copy()
+
+        if fallback_embedder is not None:
+            emb = np.array(fallback_embedder(text), dtype=np.float32)
+            embeddings[text] = emb
+            return emb.copy()
+
+        raise KeyError(f"Text not in embedding cache: {text[:80]}...")
 
     return cached_embedder
 

@@ -1,5 +1,7 @@
 """Tests for the memory-decay FastAPI server."""
 
+import pickle
+
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
@@ -59,6 +61,42 @@ class TestStoreAndSearch:
         r = client.post("/search", json={"query": "nothing"})
         assert r.status_code == 200
         assert r.json()["results"] == []
+
+    def test_store_uses_cached_embeddings_before_fallback(self, tmp_path):
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+
+        cached_embedding = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+        with open(cache_dir / "embeddings.pkl", "wb") as f:
+            pickle.dump({"cached message": cached_embedding}, f)
+
+        fallback_calls: list[str] = []
+
+        def fallback_embedder(text: str) -> np.ndarray:
+            fallback_calls.append(text)
+            return np.array([0.0, 1.0, 0.0, 0.0], dtype=np.float32)
+
+        app = create_app(
+            embedding_provider=None,
+            cache_dir=str(cache_dir),
+            _test_embedder=fallback_embedder,
+        )
+
+        with TestClient(app) as client:
+            cached_store = client.post("/store", json={
+                "text": "[User] cached message",
+                "importance": 0.8,
+                "mtype": "fact",
+            })
+            fallback_store = client.post("/store", json={
+                "text": "[Assistant] uncached message",
+                "importance": 0.8,
+                "mtype": "fact",
+            })
+
+        assert cached_store.status_code == 200
+        assert fallback_store.status_code == 200
+        assert fallback_calls == ["[Assistant] uncached message"]
 
 
 class TestTick:

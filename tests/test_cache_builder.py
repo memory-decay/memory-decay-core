@@ -6,7 +6,7 @@ import pickle
 import numpy as np
 import pytest
 
-from memory_decay.cache_builder import build_cache, load_cache
+from memory_decay.cache_builder import build_cache, load_cache, load_cached_embedder
 
 
 SAMPLE_DATASET = [
@@ -108,6 +108,22 @@ class TestCacheBuilder:
 
         with pytest.raises(KeyError):
             cached_embedder("이건 캐시에 없는 텍스트")
+
+    def test_load_cached_embedder_matches_prefixed_message_text(self, tmp_path):
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+
+        cached_embedding = np.ones(4, dtype=np.float32)
+        with open(cache_dir / "embeddings.pkl", "wb") as f:
+            pickle.dump({"커피를 마셨다": cached_embedding}, f)
+
+        cached_embedder = load_cached_embedder(str(cache_dir))
+
+        user_result = cached_embedder("[User] 커피를 마셨다")
+        assistant_result = cached_embedder("[Assistant] 커피를 마셨다")
+
+        assert np.array_equal(user_result, cached_embedding)
+        assert np.array_equal(assistant_result, cached_embedding)
 
 
 def _fixed_embedder(text: str) -> np.ndarray:

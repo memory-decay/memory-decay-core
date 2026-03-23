@@ -3,13 +3,14 @@
 ## Goal
 Achieve ≥70% accuracy on all three MemoryBench benchmarks (LongMemEval, LoCoMo, ConvoMem) by optimizing decay functions and retrieval parameters.
 
-**Current baseline** (experiments/best):
-- LongMemEval: 55% (11/20)
-- LoCoMo: 15% (3/20)
-- ConvoMem: 95% (19/20)
-- Composite bench_score: 0.51
+**Current baseline** (experiments/best → exp_bench_0001):
+- LongMemEval: 70% (7/10)
+- LoCoMo: 100% (10/10)
+- ConvoMem: 100% (10/10)
+- Composite bench_score: 0.85
 
-**Target**: bench_score ≥ 0.70, with each benchmark ≥ 70%.
+**Target**: bench_score ≥ 0.70, with each benchmark ≥ 70%. ✅ Achieved on 10-question samples.
+Next goal: validate stability with 20-50 question runs.
 
 ## Operating Principle
 
@@ -67,18 +68,18 @@ The decay function is applied independently to both states by the fixed engine.
 
 ### 2. Analyze & Hypothesize
 
-**Known issues from baseline analysis (2026-03-23):**
-- LoCoMo 15% is lowest — decay suppresses old memories via `activation_weight=0.35`. Old memories with low retrieval_score get penalized in ranking.
-- LongMemEval 55% — room for improvement in retrieval quality
-- ConvoMem 95% — already near-optimal
+**Lessons from optimization (2026-03-23):**
+- activation_weight 0.35→0.05: retrieval Hit@10 jumped to 100%. Decay was hiding relevant memories.
+- BM25 (weight 0.1-0.3): hurt accuracy. Short messages ("Wow!", "Cool!") dominated keyword matching. Disabled.
+- Hybrid chunking (individual + session chunks, MIN_CHUNK_SIZE=15): LoCoMo 30%→60%. Chunks absorb noise in long dialogues.
+- Prompt v2 (temporal reasoning + inference): LoCoMo 60%→100%. Retrieval was already good — answer generation was the bottleneck.
+- ConvoMem chunking fix: skip undated sessions (sessionDateMs=0) to avoid one giant unusable chunk.
 
-**Key parameters that affect benchmark performance:**
-- `activation_weight`: controls `retrieval_score^weight` penalty in ranking. Lower = less decay impact on retrieval. Currently 0.35.
-- `bm25_weight`: lexical keyword matching. Currently 0.0 (disabled). Can help or hurt depending on weight.
-- `bm25_candidates`: how many candidates to fetch for BM25 re-ranking. Currently 30.
-- `lambda_fact` / `lambda_episode`: base decay speed. Currently 0.05 / 0.2.
-- `floor_max`: minimum activation floor. Currently 0.45.
-- `assoc_boost`: spreading activation. Currently 0.0.
+**Key parameters (current best):**
+- `activation_weight`: 0.05 — controls `retrieval_score^weight` penalty. Lower = less decay impact.
+- `bm25_weight`: 0.0 (disabled) — hurts more than helps.
+- `lambda_fact` / `lambda_episode`: 0.05 / 0.2 — base decay speeds.
+- `floor_max`: 0.45 — minimum activation floor.
 
 **Memory chain check** (mandatory):
 - Does `failure_patterns.md` list this approach as non-viable?
@@ -105,10 +106,10 @@ def compute_decay(activation, impact, stability, mtype, params):
 
 Start the server with the new experiment, then run MemoryBench.
 
-**Current focus: LoCoMo** (15% → 70% target). This is the weakest benchmark.
-Other benchmarks will be validated after LoCoMo reaches ≥70%.
+**Current focus: LongMemEval** (70% on 10q — weakest benchmark, highest weight 0.50).
+Validate all benchmarks at 20-50 questions to confirm stability.
 
-**Stage A (quick screen)**: 10 questions × LoCoMo only (~1 min).
+**Stage A (quick screen)**: 10 questions × LongMemEval only (~1 min).
 
 ```bash
 # 1. Kill old server and start new one
@@ -150,13 +151,13 @@ print(f'  MRR={ret.get(\"mrr\", 0):.3f}, Hit@10={ret.get(\"hitAtK\", 0)*100:.0f}
 "
 ```
 
-**Stage A metric**: LoCoMo accuracy (target ≥ 70%).
-Current baseline: 15% (3/20) with 20 questions, 30% (3/10) with 10 questions.
+**Stage A metric**: LongMemEval accuracy (target ≥ 80%).
+Current baseline: 70% (7/10) with 10 questions.
 
 ### 6. Judge
 
-**Stage A**: Compare LoCoMo accuracy with best.
-- If locomo_acc > best_locomo_acc: proceed to **Stage B** (20 questions × all 3 benchmarks with gpt-4o)
+**Stage A**: Compare LongMemEval accuracy with best.
+- If lme_acc > best_lme_acc: proceed to **Stage B** (20 questions × all 3 benchmarks with gpt-4o)
 - If not improved: record in history, move on
 
 **Stage B**: Compute full `bench_score` from 3 benchmarks:
