@@ -80,6 +80,7 @@ ERA_OPTIONS = [
     {"label": "All", "value": "All"},
     {"label": "memories_500", "value": "memories_500"},
     {"label": "LongMemEval", "value": "LongMemEval"},
+    {"label": "MemoryBench", "value": "MemoryBench"},
 ]
 
 PIPELINE_RECORD_TYPE_OPTIONS = [
@@ -158,6 +159,14 @@ def _find_best_experiment(
     if best_id is not None:
         return best_id
 
+    # For MemoryBench era, use bench_score
+    for exp in experiments:
+        if exp.bench_score is not None and exp.bench_score > best_score:
+            best_score = exp.bench_score
+            best_id = exp.id
+    if best_id is not None:
+        return best_id
+
     # Fallback to overall_score
     for exp in experiments:
         if exp.overall_score is not None and exp.overall_score > best_score:
@@ -182,6 +191,10 @@ def _build_dataframe(
             "overall_score": exp.overall_score,
             "retrieval_score": exp.retrieval_score,
             "plausibility_score": exp.plausibility_score,
+            "bench_score": exp.bench_score,
+            "lme_accuracy": exp.lme_accuracy,
+            "locomo_accuracy": exp.locomo_accuracy,
+            "convomem_accuracy": exp.convomem_accuracy,
             "status": display_status,
             "raw_status": exp.status,
             "hypothesis": (exp.hypothesis[:120] + "...") if exp.hypothesis and len(exp.hypothesis) > 120 else (exp.hypothesis or ""),
@@ -249,6 +262,38 @@ _GRID_COLUMN_DEFS = [
         "sortable": True,
         "minWidth": 110,
         "valueFormatter": {"function": "params.value !== null ? d3.format('.4f')(params.value) : 'N/A'"},
+    },
+    {
+        "headerName": "Bench Score",
+        "field": "bench_score",
+        "filter": "agNumberColumnFilter",
+        "sortable": True,
+        "minWidth": 110,
+        "valueFormatter": {"function": "params.value !== null ? d3.format('.2f')(params.value) : ''"},
+    },
+    {
+        "headerName": "LME",
+        "field": "lme_accuracy",
+        "filter": "agNumberColumnFilter",
+        "sortable": True,
+        "minWidth": 80,
+        "valueFormatter": {"function": "params.value !== null ? d3.format('.0%')(params.value) : ''"},
+    },
+    {
+        "headerName": "LoCoMo",
+        "field": "locomo_accuracy",
+        "filter": "agNumberColumnFilter",
+        "sortable": True,
+        "minWidth": 90,
+        "valueFormatter": {"function": "params.value !== null ? d3.format('.0%')(params.value) : ''"},
+    },
+    {
+        "headerName": "ConvoMem",
+        "field": "convomem_accuracy",
+        "filter": "agNumberColumnFilter",
+        "sortable": True,
+        "minWidth": 100,
+        "valueFormatter": {"function": "params.value !== null ? d3.format('.0%')(params.value) : ''"},
     },
     {
         "headerName": "Status",
