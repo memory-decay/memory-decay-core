@@ -1733,58 +1733,87 @@ def _build_detail_view(exp_id: str, source_page: str = "leaderboard") -> list:
             ),
         ]
 
-    # Key metrics — show N/A for all when validation_failed (VAL-TABLE-014)
-    # Include percentiles and deltas for the main scores
-    key_metrics_with_meta = [
-        ("Overall Score", None if is_validation_failed else exp.overall_score, percentiles.get("overall_era"), deltas.get("overall")),
-        ("Retrieval Score", None if is_validation_failed else exp.retrieval_score, percentiles.get("retrieval_era"), deltas.get("retrieval")),
-        ("Plausibility Score", None if is_validation_failed else exp.plausibility_score, percentiles.get("plausibility_era"), deltas.get("plausibility")),
-    ]
-    
-    other_metrics = [
-        ("Recall Mean", None if is_validation_failed else exp.recall_mean),
-        ("Precision Mean", None if is_validation_failed else exp.precision_mean),
-        ("MRR Mean", None if is_validation_failed else exp.mrr_mean),
-        ("Correlation Score", None if is_validation_failed else exp.corr_score),
-        ("Retention AUC", None if is_validation_failed else exp.retention_auc),
-        ("Selectivity Score", None if is_validation_failed else exp.selectivity_score),
-    ]
+    if exp.era == "MemoryBench":
+        # MemoryBench: show bench_score + per-benchmark accuracy
+        bench_metrics = [
+            ("Bench Score", exp.bench_score, None, None),
+            ("LongMemEval", exp.lme_accuracy, None, None),
+            ("LoCoMo", exp.locomo_accuracy, None, None),
+            ("ConvoMem", exp.convomem_accuracy, None, None),
+        ]
+        metrics_html = [
+            html.H3("MemoryBench Scores", style={"marginTop": "24px", "marginBottom": "12px", "fontSize": "16px"}),
+            html.Div(
+                style={"display": "grid", "gridTemplateColumns": "repeat(auto-fill, minmax(200px, 1fr))", "gap": "12px"},
+                children=[
+                    _build_metric_card(name, val, percentile=perc, delta=delta_val)
+                    for name, val, perc, delta_val in bench_metrics
+                ],
+            ),
+        ]
 
-    metrics_html = [
-        html.H3("Key Metrics", style={"marginTop": "24px", "marginBottom": "12px", "fontSize": "16px"}),
-        html.Div(
-            style={"display": "grid", "gridTemplateColumns": "repeat(auto-fill, minmax(200px, 1fr))", "gap": "12px"},
-            children=[
-                _build_metric_card(name, val, percentile=perc, delta=delta_val)
-                for name, val, perc, delta_val in key_metrics_with_meta
-            ] + [
-                _build_metric_card(name, val)
-                for name, val in other_metrics
-            ],
-        ),
-    ]
+        # Radar chart + Progression chart replace later_html
+        radar_fig = charts.build_benchmark_radar(exp)
+        progression_fig = charts.build_bench_score_progression(_experiments)
+        later_html = [
+            html.H3("Benchmark Distribution", style={"marginTop": "24px", "marginBottom": "12px", "fontSize": "16px"}),
+            dcc.Graph(figure=radar_fig, config={"displayModeBar": False}),
+            html.H3("Score Progression", style={"marginTop": "24px", "marginBottom": "12px", "fontSize": "16px"}),
+            dcc.Graph(figure=progression_fig, config={"displayModeBar": False}),
+        ]
+    else:
+        # Key metrics — show N/A for all when validation_failed (VAL-TABLE-014)
+        # Include percentiles and deltas for the main scores
+        key_metrics_with_meta = [
+            ("Overall Score", None if is_validation_failed else exp.overall_score, percentiles.get("overall_era"), deltas.get("overall")),
+            ("Retrieval Score", None if is_validation_failed else exp.retrieval_score, percentiles.get("retrieval_era"), deltas.get("retrieval")),
+            ("Plausibility Score", None if is_validation_failed else exp.plausibility_score, percentiles.get("plausibility_era"), deltas.get("plausibility")),
+        ]
 
-    # Later-era metrics — always show, with "N/A" for missing (VAL-TABLE-012)
-    later_metrics = [
-        ("Strict Score", None if is_validation_failed else exp.strict_score),
-        ("Forgetting Depth", None if is_validation_failed else exp.forgetting_depth),
-        ("Forgetting Score", None if is_validation_failed else exp.forgetting_score),
-        ("Eval V2 Score", None if is_validation_failed else exp.eval_v2_score),
-    ]
-    later_html = [
-        html.H3("Strict Validation & Extended Metrics", style={"marginTop": "24px", "marginBottom": "12px", "fontSize": "16px"}),
-        html.Div(
-            style={"display": "grid", "gridTemplateColumns": "repeat(auto-fill, minmax(200px, 1fr))", "gap": "12px"},
-            children=[
-                _build_metric_card(
-                    name, val,
-                    bg_color="#fff8e1", border_color="#ffe082",
-                    label_color="#856404",
-                )
-                for name, val in later_metrics
-            ],
-        ),
-    ]
+        other_metrics = [
+            ("Recall Mean", None if is_validation_failed else exp.recall_mean),
+            ("Precision Mean", None if is_validation_failed else exp.precision_mean),
+            ("MRR Mean", None if is_validation_failed else exp.mrr_mean),
+            ("Correlation Score", None if is_validation_failed else exp.corr_score),
+            ("Retention AUC", None if is_validation_failed else exp.retention_auc),
+            ("Selectivity Score", None if is_validation_failed else exp.selectivity_score),
+        ]
+
+        metrics_html = [
+            html.H3("Key Metrics", style={"marginTop": "24px", "marginBottom": "12px", "fontSize": "16px"}),
+            html.Div(
+                style={"display": "grid", "gridTemplateColumns": "repeat(auto-fill, minmax(200px, 1fr))", "gap": "12px"},
+                children=[
+                    _build_metric_card(name, val, percentile=perc, delta=delta_val)
+                    for name, val, perc, delta_val in key_metrics_with_meta
+                ] + [
+                    _build_metric_card(name, val)
+                    for name, val in other_metrics
+                ],
+            ),
+        ]
+
+        # Later-era metrics — always show, with "N/A" for missing (VAL-TABLE-012)
+        later_metrics = [
+            ("Strict Score", None if is_validation_failed else exp.strict_score),
+            ("Forgetting Depth", None if is_validation_failed else exp.forgetting_depth),
+            ("Forgetting Score", None if is_validation_failed else exp.forgetting_score),
+            ("Eval V2 Score", None if is_validation_failed else exp.eval_v2_score),
+        ]
+        later_html = [
+            html.H3("Strict Validation & Extended Metrics", style={"marginTop": "24px", "marginBottom": "12px", "fontSize": "16px"}),
+            html.Div(
+                style={"display": "grid", "gridTemplateColumns": "repeat(auto-fill, minmax(200px, 1fr))", "gap": "12px"},
+                children=[
+                    _build_metric_card(
+                        name, val,
+                        bg_color="#fff8e1", border_color="#ffe082",
+                        label_color="#856404",
+                    )
+                    for name, val in later_metrics
+                ],
+            ),
+        ]
 
     # Hypothesis section (VAL-TABLE-013)
     hypothesis_section = [
