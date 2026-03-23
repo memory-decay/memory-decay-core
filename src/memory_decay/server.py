@@ -17,6 +17,7 @@ import numpy as np
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from .cache_builder import load_cached_embedder
 from .decay import DecayEngine
 from .embedding_provider import EmbeddingProvider, create_embedding_provider
 from .graph import MemoryGraph
@@ -27,6 +28,7 @@ from .persistence import MemoryPersistence
 # ---------------------------------------------------------------------------
 
 _PACKAGE_ROOT = Path(__file__).resolve().parent.parent.parent  # repo root
+_DEFAULT_CACHE_DIR = _PACKAGE_ROOT / "cache"
 
 
 def _load_best_experiment(experiment_dir: Path | None = None) -> tuple[dict, object | None]:
@@ -53,6 +55,20 @@ def _load_best_experiment(experiment_dir: Path | None = None) -> tuple[dict, obj
 
     return params, decay_fn
 
+
+def _resolve_cache_dir(cache_dir: str | None) -> Path | None:
+    """Return the embedding cache dir when one is available."""
+    if cache_dir:
+        resolved = Path(cache_dir)
+        if not (resolved / "embeddings.pkl").exists():
+            raise FileNotFoundError(f"Embedding cache not found at {resolved / 'embeddings.pkl'}")
+        return resolved
+
+    if (_DEFAULT_CACHE_DIR / "embeddings.pkl").exists():
+        return _DEFAULT_CACHE_DIR
+
+    return None
+
 # ---------------------------------------------------------------------------
 # Request / Response models
 # ---------------------------------------------------------------------------
@@ -65,6 +81,7 @@ class StoreRequest(BaseModel):
     mtype: str = "fact"
     associations: list[str] | None = None
     created_tick: int | None = None
+    speaker: str | None = None
 
 
 class SearchRequest(BaseModel):
@@ -121,6 +138,7 @@ _state: ServerState | None = None
 
 def create_app(
     embedding_provider: EmbeddingProvider | None = None,
+    cache_dir: str | None = None,
     persistence_dir: str | None = None,
     tick_interval_seconds: float = 3600.0,
     experiment_dir: Path | str | None = None,
@@ -135,7 +153,25 @@ def create_app(
     async def lifespan(app: FastAPI):
         global _state
 
+        resolved_cache_dir = _resolve_cache_dir(cache_dir)
+
+        fallback_embedder = None
         if _test_embedder:
+            fallback_embedder = _test_embedder
+        elif embedding_provider:
+            fallback_embedder = embedding_provider.embed
+
+        if resolved_cache_dir is not None:
+            if fallback_embedder is None:
+                fallback_graph = MemoryGraph(embedding_backend="auto")
+                fallback_embedder = fallback_graph._embed_text
+
+            cached_embedder = load_cached_embedder(
+                str(resolved_cache_dir),
+                fallback_embedder=fallback_embedder,
+            )
+            graph = MemoryGraph(embedder=cached_embedder)
+        elif _test_embedder:
             graph = MemoryGraph(embedder=_test_embedder)
         elif embedding_provider:
             graph = MemoryGraph(embedder=embedding_provider.embed)
@@ -201,10 +237,37 @@ def create_app(
             impact=req.importance,
             created_tick=req.created_tick if req.created_tick is not None else _state.current_tick,
             associations=associations,
+            speaker=req.speaker,
         )
         _state.maybe_auto_save()
 
         return {"id": memory_id, "text": req.text, "tick": _state.current_tick}
+
+    @app.post("/store-batch")
+    def store_batch(items: list[StoreRequest]):
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+
+        ids = []
+        for req in items:
+            memory_id = _state.next_memory_id()
+            associations = None
+            if req.associations:
+                associations = [(a, 0.5) for a in req.associations]
+
+            _state.graph.add_memory(
+                memory_id=memory_id,
+                mtype=req.mtype,
+                content=req.text,
+                impact=req.importance,
+                created_tick=req.created_tick if req.created_tick is not None else _state.current_tick,
+                associations=associations,
+                speaker=req.speaker,
+            )
+            ids.append(memory_id)
+        _state.maybe_auto_save()
+
+        return {"ids": ids, "count": len(ids), "tick": _state.current_tick}
 
     @app.post("/search")
     def search(req: SearchRequest):
@@ -218,6 +281,8 @@ def create_app(
             current_tick=_state.current_tick,
             activation_weight=params.get("activation_weight", 0.5),
             assoc_boost=params.get("assoc_boost", 0.0),
+            bm25_weight=params.get("bm25_weight", 0.0),
+            bm25_candidates=params.get("bm25_candidates", 30),
         )
 
         enriched = []
@@ -232,6 +297,7 @@ def create_app(
                     "retrieval_score": round(node.get("retrieval_score", 0.0), 4),
                     "category": node.get("type", "unknown"),
                     "created_tick": node.get("created_tick", 0),
+                    "speaker": node.get("speaker", ""),
                 })
         return {"results": enriched}
 
@@ -315,6 +381,8 @@ def main():
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8100)
     parser.add_argument("--persistence-dir", default=None)
+    parser.add_argument("--cache-dir", default=None,
+                        help="Path to embedding cache dir (default: auto-detect ./cache)")
     parser.add_argument("--experiment-dir", default=None,
                         help="Path to experiment dir (default: experiments/best)")
     parser.add_argument("--tick-interval", type=float, default=3600.0,
@@ -335,6 +403,7 @@ def main():
 
     app = create_app(
         embedding_provider=provider,
+        cache_dir=args.cache_dir,
         persistence_dir=args.persistence_dir,
         tick_interval_seconds=args.tick_interval,
         experiment_dir=args.experiment_dir,

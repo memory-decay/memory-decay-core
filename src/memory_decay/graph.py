@@ -147,6 +147,7 @@ class MemoryGraph:
         impact: float,
         created_tick: int,
         associations: list[tuple[str, float]] | None = None,
+        speaker: str | None = None,
     ) -> None:
         """Insert a memory node with associations."""
         embedding = self._embed_text(content)
@@ -165,6 +166,7 @@ class MemoryGraph:
             last_activated_tick=created_tick,
             retrieval_count=0,
             last_reinforced_tick=created_tick,
+            speaker=speaker or "",
         )
 
         if associations:
