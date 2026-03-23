@@ -2167,3 +2167,48 @@ class TestMemoryBenchEra:
         assert exp.lme_accuracy is None
         assert exp.locomo_accuracy is None
         assert exp.convomem_accuracy is None
+
+
+# ---------------------------------------------------------------------------
+# MemoryBench charts
+# ---------------------------------------------------------------------------
+
+class TestBenchCharts:
+    """Tests for MemoryBench chart builders."""
+
+    def test_build_bench_score_progression(self):
+        from dashboard.charts import build_bench_score_progression
+
+        experiments = [
+            Experiment(id="exp_bench_0001", era="MemoryBench", phase=10,
+                       dir_path="/tmp/e1", status="completed",
+                       bench_score=0.51, lme_accuracy=0.55,
+                       locomo_accuracy=0.15, convomem_accuracy=0.95),
+            Experiment(id="exp_bench_0002", era="MemoryBench", phase=10,
+                       dir_path="/tmp/e2", status="completed",
+                       bench_score=0.85, lme_accuracy=0.70,
+                       locomo_accuracy=1.00, convomem_accuracy=1.00),
+        ]
+        fig = build_bench_score_progression(experiments)
+        assert fig is not None
+        # 4 traces: bench_score + 3 benchmark accuracies
+        assert len(fig.data) == 4
+
+    def test_build_bench_score_progression_empty(self):
+        from dashboard.charts import build_bench_score_progression
+
+        fig = build_bench_score_progression([])
+        assert fig is not None
+        assert len(fig.data) == 0
+
+    def test_build_benchmark_radar(self):
+        from dashboard.charts import build_benchmark_radar
+
+        exp = Experiment(id="exp_bench_0001", era="MemoryBench", phase=10,
+                         dir_path="/tmp/e1", status="completed",
+                         bench_score=0.85, lme_accuracy=0.70,
+                         locomo_accuracy=1.00, convomem_accuracy=1.00)
+        fig = build_benchmark_radar(exp)
+        assert fig is not None
+        # 2 traces: actual values + 70% target ring
+        assert len(fig.data) == 2

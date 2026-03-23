@@ -39,6 +39,7 @@ PHASE_NAMES: dict[int, str] = {
     7: "LongMemEval Integration",
     8: "LongMemEval Auto-Research",
     9: "Batch Embedding & Strict",
+    10: "MemoryBench",
 }
 
 # Phase colors for background shading (semi-transparent, distinct)
@@ -52,6 +53,7 @@ PHASE_COLORS: dict[int, str] = {
     7: "#FFB300",  # Amber
     8: "#3949AB",  # Indigo
     9: "#6D4C41",  # Brown
+    10: "#00897B",  # Teal
 }
 
 # Phase colors with alpha for timeline bars
@@ -65,6 +67,7 @@ PHASE_BAR_COLORS: dict[int, str] = {
     7: "#FFE082",
     8: "#9FA8DA",
     9: "#BCAAA4",
+    10: "#80CBC4",
 }
 
 # Retention curve palette (10 distinct colors)
@@ -1807,5 +1810,102 @@ def build_phase_distribution_chart(phase_dist: dict[int, int]) -> go.Figure:
         showlegend=False,
         yaxis=dict(autorange="reversed"),
     )
-    
+
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# MemoryBench charts
+# ---------------------------------------------------------------------------
+
+def build_bench_score_progression(
+    experiments: list[Experiment],
+) -> go.Figure:
+    """Line chart showing bench_score and per-benchmark accuracy over experiments."""
+    bench_exps = [e for e in experiments if e.era == "MemoryBench" and e.bench_score is not None]
+    bench_exps.sort(key=lambda e: int(e.id.split("_")[2]))
+
+    if not bench_exps:
+        fig = go.Figure()
+        fig.update_layout(title="MemoryBench Score Progression (no data)")
+        return fig
+
+    ids = [e.id for e in bench_exps]
+
+    fig = go.Figure()
+
+    # Composite bench_score
+    fig.add_trace(go.Scatter(
+        x=ids, y=[e.bench_score for e in bench_exps],
+        name="bench_score", mode="lines+markers",
+        line=dict(color="#1565C0", width=3),
+        marker=dict(size=8),
+    ))
+
+    # Per-benchmark accuracies
+    for label, attr, color in [
+        ("LongMemEval", "lme_accuracy", "#E65100"),
+        ("LoCoMo", "locomo_accuracy", "#2E7D32"),
+        ("ConvoMem", "convomem_accuracy", "#6A1B9A"),
+    ]:
+        fig.add_trace(go.Scatter(
+            x=ids, y=[getattr(e, attr) for e in bench_exps],
+            name=label, mode="lines+markers",
+            line=dict(color=color, width=2, dash="dot"),
+            marker=dict(size=6),
+        ))
+
+    # 70% target line
+    fig.add_hline(y=0.70, line_dash="dash", line_color="red",
+                  annotation_text="70% target", annotation_position="top right")
+
+    fig.update_layout(
+        title="MemoryBench Score Progression",
+        xaxis_title="Experiment",
+        yaxis_title="Score / Accuracy",
+        yaxis=dict(range=[0, 1.05]),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        height=400,
+    )
+
+    return fig
+
+
+def build_benchmark_radar(experiment: Experiment) -> go.Figure:
+    """Radar chart showing per-benchmark accuracy for a single experiment."""
+    categories = ["LongMemEval", "LoCoMo", "ConvoMem"]
+    values = [
+        experiment.lme_accuracy or 0,
+        experiment.locomo_accuracy or 0,
+        experiment.convomem_accuracy or 0,
+    ]
+    # Close the polygon
+    categories_closed = categories + [categories[0]]
+    values_closed = values + [values[0]]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatterpolar(
+        r=values_closed,
+        theta=categories_closed,
+        fill="toself",
+        fillcolor="rgba(21, 101, 192, 0.2)",
+        line=dict(color="#1565C0", width=2),
+        name=experiment.id,
+    ))
+
+    # 70% target ring
+    target = [0.70] * 4
+    fig.add_trace(go.Scatterpolar(
+        r=target, theta=categories_closed,
+        line=dict(color="red", dash="dash", width=1),
+        name="70% target",
+        fill=None,
+    ))
+
+    fig.update_layout(
+        polar=dict(radialaxis=dict(visible=True, range=[0, 1.05])),
+        title=f"Benchmark Accuracy: {experiment.id}",
+        height=350,
+        showlegend=False,
+    )
     return fig
