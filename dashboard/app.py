@@ -993,13 +993,22 @@ app.layout = html.Div(
                             style={"marginBottom": "24px"},
                             children=[dcc.Graph(id="phase-timeline-graph", config={"displayModeBar": False})],
                         ),
-                        # Metric progression charts
+                        # Metric progression charts (old eras)
                         html.Div(
+                            id="old-era-metrics-container",
                             style={"display": "grid", "gridTemplateColumns": "repeat(1, 1fr)", "gap": "16px"},
                             children=[
                                 dcc.Graph(id="metric-overall-graph", config={"displayModeBar": True}),
                                 dcc.Graph(id="metric-retrieval-graph", config={"displayModeBar": True}),
                                 dcc.Graph(id="metric-plausibility-graph", config={"displayModeBar": True}),
+                            ],
+                        ),
+                        # Metric progression chart (MemoryBench era)
+                        html.Div(
+                            id="bench-metrics-container",
+                            style={"display": "none"},
+                            children=[
+                                dcc.Graph(id="metric-bench-graph", config={"displayModeBar": True}),
                             ],
                         ),
                     ],
@@ -2775,6 +2784,9 @@ def clear_phase_filter(n_clicks: int) -> None:
         Output("metric-overall-graph", "figure"),
         Output("metric-retrieval-graph", "figure"),
         Output("metric-plausibility-graph", "figure"),
+        Output("metric-bench-graph", "figure"),
+        Output("old-era-metrics-container", "style"),
+        Output("bench-metrics-container", "style"),
     ],
     [
         Input("era-dropdown", "value"),
@@ -2784,14 +2796,32 @@ def clear_phase_filter(n_clicks: int) -> None:
 )
 def update_metric_progression(era: str, selected_phase: int | None, active_page: str) -> tuple:
     """Update metric progression charts on era, phase, or page change."""
-    # Only build charts when timeline page is active to save computation
     if active_page != "timeline":
-        return dash.no_update, dash.no_update, dash.no_update
+        return (dash.no_update,) * 6
 
-    figs = charts.build_metric_progression(_experiments, era, selected_phase)
-    if len(figs) == 3:
-        return figs[0], figs[1], figs[2]
-    return dash.no_update, dash.no_update, dash.no_update
+    empty_fig = go.Figure()
+    empty_fig.update_layout(height=100, margin={"t": 0, "b": 0, "l": 0, "r": 0})
+
+    if era == "MemoryBench":
+        # Show bench_score progression, hide old-era charts
+        bench_fig = charts.build_bench_score_progression(_experiments)
+        return (
+            empty_fig, empty_fig, empty_fig,
+            bench_fig,
+            {"display": "none"},
+            {"display": "block"},
+        )
+    else:
+        # Show old-era charts, hide bench chart
+        figs = charts.build_metric_progression(_experiments, era, selected_phase)
+        if len(figs) == 3:
+            return (
+                figs[0], figs[1], figs[2],
+                empty_fig,
+                {"display": "grid", "gridTemplateColumns": "repeat(1, 1fr)", "gap": "16px"},
+                {"display": "none"},
+            )
+        return (dash.no_update,) * 6
 
 
 # ---------------------------------------------------------------------------
