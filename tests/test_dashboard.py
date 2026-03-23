@@ -2168,6 +2168,24 @@ class TestMemoryBenchEra:
         assert exp.locomo_accuracy is None
         assert exp.convomem_accuracy is None
 
+    def test_load_history_bench_entries(self, experiments_dir):
+        """History entries with bench_score should be loaded correctly."""
+        history_path = experiments_dir / "history.jsonl"
+        lines = [
+            json.dumps({"exp": "exp_bench_0001", "bench_score": 0.62,
+                         "lme_acc": 0.60, "locomo_acc": 0.40,
+                         "convomem_acc": 1.00, "status": "improved"}),
+            json.dumps({"exp": "exp_bench_0001-promptv2", "bench_score": 0.85,
+                         "lme_acc": 0.70, "locomo_acc": 1.00,
+                         "convomem_acc": 1.00, "status": "improved"}),
+        ]
+        history_path.write_text("\n".join(lines))
+
+        entries = load_history(str(history_path))
+        assert len(entries) == 2
+        assert entries[0]["bench_score"] == 0.62
+        assert entries[1]["bench_score"] == 0.85
+
 
 # ---------------------------------------------------------------------------
 # MemoryBench charts
