@@ -25,9 +25,10 @@ from typing import Any, Optional
 
 _EXP_OLD_RE = re.compile(r"^exp_(\d{4})$")
 _EXP_NEW_RE = re.compile(r"^exp_lme_(\d{4})$")
+_EXP_BENCH_RE = re.compile(r"^exp_bench_(\d{4})$")
 
 # Directories at maxdepth 1 that match these patterns are experiments
-_EXPERIMENT_NAME_RE = re.compile(r"^exp(_lme)?_\d{4}$")
+_EXPERIMENT_NAME_RE = re.compile(r"^exp(_lme|_bench)?_\d{4}$")
 
 # Non-experiment entries to exclude
 _EXCLUDED_ENTRIES = {
@@ -53,6 +54,7 @@ PHASE_RANGES: dict[int, list[tuple[str, int, int]]] = {
     7: [("new", 0, 0)],        # LongMemEval Integration
     8: [("new", 1, 45)],       # LongMemEval Auto-Research
     9: [("new", 46, 9999)],    # Batch Embedding & Strict
+   10: [("bench", 0, 9999)],   # MemoryBench
 }
 
 
@@ -60,8 +62,11 @@ def classify_era(exp_id: str) -> str:
     """Classify experiment by naming pattern into era.
 
     Returns:
-        'memories_500' for exp_NNNN, 'LongMemEval' for exp_lme_NNNN.
+        'memories_500' for exp_NNNN, 'LongMemEval' for exp_lme_NNNN,
+        'MemoryBench' for exp_bench_NNNN.
     """
+    if _EXP_BENCH_RE.match(exp_id):
+        return "MemoryBench"
     if _EXP_NEW_RE.match(exp_id):
         return "LongMemEval"
     if _EXP_OLD_RE.match(exp_id):
@@ -80,6 +85,7 @@ def get_phase(exp_id: str) -> Optional[int]:
     """
     m_old = _EXP_OLD_RE.match(exp_id)
     m_new = _EXP_NEW_RE.match(exp_id)
+    m_bench = _EXP_BENCH_RE.match(exp_id)
 
     if m_old:
         num = int(m_old.group(1))
@@ -87,6 +93,9 @@ def get_phase(exp_id: str) -> Optional[int]:
     elif m_new:
         num = int(m_new.group(1))
         era = "new"
+    elif m_bench:
+        num = int(m_bench.group(1))
+        era = "bench"
     else:
         return None
 
@@ -140,6 +149,13 @@ class Experiment:
     forgetting_score: Optional[float] = None
     selectivity_score: Optional[float] = None
     robustness_score: Optional[float] = None
+
+    # MemoryBench metrics (from bench_results.json)
+    bench_score: Optional[float] = None
+    lme_accuracy: Optional[float] = None
+    locomo_accuracy: Optional[float] = None
+    convomem_accuracy: Optional[float] = None
+    bench_config: dict[str, Any] = field(default_factory=dict)
 
     # Composite structures
     threshold_metrics: dict[str, dict[str, float]] = field(default_factory=dict)
@@ -255,6 +271,35 @@ def load_experiment(exp_dir: str) -> Experiment:
     exp_name = os.path.basename(exp_dir)
     era = classify_era(exp_name)
     phase = get_phase(exp_name)
+
+    # MemoryBench era: load bench_results.json instead of results.json
+    if era == "MemoryBench":
+        bench_path = os.path.join(exp_dir, "bench_results.json")
+        bench_data, bench_error = _safe_load_json(bench_path)
+        if bench_error:
+            return Experiment(id=exp_name, era=era, phase=phase, dir_path=exp_dir,
+                              status="parse_error", error=bench_error)
+        if bench_data is None:
+            # No bench_results.json — check for params only
+            params_data, _ = _safe_load_json(os.path.join(exp_dir, "params.json"))
+            hypothesis = _safe_load_text(os.path.join(exp_dir, "hypothesis.txt"))
+            return Experiment(id=exp_name, era=era, phase=phase, dir_path=exp_dir,
+                              status="no_results", params=params_data or {},
+                              hypothesis=hypothesis)
+        benchmarks = bench_data.get("benchmarks", {})
+        params_data, _ = _safe_load_json(os.path.join(exp_dir, "params.json"))
+        hypothesis = _safe_load_text(os.path.join(exp_dir, "hypothesis.txt"))
+        return Experiment(
+            id=exp_name, era=era, phase=phase, dir_path=exp_dir,
+            status="completed",
+            bench_score=bench_data.get("bench_score"),
+            lme_accuracy=benchmarks.get("longmemeval", {}).get("accuracy"),
+            locomo_accuracy=benchmarks.get("locomo", {}).get("accuracy"),
+            convomem_accuracy=benchmarks.get("convomem", {}).get("accuracy"),
+            bench_config=bench_data.get("config", {}),
+            params=params_data or {},
+            hypothesis=hypothesis,
+        )
 
     # Try loading results.json
     results_path = os.path.join(exp_dir, "results.json")

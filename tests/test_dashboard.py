@@ -762,8 +762,8 @@ class TestPerformance:
 class TestPhaseConstants:
 
     def test_phase_ranges_coverage(self):
-        """All 10 phases (0-9) defined."""
-        assert set(PHASE_RANGES.keys()) == set(range(10))
+        """All 11 phases (0-10) defined."""
+        assert set(PHASE_RANGES.keys()) == set(range(11))
 
     def test_get_phase(self):
         assert get_phase("exp_0010") == 1
@@ -2098,3 +2098,72 @@ class TestCrossAreaFilterConsistency:
         for exp_id in filtered:
             exp = next((e for e in all_experiments if e.id == exp_id), None)
             assert exp is not None and exp.phase == 8
+
+
+# ---------------------------------------------------------------------------
+# MemoryBench era experiments (exp_bench_NNNN style)
+# ---------------------------------------------------------------------------
+
+class TestMemoryBenchEra:
+    """Tests for MemoryBench era experiment loading."""
+
+    def test_classify_era_bench(self):
+        assert classify_era("exp_bench_0001") == "MemoryBench"
+
+    def test_classify_era_bench_high_number(self):
+        assert classify_era("exp_bench_9999") == "MemoryBench"
+
+    def test_get_phase_bench(self):
+        assert get_phase("exp_bench_0001") == 10
+
+    def test_load_bench_experiment_with_results(self, experiments_dir):
+        exp_dir = experiments_dir / "exp_bench_0001"
+        exp_dir.mkdir()
+        _write_json(exp_dir / "bench_results.json", {
+            "bench_score": 0.85,
+            "benchmarks": {
+                "longmemeval": {"accuracy": 0.70, "total": 10, "correct": 7, "run_id": "r1"},
+                "locomo": {"accuracy": 1.00, "total": 10, "correct": 10, "run_id": "r2"},
+                "convomem": {"accuracy": 1.00, "total": 10, "correct": 10, "run_id": "r3"},
+            },
+            "config": {"activation_weight": 0.05, "top_k": 20},
+        })
+        _write_json(exp_dir / "params.json", {"activation_weight": 0.05})
+        _write_text(exp_dir / "hypothesis.txt", "prompt v2")
+
+        experiments = load_all_experiments(str(experiments_dir))
+        assert len(experiments) == 1
+        exp = experiments[0]
+        assert exp.id == "exp_bench_0001"
+        assert exp.era == "MemoryBench"
+        assert exp.bench_score == 0.85
+        assert exp.lme_accuracy == 0.70
+        assert exp.locomo_accuracy == 1.00
+        assert exp.convomem_accuracy == 1.00
+        assert exp.status == "completed"
+
+    def test_load_bench_experiment_no_results(self, experiments_dir):
+        exp_dir = experiments_dir / "exp_bench_0003"
+        exp_dir.mkdir()
+        _write_json(exp_dir / "params.json", {"activation_weight": 0.1})
+
+        experiments = load_all_experiments(str(experiments_dir))
+        assert len(experiments) == 1
+        exp = experiments[0]
+        assert exp.status == "no_results"
+        assert exp.bench_score is None
+
+    def test_load_bench_experiment_empty_benchmarks(self, experiments_dir):
+        exp_dir = experiments_dir / "exp_bench_0002"
+        exp_dir.mkdir()
+        _write_json(exp_dir / "bench_results.json", {
+            "bench_score": 0.0,
+            "benchmarks": {},
+        })
+
+        experiments = load_all_experiments(str(experiments_dir))
+        exp = experiments[0]
+        assert exp.bench_score == 0.0
+        assert exp.lme_accuracy is None
+        assert exp.locomo_accuracy is None
+        assert exp.convomem_accuracy is None
