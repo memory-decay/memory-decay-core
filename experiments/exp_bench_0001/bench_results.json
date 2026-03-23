@@ -1,26 +1,14 @@
 {
-  "bench_score": 0.505,
+  "bench_score": 0.62,
   "benchmarks": {
-    "longmemeval": {
-      "accuracy": 0.45,
-      "total": 20,
-      "correct": 9,
-      "mrr": 0.7406,
-      "run_id": "exp_bench_0001-longmemeval"
-    },
-    "locomo": {
-      "accuracy": 0.3,
-      "total": 20,
-      "correct": 6,
-      "mrr": 0.4042,
-      "run_id": "exp_bench_0001-locomo"
-    },
-    "convomem": {
-      "accuracy": 0.95,
-      "total": 20,
-      "correct": 19,
-      "mrr": 0.975,
-      "run_id": "exp_bench_0001-convomem"
-    }
+    "longmemeval": {"accuracy": 0.60, "total": 10, "correct": 6, "mrr": 0.631, "run_id": "hybrid15-longmemeval"},
+    "locomo": {"accuracy": 0.40, "total": 10, "correct": 4, "mrr": 0.698, "run_id": "hybrid15-locomo"},
+    "convomem": {"accuracy": 1.00, "total": 10, "correct": 10, "mrr": 1.000, "run_id": "hybrid15-convomem"}
+  },
+  "config": {
+    "activation_weight": 0.05,
+    "min_chunk_size": 15,
+    "top_k": 20,
+    "bm25_weight": 0.0
   }
 }
