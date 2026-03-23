@@ -363,6 +363,23 @@ _GRID_COLUMN_DEFS = [
     },
 ]
 
+# --- Era-specific column sets ---
+_OLD_ERA_METRIC_COLS = [c for c in _GRID_COLUMN_DEFS if c["field"] in ("overall_score", "retrieval_score", "plausibility_score")]
+_BENCH_METRIC_COLS = [c for c in _GRID_COLUMN_DEFS if c["field"] in ("bench_score", "lme_accuracy", "locomo_accuracy", "convomem_accuracy")]
+_COMMON_COLS_BEFORE = [c for c in _GRID_COLUMN_DEFS if c["field"] == "id"]
+_COMMON_COLS_AFTER = [c for c in _GRID_COLUMN_DEFS if c["field"] in ("status", "hypothesis")]
+
+
+def _get_column_defs_for_era(era: str) -> list[dict]:
+    """Return column definitions appropriate for the selected era."""
+    if era == "MemoryBench":
+        return _COMMON_COLS_BEFORE + _BENCH_METRIC_COLS + _COMMON_COLS_AFTER
+    elif era == "All":
+        return _GRID_COLUMN_DEFS
+    else:
+        return _COMMON_COLS_BEFORE + _OLD_ERA_METRIC_COLS + _COMMON_COLS_AFTER
+
+
 _PIPELINE_GRID_COLUMN_DEFS = [
     {
         "headerName": "Type",
@@ -766,6 +783,8 @@ app.layout = html.Div(
                                 "padding": "16px 24px",
                                 "backgroundColor": "#f8f9fa",
                                 "borderBottom": "1px solid #dee2e6",
+                                "maxHeight": "140px",
+                                "overflow": "hidden",
                             },
                             children=[
                                 html.Div(
@@ -861,7 +880,7 @@ app.layout = html.Div(
                                             },
                                             children=[
                                                 html.Div("Phase Distribution", style={"fontSize": "11px", "color": "#6c757d", "textTransform": "uppercase", "letterSpacing": "0.5px", "padding": "4px 8px"}),
-                                                dcc.Graph(id="kpi-phase-chart", config={"displayModeBar": False}, style={"height": "100%"}),
+                                                dcc.Graph(id="kpi-phase-chart", config={"displayModeBar": False}, style={"height": "80px"}),
                                             ],
                                         ),
                                     ],
@@ -1507,15 +1526,31 @@ def _build_row_data(
     df: pd.DataFrame,
 ) -> list[dict]:
     """Convert DataFrame to AG Grid row data."""
+    def _nan_to_none(v: object) -> object:
+        """Convert pandas NaN to None for AG Grid (NaN renders as 'NaN' in JS)."""
+        if v is None:
+            return None
+        try:
+            import math
+            if isinstance(v, float) and math.isnan(v):
+                return None
+        except (TypeError, ValueError):
+            pass
+        return v
+
     rows = []
     for _, row in df.iterrows():
         rows.append({
             "id": row["id"],
             "era": row["era"],
             "phase": row["phase"],
-            "overall_score": row["overall_score"],
-            "retrieval_score": row["retrieval_score"],
-            "plausibility_score": row["plausibility_score"],
+            "overall_score": _nan_to_none(row["overall_score"]),
+            "retrieval_score": _nan_to_none(row["retrieval_score"]),
+            "plausibility_score": _nan_to_none(row["plausibility_score"]),
+            "bench_score": _nan_to_none(row["bench_score"]),
+            "lme_accuracy": _nan_to_none(row["lme_accuracy"]),
+            "locomo_accuracy": _nan_to_none(row["locomo_accuracy"]),
+            "convomem_accuracy": _nan_to_none(row["convomem_accuracy"]),
             "status": row["status"],
             "hypothesis": row["hypothesis"],
         })
@@ -2116,6 +2151,7 @@ def _build_detail_view(exp_id: str, source_page: str = "leaderboard") -> list:
 @callback(
     [
         Output("leaderboard-grid", "rowData"),
+        Output("leaderboard-grid", "columnDefs"),
         Output("experiment-count", "children"),
         Output("sort-indicator", "children"),
     ],
@@ -2133,7 +2169,7 @@ def update_leaderboard(
     search: str | None,
     sort_state: dict | None,
     selected_phase: int | None,
-) -> tuple[list[dict], list, str]:
+) -> tuple[list[dict], list[dict], list, str]:
     """Update leaderboard table based on filters, search, sort, and phase.
 
     VAL-CROSS-001: era filter propagates atomically to leaderboard.
@@ -2174,7 +2210,10 @@ def update_leaderboard(
     col_label = sort_col.replace("_", " ").title()
     sort_text = f"Sorted by {col_label} {arrow}"
 
-    return row_data, count_children, sort_text
+    # Dynamic columns: hide irrelevant metric columns based on era
+    col_defs = _get_column_defs_for_era(era)
+
+    return row_data, col_defs, count_children, sort_text
 
 
 @callback(
