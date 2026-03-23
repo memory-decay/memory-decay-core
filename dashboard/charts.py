@@ -1690,10 +1690,12 @@ def calculate_dashboard_kpis(
             "validation_failed_count": 0,
         }
     
-    # Best score (prefer CV mean, fallback to overall_score)
+    # Best score (prefer CV mean, fallback to overall_score or bench_score)
     best_score = -1.0
     best_id = None
-    if cv_data:
+    is_bench_era = era == "MemoryBench"
+
+    if cv_data and not is_bench_era:
         for exp_id, cv in cv_data.items():
             exp = next((e for e in filtered if e.id == exp_id), None)
             if exp is None:
@@ -1706,16 +1708,24 @@ def calculate_dashboard_kpis(
             if score is not None and score > best_score:
                 best_score = score
                 best_id = exp_id
-    
-    # Fallback to overall_score
+
+    # Fallback to overall_score or bench_score depending on era
     for exp in filtered:
+        if is_bench_era or exp.overall_score is None:
+            if exp.bench_score is not None and exp.bench_score > best_score:
+                best_score = exp.bench_score
+                best_id = exp.id
         if exp.overall_score is not None and exp.overall_score > best_score:
             best_score = exp.overall_score
             best_id = exp.id
-    
-    # Average overall_score (excluding validation_failed and None)
-    scored = [e.overall_score for e in filtered 
-              if e.overall_score is not None and e.status != "validation_failed"]
+
+    # Average score (excluding validation_failed and None)
+    if is_bench_era:
+        scored = [e.bench_score for e in filtered
+                  if e.bench_score is not None and e.status != "validation_failed"]
+    else:
+        scored = [e.overall_score for e in filtered
+                  if e.overall_score is not None and e.status != "validation_failed"]
     avg_score = sum(scored) / len(scored) if scored else None
     
     # Success rate (completed / total)
@@ -1749,23 +1759,29 @@ def calculate_dashboard_kpis(
 
 def _calculate_recent_trend(experiments: list[Experiment]) -> dict[str, Any] | None:
     """Calculate trend from recent experiments vs previous batch.
-    
-    Compares average overall_score of last 10 experiments vs the 10 before that.
+
+    Compares average score of last 10 experiments vs the 10 before that.
+    Uses bench_score for MemoryBench experiments, overall_score otherwise.
     """
+    def _get_score(e: Experiment) -> float | None:
+        if e.bench_score is not None:
+            return e.bench_score
+        return e.overall_score
+
     # Sort by ID (chronological within era)
     sorted_exps = sorted(
-        [e for e in experiments if e.overall_score is not None and e.status != "validation_failed"],
+        [e for e in experiments if _get_score(e) is not None and e.status != "validation_failed"],
         key=lambda e: e.id
     )
-    
+
     if len(sorted_exps) < 20:
         return None
-    
+
     recent_10 = sorted_exps[-10:]
     previous_10 = sorted_exps[-20:-10]
-    
-    recent_avg = sum(e.overall_score for e in recent_10) / len(recent_10)
-    previous_avg = sum(e.overall_score for e in previous_10) / len(previous_10)
+
+    recent_avg = sum(_get_score(e) or 0 for e in recent_10) / len(recent_10)
+    previous_avg = sum(_get_score(e) or 0 for e in previous_10) / len(previous_10)
     
     change = recent_avg - previous_avg
     change_pct = (change / previous_avg * 100) if previous_avg != 0 else 0

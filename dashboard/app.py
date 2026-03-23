@@ -2191,11 +2191,12 @@ def update_leaderboard(
     if selected_phase is not None:
         filtered = filtered[filtered["phase"] == selected_phase]
 
-    # Apply sort from state
-    sort_col = "overall_score"
+    # Apply sort from state (default to bench_score for MemoryBench era)
+    default_sort = "bench_score" if era == "MemoryBench" else "overall_score"
+    sort_col = default_sort
     ascending = False
     if sort_state:
-        sort_col = sort_state.get("column", "overall_score")
+        sort_col = sort_state.get("column", default_sort)
         ascending = sort_state.get("ascending", False)
 
     filtered = _sort_dataframe(filtered, sort_col, ascending)
@@ -2997,9 +2998,9 @@ def update_param_sweep_options(era: str, active_page: str) -> tuple:
 
     # Get experiments with params and scores for detail selector
     filtered = _experiments if era == "All" else [e for e in _experiments if e.era == era]
-    scored_with_params = [e for e in filtered if e.params and e.overall_score is not None]
-    scored_with_params.sort(key=lambda e: e.overall_score, reverse=True)
-    exp_options = [{"label": f"{e.id} (overall: {_format_score(e.overall_score)})", "value": e.id}
+    scored_with_params = [e for e in filtered if e.params and (e.overall_score is not None or e.bench_score is not None)]
+    scored_with_params.sort(key=lambda e: e.bench_score or e.overall_score or 0, reverse=True)
+    exp_options = [{"label": f"{e.id} ({_format_score(e.bench_score or e.overall_score)})", "value": e.id}
                    for e in scored_with_params[:100]]
 
     return param_options, preselected, exp_options
