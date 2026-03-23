@@ -37,6 +37,7 @@ curl -s http://localhost:8100/stats
 
 3. **Temporal reasoning:**
    - Each memory has a date. Use dates to determine chronological order.
+   - CRITICAL: Use the "Today's date" provided in the prompt, NOT your system clock. The memories may be from a different time period.
    - For "how many days/months ago" questions: compute `today - event_date`. Show your math.
    - For "which came first" questions: compare dates, not result order.
    - Convert relative time references within memories to absolute dates.
