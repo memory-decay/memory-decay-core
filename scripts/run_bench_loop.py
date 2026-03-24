@@ -107,7 +107,7 @@ def _record_history(
         f.write(json.dumps(entry) + "\n")
 
 
-def run_loop(budget: int = 20, stage_a_limit: int = 20, stage_b_limit: int = 50):
+def run_loop(budget: int = 20, stage_a_sample: int = 3, stage_b_sample: int = 5):
     """Run the auto-improvement loop."""
     print("=" * 60)
     print("MemoryBench Auto-Improvement Loop")
@@ -124,7 +124,7 @@ def run_loop(budget: int = 20, stage_a_limit: int = 20, stage_b_limit: int = 50)
         baseline_result = evaluate(
             best_dir,
             run_prefix="baseline",
-            limit=stage_a_limit,
+            sample_per_category=stage_a_sample,
         )
         best_score = baseline_result.bench_score
         print(f"Baseline bench_score: {best_score:.4f}")
@@ -179,12 +179,12 @@ def run_loop(budget: int = 20, stage_a_limit: int = 20, stage_b_limit: int = 50)
         _save_experiment(exp_dir, new_params, CompositeResult(bench_score=0.0), reasoning)
 
         # 3. Stage A: Quick screen
-        print(f"\n  Stage A: {stage_a_limit} questions/benchmark...")
+        print(f"\n  Stage A: {stage_a_sample} questions/category (random)...")
         try:
             stage_a_result = evaluate(
                 exp_dir,
                 run_prefix=exp_name,
-                limit=stage_a_limit,
+                sample_per_category=stage_a_sample,
             )
         except Exception as e:
             print(f"  Stage A failed: {e}")
@@ -204,12 +204,12 @@ def run_loop(budget: int = 20, stage_a_limit: int = 20, stage_b_limit: int = 50)
             continue
 
         # 5. Stage B: Confirm with more questions
-        print(f"\n  Stage B: {stage_b_limit} questions/benchmark (confirming)...")
+        print(f"\n  Stage B: {stage_b_sample} questions/category (random, confirming)...")
         try:
             stage_b_result = evaluate(
                 exp_dir,
                 run_prefix=f"{exp_name}-stageB",
-                limit=stage_b_limit,
+                sample_per_category=stage_b_sample,
             )
         except Exception as e:
             print(f"  Stage B failed: {e}")
@@ -252,14 +252,14 @@ def run_loop(budget: int = 20, stage_a_limit: int = 20, stage_b_limit: int = 50)
 def main():
     parser = argparse.ArgumentParser(description="MemoryBench auto-improvement loop")
     parser.add_argument("--budget", type=int, default=20, help="Max iterations")
-    parser.add_argument("--stage-a-limit", type=int, default=20, help="Questions per benchmark in Stage A")
-    parser.add_argument("--stage-b-limit", type=int, default=50, help="Questions per benchmark in Stage B")
+    parser.add_argument("--stage-a-sample", type=int, default=3, help="Questions per category in Stage A (random)")
+    parser.add_argument("--stage-b-sample", type=int, default=5, help="Questions per category in Stage B (random)")
     args = parser.parse_args()
 
     run_loop(
         budget=args.budget,
-        stage_a_limit=args.stage_a_limit,
-        stage_b_limit=args.stage_b_limit,
+        stage_a_sample=args.stage_a_sample,
+        stage_b_sample=args.stage_b_sample,
     )
 
 

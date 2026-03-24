@@ -113,7 +113,7 @@ def _start_server(experiment_dir: str | Path) -> subprocess.Popen:
 def _run_benchmark(
     benchmark: str,
     run_id: str,
-    limit: int,
+    sample_per_category: int,
     judge: str = "gpt-4o",
     answering_model: str = "gpt-4o",
 ) -> BenchResult:
@@ -125,7 +125,8 @@ def _run_benchmark(
         "-j", judge,
         "-m", answering_model,
         "-r", run_id,
-        "-l", str(limit),
+        "-s", str(sample_per_category),
+        "--sample-type", "random",
         "--force",
     ]
 
@@ -170,7 +171,7 @@ def _run_benchmark(
 def evaluate(
     experiment_dir: str | Path,
     run_prefix: str,
-    limit: int = 20,
+    sample_per_category: int = 5,
     benchmarks: list[str] | None = None,
     judge: str = "gpt-4o",
     answering_model: str = "gpt-4o",
@@ -180,7 +181,7 @@ def evaluate(
     Args:
         experiment_dir: Path to experiment directory (with decay_fn.py + params.json)
         run_prefix: Prefix for run IDs (e.g., "exp_bench_0001")
-        limit: Number of questions per benchmark
+        sample_per_category: Number of questions to randomly sample per category
         benchmarks: Which benchmarks to run (default: all 3)
         judge: Judge model
         answering_model: Answering model
@@ -198,10 +199,10 @@ def evaluate(
         results: dict[str, BenchResult] = {}
         for bench in benchmarks:
             run_id = f"{run_prefix}-{bench}"
-            print(f"  Running {bench} (limit={limit})...")
+            print(f"  Running {bench} (sample_per_category={sample_per_category})...")
             t0 = time.time()
             results[bench] = _run_benchmark(
-                bench, run_id, limit, judge, answering_model,
+                bench, run_id, sample_per_category, judge, answering_model,
             )
             elapsed = time.time() - t0
             r = results[bench]
@@ -231,7 +232,7 @@ def evaluate_cached(
     experiment_dir: str | Path,
     run_prefix: str,
     cached_run_ids: dict[str, str] | None = None,
-    limit: int = 20,
+    sample_per_category: int = 5,
     judge: str = "gpt-4o",
     answering_model: str = "gpt-4o",
 ) -> CompositeResult:
@@ -266,7 +267,7 @@ def evaluate_cached(
 
     if benchmarks_to_run:
         fresh = evaluate(
-            experiment_dir, run_prefix, limit,
+            experiment_dir, run_prefix, sample_per_category,
             benchmarks=benchmarks_to_run,
             judge=judge,
             answering_model=answering_model,

@@ -109,7 +109,13 @@ Start the server with the new experiment, then run MemoryBench.
 **Current focus: LongMemEval** (70% on 10q — weakest benchmark, highest weight 0.50).
 Validate all benchmarks at 20-50 questions to confirm stability.
 
-**Stage A (quick screen)**: 10 questions × LongMemEval only (~1 min).
+**IMPORTANT: Always use random sampling (`--sample-type random`) to prevent overfitting to specific questions.**
+
+**Answer mode**: Use Claude Code agent mode (`MEMORY_DECAY_AGENT_MODE=1`).
+**Judge**: gpt-4o-mini (`-j gpt-4o-mini`).
+**Embedding model**: text-embedding-3-large (cache is 3072 dims).
+
+**Stage A (quick screen)**: 3 questions/category × LongMemEval only.
 
 ```bash
 # 1. Kill old server and start new one
@@ -117,22 +123,25 @@ pkill -f "memory_decay.server" 2>/dev/null; sleep 1
 .venv/bin/python -m memory_decay.server \
   --port 8100 --cache-dir cache/openai \
   --embedding-provider openai --embedding-api-key "$OPENAI_API_KEY" \
+  --embedding-model text-embedding-3-large \
   --experiment-dir experiments/exp_bench_NNNN &
 sleep 3
 
-# 2. Stage A: LoCoMo only, 10 questions, gpt-4o-mini
+# 2. Stage A: LongMemEval, 3/category random, agent mode
 cd ~/memorybench
-OPENAI_API_KEY="$OPENAI_API_KEY" bun run src/index.ts run \
-  -p memory-decay -b locomo -j gpt-4o-mini -m gpt-4o-mini \
-  -r exp_bench_NNNN-locomo -l 10 --force
+OPENAI_API_KEY="$OPENAI_API_KEY" MEMORY_DECAY_AGENT_MODE=1 bun run src/index.ts run \
+  -p memory-decay -b longmemeval -j gpt-4o-mini -m sonnet \
+  -s 3 --sample-type random \
+  -r exp_bench_NNNN-stageA --force
 ```
 
-**Stage B (confirmation)**: only if Stage A shows improvement, run 20 questions × all 3 benchmarks with gpt-4o:
+**Stage B (confirmation)**: only if Stage A shows improvement, run 5/category × all 3 benchmarks:
 ```bash
 for BENCH in longmemeval locomo convomem; do
-  OPENAI_API_KEY="$OPENAI_API_KEY" bun run src/index.ts run \
-    -p memory-decay -b $BENCH -j gpt-4o -m gpt-4o \
-    -r exp_bench_NNNN-stageB-$BENCH -l 20 --force
+  OPENAI_API_KEY="$OPENAI_API_KEY" MEMORY_DECAY_AGENT_MODE=1 bun run src/index.ts run \
+    -p memory-decay -b $BENCH -j gpt-4o-mini -m sonnet \
+    -s 5 --sample-type random \
+    -r exp_bench_NNNN-stageB-$BENCH --force
 done
 ```
 
