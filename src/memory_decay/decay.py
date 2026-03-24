@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import math
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
 from .graph import MemoryGraph
+
+if TYPE_CHECKING:
+    from .memory_store import MemoryStore
 
 
 def _sigmoid_gate(value: float, center: float, width: float) -> float:
@@ -78,12 +81,16 @@ class DecayEngine:
 
     def __init__(
         self,
-        graph: MemoryGraph,
+        graph: MemoryGraph | None = None,
         decay_type: Literal["exponential", "power_law"] = "exponential",
         params: dict | None = None,
         custom_decay_fn=None,
+        store: MemoryStore | None = None,
     ):
+        if graph is None and store is None:
+            raise ValueError("Either graph or store must be provided")
         self._graph = graph
+        self._store = store
         self.decay_type = decay_type
         self.current_tick = 0
         self._custom_decay_fn = custom_decay_fn
@@ -233,6 +240,10 @@ class DecayEngine:
         """
         self.current_tick += 1
 
+        if self._store is not None:
+            self._tick_store()
+            return
+
         if not self._tick_arrays_built:
             self._build_tick_arrays()
         else:
@@ -294,3 +305,29 @@ class DecayEngine:
                 idx = emb_nid_to_idx.get(nid)
                 if idx is not None:
                     emb_scores[idx] = max(nr, 0.0)
+
+    def _tick_store(self) -> None:
+        """Run one decay tick using MemoryStore (SQLite path)."""
+        rows = self._store.get_all_for_decay(self.current_tick)
+        if not rows:
+            return
+
+        stability_decay = self._params["stability_decay"]
+        stability_cap = self._params["stability_cap"]
+        compute = self._compute_decay
+
+        updates: list[tuple] = []
+        for row in rows:
+            mtype = row["mtype"] or "episode"
+            retrieval = float(row["retrieval_score"])
+            storage = float(row["storage_score"])
+            stability = float(row["stability_score"])
+            importance = float(row["importance"])
+
+            new_retrieval = compute(retrieval, importance, stability, mtype)
+            new_storage = compute(storage, importance, stability, mtype)
+            new_stability = min(stability * (1.0 - stability_decay), stability_cap)
+
+            updates.append((new_retrieval, new_storage, new_stability, row["id"]))
+
+        self._store.batch_update_scores(updates)
