@@ -52,7 +52,8 @@ class MemoryStore:
         self._init_schema()
 
     def _init_schema(self) -> None:
-        self._db.executescript(f"""
+        # Create non-vector tables first
+        self._db.executescript("""
             CREATE TABLE IF NOT EXISTS memories (
                 id                   TEXT PRIMARY KEY,
                 user_id              TEXT NOT NULL DEFAULT '',
@@ -67,10 +68,6 @@ class MemoryStore:
                 last_activated_tick  INTEGER DEFAULT 0,
                 last_reinforced_tick INTEGER DEFAULT 0,
                 retrieval_count      INTEGER DEFAULT 0
-            );
-
-            CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories USING vec0(
-                embedding float[{self._embedding_dim}]
             );
 
             CREATE TABLE IF NOT EXISTS associations (
@@ -92,7 +89,48 @@ class MemoryStore:
                 embedding BLOB NOT NULL
             );
         """)
+
+        # Handle vec_memories with dimension change detection
+        self._ensure_vec_table()
         self._db.commit()
+
+    def _ensure_vec_table(self) -> None:
+        """Create or recreate vec_memories if embedding dimension changed."""
+        import sys
+
+        stored_dim = self.get_metadata("embedding_dim")
+        vec_exists = self._db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='vec_memories'"
+        ).fetchone() is not None
+
+        needs_recreate = False
+        if stored_dim and int(stored_dim) != self._embedding_dim:
+            print(
+                f"[memory-store] Embedding dimension changed: {stored_dim} → {self._embedding_dim}. "
+                f"Recreating vec_memories and clearing embedding_cache.",
+                file=sys.stderr,
+            )
+            needs_recreate = True
+        elif not stored_dim and vec_exists:
+            # Old DB without metadata — probe the existing dimension
+            print(
+                f"[memory-store] Existing vec_memories found without dimension metadata. "
+                f"Recreating for {self._embedding_dim}-dim embeddings.",
+                file=sys.stderr,
+            )
+            needs_recreate = True
+
+        if needs_recreate:
+            self._db.executescript(
+                "DROP TABLE IF EXISTS vec_memories;"
+                "DELETE FROM embedding_cache;"
+            )
+
+        self._db.executescript(
+            f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories USING vec0("
+            f"embedding float[{self._embedding_dim}]);"
+        )
+        self.set_metadata("embedding_dim", str(self._embedding_dim))
 
     def add_memory(
         self,

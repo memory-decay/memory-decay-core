@@ -144,7 +144,7 @@ def create_app(
     tick_interval_seconds: float = 3600.0,
     experiment_dir: Path | str | None = None,
     db_path: str | None = None,
-    embedding_dim: int = 3072,
+    embedding_dim: int | None = None,
     _test_embedder=None,
 ) -> FastAPI:
     """Create the FastAPI application.
@@ -159,50 +159,42 @@ def create_app(
         # Only auto-detect default cache dir when no test embedder is provided
         # (test embedder is authoritative in tests — default cache is a production artifact)
         resolved_cache_dir = _resolve_cache_dir(cache_dir) if (cache_dir or not _test_embedder) else None
-
-        # --- Resolve embedder function and dimension ---
-        fallback_embedder = None
-        _embedding_dim = embedding_dim
-
-        # Try to infer dimension from PKL cache entries first (avoids embedder calls)
-        _dim_inferred = False
+        cached_embedding_dim: int | None = None
         if resolved_cache_dir is not None:
             pkl_path = Path(resolved_cache_dir) / "embeddings.pkl"
             if pkl_path.exists():
                 with open(pkl_path, "rb") as f:
-                    _pkl_peek: dict[str, np.ndarray] = pickle.load(f)  # noqa: S301
-                if _pkl_peek:
-                    _embedding_dim = len(next(iter(_pkl_peek.values())))
-                    _dim_inferred = True
+                    cached_embeddings: dict[str, np.ndarray] = pickle.load(f)  # noqa: S301
+                if cached_embeddings:
+                    cached_embedding_dim = len(next(iter(cached_embeddings.values())))
 
+        # --- Resolve embedder function and dimension ---
         if _test_embedder:
-            fallback_embedder = _test_embedder
-            if not _dim_inferred:
-                test_emb = _test_embedder("_dim_probe_")
-                _embedding_dim = len(test_emb)
+            base_embedder = _test_embedder
         elif embedding_provider:
-            fallback_embedder = embedding_provider.embed
-            if not _dim_inferred:
-                _embedding_dim = embedding_provider.dimension
-
-        if resolved_cache_dir is not None and fallback_embedder is None:
-            # Need a fallback embedder for the cache builder
-            from .graph import MemoryGraph
-            fallback_graph = MemoryGraph(embedding_backend="auto")
-            fallback_embedder = fallback_graph._embed_text
-
-        # Build the embedder: cached PKL wrapper around fallback
-        if resolved_cache_dir is not None:
-            embedder_fn = load_cached_embedder(
-                str(resolved_cache_dir),
-                fallback_embedder=fallback_embedder,
-            )
-        elif fallback_embedder is not None:
-            embedder_fn = fallback_embedder
+            base_embedder = embedding_provider.embed
+            provider_embedding_dim = embedding_provider.dimension
         else:
             from .graph import MemoryGraph
             _graph = MemoryGraph(embedding_backend="auto")
-            embedder_fn = _graph._embed_text
+            base_embedder = _graph._embed_text
+            provider_embedding_dim = 768
+
+        resolved_embedding_dim = embedding_dim or cached_embedding_dim
+        if resolved_embedding_dim is None:
+            if _test_embedder:
+                resolved_embedding_dim = len(_test_embedder("_dim_probe_"))
+            else:
+                resolved_embedding_dim = provider_embedding_dim
+
+        # Wrap with PKL cache if available
+        if resolved_cache_dir is not None:
+            embedder_fn = load_cached_embedder(
+                str(resolved_cache_dir),
+                fallback_embedder=base_embedder,
+            )
+        else:
+            embedder_fn = base_embedder
 
         # --- Resolve DB path ---
         resolved_db_path = db_path or ":memory:"
@@ -211,7 +203,7 @@ def create_app(
             db_dir.mkdir(parents=True, exist_ok=True)
 
         # --- Create MemoryStore ---
-        store = MemoryStore(resolved_db_path, embedding_dim=_embedding_dim)
+        store = MemoryStore(resolved_db_path, embedding_dim=resolved_embedding_dim)
 
         # --- Migrate PKL embedding cache into SQLite if DB is new ---
         if resolved_cache_dir is not None and store.num_memories == 0:
@@ -415,21 +407,23 @@ def main():
                         help="Path to experiment dir (default: experiments/best)")
     parser.add_argument("--tick-interval", type=float, default=3600.0,
                         help="Real seconds per tick")
-    parser.add_argument("--embedding-provider", default="gemini",
-                        choices=["gemini", "openai"])
-    parser.add_argument("--embedding-model", default=None)
+    parser.add_argument("--embedding-provider", default="local",
+                        choices=["local", "gemini", "openai"])
+    parser.add_argument("--embedding-model", default=None,
+                        help="Model name (default: auto per provider)")
     parser.add_argument("--embedding-api-key", default=None)
-    parser.add_argument("--embedding-dim", type=int, default=3072,
-                        help="Embedding dimension (default: 3072)")
+    parser.add_argument("--embedding-dim", type=int, default=None,
+                        help="Embedding dimension (default: auto-detect from provider)")
     args = parser.parse_args()
 
-    provider = None
-    if args.embedding_api_key:
-        provider = create_embedding_provider(
-            provider=args.embedding_provider,
-            api_key=args.embedding_api_key,
-            model=args.embedding_model,
-        )
+    provider = create_embedding_provider(
+        provider=args.embedding_provider,
+        api_key=args.embedding_api_key,
+        model=args.embedding_model,
+    )
+
+    # Auto-detect dimension from provider if not specified
+    resolved_dim = args.embedding_dim or provider.dimension
 
     # Resolve db_path: explicit > cache_dir fallback > default
     resolved_db_path = args.db_path
@@ -445,7 +439,7 @@ def main():
         tick_interval_seconds=args.tick_interval,
         experiment_dir=args.experiment_dir,
         db_path=resolved_db_path,
-        embedding_dim=args.embedding_dim,
+        embedding_dim=resolved_dim,
     )
 
     uvicorn.run(app, host=args.host, port=args.port)

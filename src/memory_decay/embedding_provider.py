@@ -65,6 +65,41 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         return vecs
 
 
+class LocalEmbeddingProvider(EmbeddingProvider):
+    """Local sentence-transformers embedding provider."""
+
+    KNOWN_DIMS = {
+        "jhgan/ko-sroberta-multitask": 768,
+        "sentence-transformers/all-MiniLM-L6-v2": 384,
+        "sentence-transformers/all-mpnet-base-v2": 768,
+        "intfloat/multilingual-e5-large": 1024,
+    }
+
+    def __init__(self, model: str = "jhgan/ko-sroberta-multitask"):
+        self._model_name = model
+        self._st_model = None
+        self._dim = self.KNOWN_DIMS.get(model, 768)
+
+    def _ensure_model(self):
+        if self._st_model is None:
+            from sentence_transformers import SentenceTransformer
+            self._st_model = SentenceTransformer(self._model_name)
+            self._dim = self._st_model.get_sentence_embedding_dimension()
+
+    @property
+    def dimension(self) -> int:
+        return self._dim
+
+    def embed(self, text: str) -> np.ndarray:
+        self._ensure_model()
+        return np.array(self._st_model.encode(text), dtype=np.float32)
+
+    def embed_batch(self, texts: list[str]) -> list[np.ndarray]:
+        self._ensure_model()
+        embeddings = self._st_model.encode(texts)
+        return [np.array(e, dtype=np.float32) for e in embeddings]
+
+
 class OpenAIEmbeddingProvider(EmbeddingProvider):
     """OpenAI-compatible embedding provider."""
 
@@ -111,23 +146,31 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
 def create_embedding_provider(
     provider: str,
-    api_key: str,
+    api_key: str | None = None,
     model: str | None = None,
     base_url: str | None = None,
     dimensions: int | None = None,
 ) -> EmbeddingProvider:
     """Factory function to create an embedding provider."""
+    if provider == "local":
+        return LocalEmbeddingProvider(model=model or "jhgan/ko-sroberta-multitask")
+
     if provider == "gemini":
+        if not api_key:
+            raise ValueError("Gemini provider requires an API key.")
         return GeminiEmbeddingProvider(
             api_key=api_key,
             model=model or "gemini-embedding-001",
         )
-    elif provider == "openai":
+
+    if provider == "openai":
+        if not api_key:
+            raise ValueError("OpenAI provider requires an API key.")
         return OpenAIEmbeddingProvider(
             api_key=api_key,
             model=model or "text-embedding-3-small",
             base_url=base_url,
             dimensions=dimensions,
         )
-    else:
-        raise ValueError(f"Unknown provider: {provider}. Use 'gemini' or 'openai'.")
+
+    raise ValueError(f"Unknown provider: {provider}. Use 'local', 'gemini', or 'openai'.")
