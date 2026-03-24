@@ -251,9 +251,10 @@ def evaluate_cached(
                 report = json.loads(report_path.read_text())
                 summary = report.get("summary", {})
                 retrieval = report.get("retrieval", {})
+                raw_acc = summary.get("accuracy", 0.0)
                 results[bench] = BenchResult(
                     benchmark=bench,
-                    accuracy=summary.get("accuracy", 0.0) / 100.0,
+                    accuracy=raw_acc if raw_acc <= 1.0 else raw_acc / 100.0,
                     total=summary.get("totalQuestions", 0),
                     correct=summary.get("correctCount", 0),
                     mrr=retrieval.get("mrr", 0.0),
@@ -268,9 +269,10 @@ def evaluate_cached(
             cached = json.loads(result_file.read_text())
             summary = cached.get("summary", {})
             retrieval = cached.get("retrieval", {})
+            raw_acc = summary.get("accuracy", 0.0)
             results[bench] = BenchResult(
                 benchmark=bench,
-                accuracy=summary.get("accuracy", 0.0) / 100.0,
+                accuracy=raw_acc if raw_acc <= 1.0 else raw_acc / 100.0,
                 total=summary.get("totalQuestions", 0),
                 correct=summary.get("correctCount", 0),
                 mrr=retrieval.get("mrr", 0.0),

@@ -9,8 +9,6 @@ from .decay import DecayEngine
 from .evaluator import Evaluator
 from .data_gen import SyntheticDataGenerator
 from .auto_improver import AutoImprover
-from .memory_store import MemoryStore
-from .embedding_provider import EmbeddingProvider, create_embedding_provider
 
 __all__ = [
     "MemoryGraph",
@@ -22,3 +20,16 @@ __all__ = [
     "SyntheticDataGenerator",
     "AutoImprover",
 ]
+
+
+def __getattr__(name: str):
+    if name == "MemoryStore":
+        from .memory_store import MemoryStore
+        return MemoryStore
+    if name == "EmbeddingProvider":
+        from .embedding_provider import EmbeddingProvider
+        return EmbeddingProvider
+    if name == "create_embedding_provider":
+        from .embedding_provider import create_embedding_provider
+        return create_embedding_provider
+    raise AttributeError(f"module 'memory_decay' has no attribute {name!r}")
