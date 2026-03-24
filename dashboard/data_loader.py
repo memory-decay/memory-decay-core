@@ -489,6 +489,78 @@ def load_archive_history(archive_path: str) -> list[HistoryEntry]:
     return list(entries.values())
 
 
+def load_history_only_experiments(
+    history_path: str,
+    existing_exp_ids: set[str],
+    experiments_dir: str,
+) -> list[Experiment]:
+    """Load experiments from history.jsonl that have no corresponding directory.
+
+    These are ad-hoc runs (e.g. agent-v4-rand, direct-full-lme-v2) recorded in
+    history.jsonl but without exp_NNNN/exp_lme_NNNN/exp_bench_NNNN directory
+    structure. Converts them to Experiment objects for dashboard display.
+
+    Args:
+        history_path: Path to history.jsonl.
+        existing_exp_ids: Set of experiment IDs already loaded from directories
+            (to avoid duplicates).
+        experiments_dir: Path to experiments/ directory (for dir_path on Experiment).
+
+    Returns:
+        List of Experiment objects for history-only entries.
+    """
+    if not os.path.exists(history_path):
+        return []
+
+    experiments: list[Experiment] = []
+
+    entries: dict[str, HistoryEntry] = {}
+    with open(history_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            exp_key = entry.get("exp")
+            if exp_key is None:
+                continue
+            entries[exp_key] = entry
+
+    for exp_id, entry in entries.items():
+        # Skip if already loaded from directory
+        if exp_id in existing_exp_ids:
+            continue
+
+        # Skip standard-format entries (should have been loaded from directories)
+        if (_EXP_OLD_RE.match(exp_id) or
+            _EXP_NEW_RE.match(exp_id) or
+            _EXP_BENCH_RE.match(exp_id)):
+            continue
+
+        # Determine era — all history-only entries are MemoryBench-era ad-hoc runs
+        experiments.append(Experiment(
+            id=exp_id,
+            era="MemoryBench",
+            phase=10,
+            dir_path=experiments_dir,
+            status=entry.get("status", "recorded"),
+            bench_score=(
+                entry.get("bench_score")
+                if "bench_score" in entry
+                else entry.get("bench_score_lme_only")
+            ),
+            lme_accuracy=entry.get("lme_acc"),
+            locomo_accuracy=entry.get("locomo_acc"),
+            convomem_accuracy=entry.get("convomem_acc"),
+            hypothesis=entry.get("hypothesis", ""),
+        ))
+
+    return experiments
+
+
 # ---------------------------------------------------------------------------
 # Percentile and Ranking Calculations
 # ---------------------------------------------------------------------------

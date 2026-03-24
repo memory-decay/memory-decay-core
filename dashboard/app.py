@@ -26,7 +26,7 @@ import plotly.graph_objects as go
 from dash import Input, Output, State, callback, dash, html, dcc
 from dash import ctx as callback_ctx
 
-from dashboard.data_loader import Experiment, load_all_experiments, calculate_experiment_percentiles, get_adjacent_experiments, calculate_score_deltas
+from dashboard.data_loader import Experiment, load_all_experiments, load_history_only_experiments, calculate_experiment_percentiles, get_adjacent_experiments, calculate_score_deltas
 from dashboard.output_loader import load_output_records
 from dashboard import charts
 
@@ -216,6 +216,16 @@ app = dash.Dash(
 
 # Load data at module level
 _experiments = load_all_experiments(EXPERIMENTS_DIR)
+
+# Also load history-only entries (e.g. agent-v4-rand, direct-full-lme-v2)
+# that exist in history.jsonl but have no experiment directory
+_history_path = os.path.join(EXPERIMENTS_DIR, "history.jsonl")
+_existing_ids = {exp.id for exp in _experiments}
+_history_only_experiments = load_history_only_experiments(
+    _history_path, _existing_ids, EXPERIMENTS_DIR
+)
+_experiments.extend(_history_only_experiments)
+
 _pipeline_records = load_output_records(OUTPUTS_DIR)
 _cv_data = _load_cv_data(_experiments)
 _history_status = _load_history_status(_experiments)

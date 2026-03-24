@@ -28,6 +28,10 @@ class FakeProvider(EmbeddingProvider):
 
 
 class TestEmbeddingProvider:
+    def test_create_provider_local_default(self):
+        p = create_embedding_provider(provider="local")
+        assert p.dimension == 768
+
     def test_fake_provider_returns_correct_dim(self):
         p = FakeProvider(dim=16)
         vec = p.embed("hello")
@@ -60,6 +64,14 @@ class TestEmbeddingProvider:
             model="text-embedding-3-small",
         )
         assert p.dimension == 1536
+
+    def test_create_provider_gemini_missing_key_raises(self):
+        with pytest.raises(ValueError, match="requires an API key"):
+            create_embedding_provider(provider="gemini")
+
+    def test_create_provider_openai_missing_key_raises(self):
+        with pytest.raises(ValueError, match="requires an API key"):
+            create_embedding_provider(provider="openai")
 
     def test_create_provider_unknown_raises(self):
         with pytest.raises(ValueError, match="Unknown provider"):

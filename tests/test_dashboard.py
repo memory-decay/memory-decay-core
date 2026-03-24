@@ -24,6 +24,7 @@ from dashboard.data_loader import (
     load_all_experiments,
     load_archive_history,
     load_history,
+    load_history_only_experiments,
 )
 
 
@@ -576,6 +577,47 @@ class TestHistoryLoading:
         exps = load_all_experiments(str(experiments_dir))
 
         assert entries[0]["overall"] == exps[0].overall_score
+
+
+class TestHistoryOnlyExperiments:
+    def test_loads_nonstandard_history_entries_for_dashboard(self, experiments_dir: Path):
+        history_file = experiments_dir / "history.jsonl"
+        history_file.write_text("\n".join([
+            json.dumps({"exp": "agent-v4-rand", "bench_score_lme_only": 0.62, "lme_acc": 0.6,
+                        "locomo_acc": 0.4, "convomem_acc": 1.0, "status": "improved",
+                        "hypothesis": "history-only"}),
+            json.dumps({"exp": "direct-full-lme-v2", "bench_score": 0.85, "status": "recorded"}),
+        ]))
+
+        experiments = load_history_only_experiments(
+            str(history_file),
+            existing_exp_ids=set(),
+            experiments_dir=str(experiments_dir),
+        )
+
+        assert [exp.id for exp in experiments] == ["agent-v4-rand", "direct-full-lme-v2"]
+        assert experiments[0].bench_score == 0.62
+        assert experiments[0].lme_accuracy == 0.6
+        assert experiments[0].locomo_accuracy == 0.4
+        assert experiments[0].convomem_accuracy == 1.0
+        assert experiments[0].hypothesis == "history-only"
+        assert experiments[1].status == "recorded"
+
+    def test_skips_standard_or_duplicate_history_entries(self, experiments_dir: Path):
+        history_file = experiments_dir / "history.jsonl"
+        history_file.write_text("\n".join([
+            json.dumps({"exp": "exp_lme_0001", "bench_score": 0.3}),
+            json.dumps({"exp": "agent-v4-rand", "bench_score": 0.4}),
+            json.dumps({"exp": "agent-v4-rand", "bench_score": 0.5}),
+        ]))
+
+        experiments = load_history_only_experiments(
+            str(history_file),
+            existing_exp_ids={"agent-v4-rand"},
+            experiments_dir=str(experiments_dir),
+        )
+
+        assert experiments == []
 
 
 # ---------------------------------------------------------------------------
