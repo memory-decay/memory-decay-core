@@ -186,6 +186,45 @@ class TestMemoryStoreMetadata:
         store.close()
 
 
+class TestMemoryStoreBatch:
+    def test_add_memories_batch(self):
+        store = MemoryStore(":memory:", embedding_dim=384)
+        memories = [
+            {"memory_id": "m1", "content": "first", "embedding": _random_embedding(384, 1)},
+            {"memory_id": "m2", "content": "second", "embedding": _random_embedding(384, 2)},
+            {"memory_id": "m3", "content": "third", "embedding": _random_embedding(384, 3)},
+        ]
+        store.add_memories_batch(memories)
+        assert store.num_memories == 3
+        assert store.get_node("m1")["content"] == "first"
+        assert store.get_node("m3")["content"] == "third"
+        store.close()
+
+    def test_add_memories_batch_empty(self):
+        store = MemoryStore(":memory:", embedding_dim=384)
+        store.add_memories_batch([])
+        assert store.num_memories == 0
+        store.close()
+
+    def test_add_memories_batch_searchable(self):
+        store = MemoryStore(":memory:", embedding_dim=384)
+        emb = _random_embedding(384, 42)
+        store.add_memories_batch([
+            {"memory_id": "m1", "content": "target", "embedding": emb},
+        ])
+        results = store.search(emb, top_k=1)
+        assert len(results) == 1
+        assert results[0]["id"] == "m1"
+        store.close()
+
+    def test_manual_commit(self):
+        store = MemoryStore(":memory:", embedding_dim=384)
+        store.add_memory("m1", "test", _random_embedding(384, 1), auto_commit=False)
+        store.commit()
+        assert store.num_memories == 1
+        store.close()
+
+
 class TestMemoryStoreAssociations:
     def test_add_with_associations(self):
         store = MemoryStore(":memory:", embedding_dim=384)

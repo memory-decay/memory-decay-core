@@ -1,10 +1,13 @@
 """FastAPI server exposing MemoryStore + DecayEngine over HTTP.
 
 Designed to be called by the openclaw-memory-decay TypeScript plugin.
+All endpoints are async to avoid blocking the event loop during
+embedding API calls or SQLite I/O.
 """
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import json
 import time
@@ -91,12 +94,14 @@ class ServerState:
         self,
         store: MemoryStore,
         engine: DecayEngine,
-        embedder: Callable,
+        embedder: Callable | None = None,
+        provider: EmbeddingProvider | None = None,
         tick_interval_seconds: float = 3600.0,
     ):
         self.store = store
         self.engine = engine
-        self.embedder = embedder
+        self._embedder = embedder
+        self._provider = provider
         self.current_tick = 0
         self.last_tick_time = time.time()
         self.tick_interval_seconds = tick_interval_seconds
@@ -104,14 +109,62 @@ class ServerState:
     def next_memory_id(self) -> str:
         return f"mem_{uuid.uuid4().hex[:12]}"
 
-    def embed(self, text: str) -> np.ndarray:
+    async def embed(self, text: str) -> np.ndarray:
         """Get embedding for text, using store cache first."""
-        cached = self.store.get_cached_embedding(text)
+        cached = await asyncio.to_thread(self.store.get_cached_embedding, text)
         if cached is not None:
             return cached
-        embedding = np.array(self.embedder(text), dtype=np.float32)
-        self.store.cache_embedding(text, embedding)
+
+        if self._provider is not None:
+            embedding = await self._provider.aembed(text)
+        elif self._embedder is not None:
+            embedding = await asyncio.to_thread(self._embedder, text)
+            embedding = np.array(embedding, dtype=np.float32)
+        else:
+            raise RuntimeError("No embedding provider configured")
+
+        await asyncio.to_thread(self.store.cache_embedding, text, embedding)
         return embedding
+
+    async def embed_batch(self, texts: list[str]) -> list[np.ndarray]:
+        """Batch embed with cache: only compute uncached texts."""
+        results: list[np.ndarray | None] = [None] * len(texts)
+        uncached_indices: list[int] = []
+        uncached_texts: list[str] = []
+
+        # Check cache for all texts
+        for i, text in enumerate(texts):
+            cached = await asyncio.to_thread(self.store.get_cached_embedding, text)
+            if cached is not None:
+                results[i] = cached
+            else:
+                uncached_indices.append(i)
+                uncached_texts.append(text)
+
+        # Batch embed uncached texts
+        if uncached_texts:
+            if self._provider is not None:
+                new_embeddings = await self._provider.aembed_batch(uncached_texts)
+            elif self._embedder is not None:
+                new_embeddings = await asyncio.to_thread(
+                    lambda ts: [np.array(self._embedder(t), dtype=np.float32) for t in ts],
+                    uncached_texts,
+                )
+            else:
+                raise RuntimeError("No embedding provider configured")
+
+            for i, (idx, embedding) in enumerate(zip(uncached_indices, new_embeddings)):
+                results[idx] = embedding
+
+            # Cache all new embeddings in one transaction
+            def _cache_all():
+                for i, emb in enumerate(new_embeddings):
+                    self.store.cache_embedding(uncached_texts[i], emb, auto_commit=False)
+                self.store.commit()
+
+            await asyncio.to_thread(_cache_all)
+
+        return results  # type: ignore[return-value]
 
 
 _state: ServerState | None = None
@@ -120,6 +173,25 @@ _state: ServerState | None = None
 # ---------------------------------------------------------------------------
 # App factory
 # ---------------------------------------------------------------------------
+
+
+def create_default_app() -> FastAPI:
+    """Factory for uvicorn multi-worker mode. Reads config from env vars."""
+    import os
+    provider_name = os.environ.get("MD_EMBEDDING_PROVIDER", "local")
+    provider = create_embedding_provider(
+        provider=provider_name,
+        api_key=os.environ.get("MD_EMBEDDING_API_KEY"),
+        model=os.environ.get("MD_EMBEDDING_MODEL"),
+    )
+    dim = os.environ.get("MD_EMBEDDING_DIM")
+    return create_app(
+        embedding_provider=provider,
+        tick_interval_seconds=float(os.environ.get("MD_TICK_INTERVAL", "3600")),
+        experiment_dir=os.environ.get("MD_EXPERIMENT_DIR"),
+        db_path=os.environ.get("MD_DB_PATH"),
+        embedding_dim=int(dim) if dim else None,
+    )
 
 
 def create_app(
@@ -140,11 +212,14 @@ def create_app(
         global _state
 
         # --- Resolve embedder function and dimension ---
+        base_embedder = None
+        resolved_provider = embedding_provider
+
         if _test_embedder:
             base_embedder = _test_embedder
+            resolved_provider = None
             resolved_embedding_dim = embedding_dim or len(_test_embedder("_dim_probe_"))
         elif embedding_provider:
-            base_embedder = embedding_provider.embed
             resolved_embedding_dim = embedding_dim or embedding_provider.dimension
         else:
             from .graph import MemoryGraph
@@ -173,7 +248,12 @@ def create_app(
         # --- Restore current_tick from store metadata ---
         state_tick = int(store.get_metadata("current_tick", "0"))
 
-        _state = ServerState(store, engine, base_embedder, tick_interval_seconds)
+        _state = ServerState(
+            store, engine,
+            embedder=base_embedder,
+            provider=resolved_provider,
+            tick_interval_seconds=tick_interval_seconds,
+        )
         _state.current_tick = state_tick
 
         yield
@@ -187,21 +267,22 @@ def create_app(
     app = FastAPI(title="memory-decay", lifespan=lifespan)
 
     @app.get("/health")
-    def health():
+    async def health():
         return {"status": "ok", "current_tick": _state.current_tick if _state else 0}
 
     @app.get("/stats")
-    def stats():
+    async def stats():
         if not _state:
             raise HTTPException(503, "Server not initialized")
+        num = await asyncio.to_thread(lambda: _state.store.num_memories)
         return {
-            "num_memories": _state.store.num_memories,
+            "num_memories": num,
             "current_tick": _state.current_tick,
             "last_tick_time": _state.last_tick_time,
         }
 
     @app.post("/store")
-    def store(req: StoreRequest):
+    async def store(req: StoreRequest):
         if not _state:
             raise HTTPException(503, "Server not initialized")
 
@@ -210,36 +291,10 @@ def create_app(
         if req.associations:
             associations = [(a, 0.5) for a in req.associations]
 
-        embedding = _state.embed(req.text)
+        embedding = await _state.embed(req.text)
 
-        _state.store.add_memory(
-            memory_id=memory_id,
-            content=req.text,
-            embedding=embedding,
-            mtype=req.mtype,
-            importance=req.importance,
-            created_tick=req.created_tick if req.created_tick is not None else _state.current_tick,
-            associations=associations,
-            speaker=req.speaker or "",
-        )
-
-        return {"id": memory_id, "text": req.text, "tick": _state.current_tick}
-
-    @app.post("/store-batch")
-    def store_batch(items: list[StoreRequest]):
-        if not _state:
-            raise HTTPException(503, "Server not initialized")
-
-        ids = []
-        for req in items:
-            memory_id = _state.next_memory_id()
-            associations = None
-            if req.associations:
-                associations = [(a, 0.5) for a in req.associations]
-
-            embedding = _state.embed(req.text)
-
-            _state.store.add_memory(
+        await asyncio.to_thread(
+            lambda: _state.store.add_memory(
                 memory_id=memory_id,
                 content=req.text,
                 embedding=embedding,
@@ -249,62 +304,107 @@ def create_app(
                 associations=associations,
                 speaker=req.speaker or "",
             )
+        )
+
+        return {"id": memory_id, "text": req.text, "tick": _state.current_tick}
+
+    @app.post("/store-batch")
+    async def store_batch(items: list[StoreRequest]):
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+
+        # Batch embed all texts at once
+        texts = [req.text for req in items]
+        embeddings = await _state.embed_batch(texts)
+
+        # Build batch and insert in single transaction
+        memories = []
+        ids = []
+        for req, embedding in zip(items, embeddings):
+            memory_id = _state.next_memory_id()
+            associations = None
+            if req.associations:
+                associations = [(a, 0.5) for a in req.associations]
+            memories.append({
+                "memory_id": memory_id,
+                "content": req.text,
+                "embedding": embedding,
+                "mtype": req.mtype,
+                "importance": req.importance,
+                "created_tick": req.created_tick if req.created_tick is not None else _state.current_tick,
+                "associations": associations,
+                "speaker": req.speaker or "",
+            })
             ids.append(memory_id)
+
+        await asyncio.to_thread(_state.store.add_memories_batch, memories)
 
         return {"ids": ids, "count": len(ids), "tick": _state.current_tick}
 
     @app.post("/search")
-    def search(req: SearchRequest):
+    async def search(req: SearchRequest):
         if not _state:
             raise HTTPException(503, "Server not initialized")
 
-        query_embedding = _state.embed(req.query)
+        query_embedding = await _state.embed(req.query)
         params = _state.engine.get_params()
 
-        results = _state.store.search(
-            query_embedding=query_embedding,
-            top_k=req.top_k,
-            current_tick=_state.current_tick,
-            activation_weight=params.get("activation_weight", 0.5),
+        results = await asyncio.to_thread(
+            lambda: _state.store.search(
+                query_embedding=query_embedding,
+                top_k=req.top_k,
+                current_tick=_state.current_tick,
+                activation_weight=params.get("activation_weight", 0.5),
+            )
         )
 
         # Retrieval consolidation: boost top result on successful recall
         if results and results[0]["score"] > 0.3:
-            _state.store.reinforce(
-                results[0]["id"],
-                retrieval_boost=params.get("retrieval_boost", 0.10),
-                stability_gain=params.get("reinforcement_gain_direct", 0.2),
-                stability_cap=params.get("stability_cap", 1.0),
+            await asyncio.to_thread(
+                lambda: _state.store.reinforce(
+                    results[0]["id"],
+                    retrieval_boost=params.get("retrieval_boost", 0.10),
+                    stability_gain=params.get("reinforcement_gain_direct", 0.2),
+                    stability_cap=params.get("stability_cap", 1.0),
+                )
             )
 
         return {"results": results}
 
     @app.post("/tick")
-    def tick(req: TickRequest):
+    async def tick(req: TickRequest):
         if not _state:
             raise HTTPException(503, "Server not initialized")
 
-        for _ in range(req.count):
-            _state.engine.tick()
-            _state.current_tick += 1
-        _state.last_tick_time = time.time()
+        def _do_ticks():
+            for _ in range(req.count):
+                _state.engine.tick()
+                _state.current_tick += 1
+            _state.last_tick_time = time.time()
+
+        await asyncio.to_thread(_do_ticks)
 
         return {"current_tick": _state.current_tick}
 
     @app.post("/auto-tick")
-    def auto_tick():
+    async def auto_tick():
         """Apply ticks based on elapsed real time since last tick."""
         if not _state:
             raise HTTPException(503, "Server not initialized")
 
         elapsed = time.time() - _state.last_tick_time
         ticks_due = int(elapsed / _state.tick_interval_seconds)
+
         if ticks_due > 0:
             ticks_due = min(ticks_due, 100)
-            for _ in range(ticks_due):
-                _state.engine.tick()
-                _state.current_tick += 1
-            _state.last_tick_time = time.time()
+
+            def _do_ticks():
+                for _ in range(ticks_due):
+                    _state.engine.tick()
+                    _state.current_tick += 1
+                _state.last_tick_time = time.time()
+
+            await asyncio.to_thread(_do_ticks)
 
         return {
             "ticks_applied": ticks_due,
@@ -313,27 +413,31 @@ def create_app(
         }
 
     @app.delete("/forget/{memory_id}")
-    def forget(memory_id: str):
+    async def forget(memory_id: str):
         if not _state:
             raise HTTPException(503, "Server not initialized")
 
-        node = _state.store.get_node(memory_id)
+        node = await asyncio.to_thread(_state.store.get_node, memory_id)
         if node is None:
             raise HTTPException(404, f"Memory {memory_id} not found")
 
-        _state.store.delete_memory(memory_id)
+        await asyncio.to_thread(_state.store.delete_memory, memory_id)
 
         return {"deleted": memory_id}
 
     @app.post("/reset")
-    def reset():
+    async def reset():
         if not _state:
             raise HTTPException(503, "Server not initialized")
 
-        cleared = _state.store.clear()
-        _state.engine.reset()
-        _state.current_tick = 0
-        _state.last_tick_time = time.time()
+        def _do_reset():
+            cleared = _state.store.clear()
+            _state.engine.reset()
+            _state.current_tick = 0
+            _state.last_tick_time = time.time()
+            return cleared
+
+        cleared = await asyncio.to_thread(_do_reset)
 
         return {"status": "ok", "cleared": cleared}
 
@@ -366,6 +470,8 @@ def main():
     parser.add_argument("--embedding-api-key", default=None)
     parser.add_argument("--embedding-dim", type=int, default=None,
                         help="Embedding dimension (default: auto-detect from provider)")
+    parser.add_argument("--workers", type=int, default=1,
+                        help="Number of uvicorn workers (default: 1)")
     args = parser.parse_args()
 
     provider = create_embedding_provider(
@@ -381,15 +487,36 @@ def main():
     if resolved_db_path is None:
         resolved_db_path = str(_DEFAULT_DB_DIR / "memories.db")
 
-    app = create_app(
-        embedding_provider=provider,
-        tick_interval_seconds=args.tick_interval,
-        experiment_dir=args.experiment_dir,
-        db_path=resolved_db_path,
-        embedding_dim=resolved_dim,
-    )
-
-    uvicorn.run(app, host=args.host, port=args.port)
+    if args.workers > 1:
+        # Multi-worker: pass config via env vars so each worker can rebuild
+        import os
+        os.environ["MD_EMBEDDING_PROVIDER"] = args.embedding_provider
+        if args.embedding_api_key:
+            os.environ["MD_EMBEDDING_API_KEY"] = args.embedding_api_key
+        if args.embedding_model:
+            os.environ["MD_EMBEDDING_MODEL"] = args.embedding_model
+        if resolved_dim:
+            os.environ["MD_EMBEDDING_DIM"] = str(resolved_dim)
+        os.environ["MD_TICK_INTERVAL"] = str(args.tick_interval)
+        os.environ["MD_DB_PATH"] = resolved_db_path
+        if args.experiment_dir:
+            os.environ["MD_EXPERIMENT_DIR"] = args.experiment_dir
+        uvicorn.run(
+            "memory_decay.server:create_default_app",
+            factory=True,
+            host=args.host,
+            port=args.port,
+            workers=args.workers,
+        )
+    else:
+        app = create_app(
+            embedding_provider=provider,
+            tick_interval_seconds=args.tick_interval,
+            experiment_dir=args.experiment_dir,
+            db_path=resolved_db_path,
+            embedding_dim=resolved_dim,
+        )
+        uvicorn.run(app, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,5 @@
 """Tests for the memory-decay FastAPI server."""
 
-import pickle
-
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
@@ -91,3 +89,41 @@ class TestForget:
     def test_forget_nonexistent(self, client):
         r = client.delete("/forget/nonexistent-id")
         assert r.status_code == 404
+
+
+class TestStoreBatch:
+    def test_batch_store(self, client):
+        items = [
+            {"text": "fact one", "importance": 0.8, "mtype": "fact"},
+            {"text": "fact two", "importance": 0.6, "mtype": "fact"},
+            {"text": "episode one", "importance": 0.7, "mtype": "episode"},
+        ]
+        r = client.post("/store-batch", json=items)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["count"] == 3
+        assert len(data["ids"]) == 3
+
+    def test_batch_store_searchable(self, client):
+        items = [
+            {"text": "batch search target", "importance": 0.9, "mtype": "fact"},
+        ]
+        client.post("/store-batch", json=items)
+        r = client.post("/search", json={"query": "batch search target", "top_k": 5})
+        assert r.status_code == 200
+        assert len(r.json()["results"]) >= 1
+
+    def test_batch_store_empty(self, client):
+        r = client.post("/store-batch", json=[])
+        assert r.status_code == 200
+        assert r.json()["count"] == 0
+
+
+class TestReset:
+    def test_reset(self, client):
+        client.post("/store", json={"text": "will be cleared", "mtype": "fact"})
+        r = client.post("/reset")
+        assert r.status_code == 200
+        assert r.json()["status"] == "ok"
+        stats = client.get("/stats").json()
+        assert stats["num_memories"] == 0

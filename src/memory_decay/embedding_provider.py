@@ -5,6 +5,7 @@ Supports Gemini and OpenAI embedding APIs with a common interface.
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -25,6 +26,14 @@ class EmbeddingProvider(ABC):
     def embed_batch(self, texts: list[str]) -> list[np.ndarray]:
         """Embed multiple texts. Override for batch API support."""
         return [self.embed(t) for t in texts]
+
+    async def aembed(self, text: str) -> np.ndarray:
+        """Async embed. Default wraps sync via to_thread."""
+        return await asyncio.to_thread(self.embed, text)
+
+    async def aembed_batch(self, texts: list[str]) -> list[np.ndarray]:
+        """Async batch embed. Default wraps sync via to_thread."""
+        return await asyncio.to_thread(self.embed_batch, texts)
 
 
 class GeminiEmbeddingProvider(EmbeddingProvider):
@@ -118,6 +127,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     ):
         import openai
         self._client = openai.OpenAI(api_key=api_key, base_url=base_url)
+        self._async_client = openai.AsyncOpenAI(api_key=api_key, base_url=base_url)
         self._model = model
         self._dimensions = dimensions
         self._dim = dimensions or self.KNOWN_DIMS.get(model, 1536)
@@ -126,18 +136,29 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     def dimension(self) -> int:
         return self._dim
 
-    def embed(self, text: str) -> np.ndarray:
-        params: dict = {"model": self._model, "input": text}
+    def _embed_params(self, input_val: str | list[str]) -> dict:
+        params: dict = {"model": self._model, "input": input_val}
         if self._dimensions:
             params["dimensions"] = self._dimensions
-        response = self._client.embeddings.create(**params)
+        return params
+
+    def embed(self, text: str) -> np.ndarray:
+        response = self._client.embeddings.create(**self._embed_params(text))
         return np.array(response.data[0].embedding, dtype=np.float32)
 
     def embed_batch(self, texts: list[str]) -> list[np.ndarray]:
-        params: dict = {"model": self._model, "input": texts}
-        if self._dimensions:
-            params["dimensions"] = self._dimensions
-        response = self._client.embeddings.create(**params)
+        response = self._client.embeddings.create(**self._embed_params(texts))
+        return [
+            np.array(item.embedding, dtype=np.float32)
+            for item in sorted(response.data, key=lambda x: x.index)
+        ]
+
+    async def aembed(self, text: str) -> np.ndarray:
+        response = await self._async_client.embeddings.create(**self._embed_params(text))
+        return np.array(response.data[0].embedding, dtype=np.float32)
+
+    async def aembed_batch(self, texts: list[str]) -> list[np.ndarray]:
+        response = await self._async_client.embeddings.create(**self._embed_params(texts))
         return [
             np.array(item.embedding, dtype=np.float32)
             for item in sorted(response.data, key=lambda x: x.index)

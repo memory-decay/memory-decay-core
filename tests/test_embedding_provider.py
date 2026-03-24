@@ -1,5 +1,7 @@
 """Tests for pluggable embedding providers."""
 
+import asyncio
+
 import numpy as np
 import pytest
 
@@ -76,3 +78,19 @@ class TestEmbeddingProvider:
     def test_create_provider_unknown_raises(self):
         with pytest.raises(ValueError, match="Unknown provider"):
             create_embedding_provider(provider="unknown", api_key="x")
+
+
+class TestAsyncEmbedding:
+    def test_aembed_returns_same_as_sync(self):
+        p = FakeProvider(dim=16)
+        sync_result = p.embed("hello")
+        async_result = asyncio.run(p.aembed("hello"))
+        np.testing.assert_array_equal(sync_result, async_result)
+
+    def test_aembed_batch_returns_same_as_sync(self):
+        p = FakeProvider()
+        sync_results = p.embed_batch(["a", "b", "c"])
+        async_results = asyncio.run(p.aembed_batch(["a", "b", "c"]))
+        assert len(async_results) == 3
+        for s, a in zip(sync_results, async_results):
+            np.testing.assert_array_equal(s, a)

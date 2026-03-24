@@ -132,6 +132,10 @@ class MemoryStore:
         )
         self.set_metadata("embedding_dim", str(self._embedding_dim))
 
+    def commit(self) -> None:
+        """Explicitly commit the current transaction."""
+        self._db.commit()
+
     def add_memory(
         self,
         memory_id: str,
@@ -144,6 +148,7 @@ class MemoryStore:
         speaker: str = "",
         created_tick: int = 0,
         associations: list[tuple[str, float]] | None = None,
+        auto_commit: bool = True,
     ) -> None:
         # Insert into memories table first to get a rowid
         self._db.execute(
@@ -180,6 +185,31 @@ class MemoryStore:
                     "INSERT OR IGNORE INTO associations VALUES (?, ?, ?, ?)",
                     (target_id, memory_id, weight, created_tick),
                 )
+        if auto_commit:
+            self._db.commit()
+
+    def add_memories_batch(
+        self,
+        memories: list[dict],
+    ) -> None:
+        """Insert multiple memories in a single transaction.
+
+        Each dict must have: memory_id, content, embedding.
+        Optional: user_id, mtype, importance, speaker, created_tick, associations.
+        """
+        for mem in memories:
+            self.add_memory(
+                memory_id=mem["memory_id"],
+                content=mem["content"],
+                embedding=mem["embedding"],
+                user_id=mem.get("user_id", ""),
+                mtype=mem.get("mtype", "episode"),
+                importance=mem.get("importance", 0.7),
+                speaker=mem.get("speaker", ""),
+                created_tick=mem.get("created_tick", 0),
+                associations=mem.get("associations"),
+                auto_commit=False,
+            )
         self._db.commit()
 
     def search(
@@ -265,26 +295,29 @@ class MemoryStore:
         )
         self._db.commit()
 
-    def set_retrieval_score(self, memory_id: str, score: float) -> None:
+    def set_retrieval_score(self, memory_id: str, score: float, *, auto_commit: bool = True) -> None:
         self._db.execute(
             "UPDATE memories SET retrieval_score = ? WHERE id = ?",
             (score, memory_id),
         )
-        self._db.commit()
+        if auto_commit:
+            self._db.commit()
 
-    def set_storage_score(self, memory_id: str, score: float) -> None:
+    def set_storage_score(self, memory_id: str, score: float, *, auto_commit: bool = True) -> None:
         self._db.execute(
             "UPDATE memories SET storage_score = ? WHERE id = ?",
             (score, memory_id),
         )
-        self._db.commit()
+        if auto_commit:
+            self._db.commit()
 
-    def set_activation(self, memory_id: str, score: float) -> None:
+    def set_activation(self, memory_id: str, score: float, *, auto_commit: bool = True) -> None:
         self._db.execute(
             "UPDATE memories SET retrieval_score = ? WHERE id = ?",
             (score, memory_id),
         )
-        self._db.commit()
+        if auto_commit:
+            self._db.commit()
 
     def reinforce(
         self,
@@ -292,6 +325,8 @@ class MemoryStore:
         retrieval_boost: float = 0.10,
         stability_gain: float = 0.05,
         stability_cap: float = 1.0,
+        *,
+        auto_commit: bool = True,
     ) -> None:
         """Boost a memory's retrieval and stability scores (retrieval consolidation).
 
@@ -317,7 +352,8 @@ class MemoryStore:
                WHERE id = ?""",
             (retrieval, storage, stability, memory_id),
         )
-        self._db.commit()
+        if auto_commit:
+            self._db.commit()
 
     def delete_memory(self, memory_id: str) -> None:
         """Delete a single memory by ID."""
@@ -368,14 +404,15 @@ class MemoryStore:
 
     # --- Embedding cache ---
 
-    def cache_embedding(self, text: str, embedding: np.ndarray, model: str = "") -> None:
+    def cache_embedding(self, text: str, embedding: np.ndarray, model: str = "", *, auto_commit: bool = True) -> None:
         """Cache an embedding for a text string."""
         text_hash = hashlib.sha256(text.encode()).hexdigest()
         self._db.execute(
             "INSERT OR REPLACE INTO embedding_cache (text_hash, model, embedding) VALUES (?, ?, ?)",
             (text_hash, model, _serialize_f32(embedding)),
         )
-        self._db.commit()
+        if auto_commit:
+            self._db.commit()
 
     def get_cached_embedding(self, text: str, model: str = "") -> np.ndarray | None:
         """Retrieve a cached embedding, or None if not found."""
