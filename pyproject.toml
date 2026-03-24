@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "memory-decay-core"
+version = "0.1.0"
+description = "Core memory decay library - graph-based associations with human-like decay algorithms"
+requires-python = ">=3.10"
+dependencies = [
+    "networkx>=3.0",
+    "sentence-transformers>=2.2",
+    "numpy>=1.24",
+    "openai>=1.0",
+    "google-genai>=1.0",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+    "sqlite-vec>=0.1.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "httpx>=0.28.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
