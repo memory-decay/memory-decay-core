@@ -4,7 +4,7 @@ import json
 import pytest
 import numpy as np
 
-from memory_decay import MemoryGraph, DecayEngine, Evaluator, SyntheticDataGenerator
+from memory_decay import MemoryGraph, DecayEngine, Evaluator
 
 
 def mock_embedder(text: str):
@@ -212,6 +212,7 @@ class TestSimulationPipeline:
             current_tick: int | None = None,
             activation_weight: float = 0.0,
             assoc_boost: float = 0.0,
+            **kwargs,
         ):
             return [(query_to_id[query_text], 1.0)]
 

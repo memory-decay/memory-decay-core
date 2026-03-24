@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import pickle  # noqa: S403 — self-generated local cache only
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -18,7 +17,6 @@ import numpy as np
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from .cache_builder import load_cached_embedder
 from .decay import DecayEngine
 from .embedding_provider import EmbeddingProvider, create_embedding_provider
 from .memory_store import MemoryStore
@@ -28,7 +26,6 @@ from .memory_store import MemoryStore
 # ---------------------------------------------------------------------------
 
 _PACKAGE_ROOT = Path(__file__).resolve().parent.parent.parent  # repo root
-_DEFAULT_CACHE_DIR = _PACKAGE_ROOT / "cache"
 _DEFAULT_DB_DIR = _PACKAGE_ROOT / "data"
 
 
@@ -57,18 +54,6 @@ def _load_best_experiment(experiment_dir: Path | None = None) -> tuple[dict, obj
     return params, decay_fn
 
 
-def _resolve_cache_dir(cache_dir: str | None) -> Path | None:
-    """Return the embedding cache dir when one is available."""
-    if cache_dir:
-        resolved = Path(cache_dir)
-        if not (resolved / "embeddings.pkl").exists():
-            raise FileNotFoundError(f"Embedding cache not found at {resolved / 'embeddings.pkl'}")
-        return resolved
-
-    if (_DEFAULT_CACHE_DIR / "embeddings.pkl").exists():
-        return _DEFAULT_CACHE_DIR
-
-    return None
 
 # ---------------------------------------------------------------------------
 # Request / Response models
@@ -139,8 +124,6 @@ _state: ServerState | None = None
 
 def create_app(
     embedding_provider: EmbeddingProvider | None = None,
-    cache_dir: str | None = None,
-    persistence_dir: str | None = None,
     tick_interval_seconds: float = 3600.0,
     experiment_dir: Path | str | None = None,
     db_path: str | None = None,
@@ -156,45 +139,18 @@ def create_app(
     async def lifespan(app: FastAPI):
         global _state
 
-        # Only auto-detect default cache dir when no test embedder is provided
-        # (test embedder is authoritative in tests — default cache is a production artifact)
-        resolved_cache_dir = _resolve_cache_dir(cache_dir) if (cache_dir or not _test_embedder) else None
-        cached_embedding_dim: int | None = None
-        if resolved_cache_dir is not None:
-            pkl_path = Path(resolved_cache_dir) / "embeddings.pkl"
-            if pkl_path.exists():
-                with open(pkl_path, "rb") as f:
-                    cached_embeddings: dict[str, np.ndarray] = pickle.load(f)  # noqa: S301
-                if cached_embeddings:
-                    cached_embedding_dim = len(next(iter(cached_embeddings.values())))
-
         # --- Resolve embedder function and dimension ---
         if _test_embedder:
             base_embedder = _test_embedder
+            resolved_embedding_dim = embedding_dim or len(_test_embedder("_dim_probe_"))
         elif embedding_provider:
             base_embedder = embedding_provider.embed
-            provider_embedding_dim = embedding_provider.dimension
+            resolved_embedding_dim = embedding_dim or embedding_provider.dimension
         else:
             from .graph import MemoryGraph
             _graph = MemoryGraph(embedding_backend="auto")
             base_embedder = _graph._embed_text
-            provider_embedding_dim = 768
-
-        resolved_embedding_dim = embedding_dim or cached_embedding_dim
-        if resolved_embedding_dim is None:
-            if _test_embedder:
-                resolved_embedding_dim = len(_test_embedder("_dim_probe_"))
-            else:
-                resolved_embedding_dim = provider_embedding_dim
-
-        # Wrap with PKL cache if available
-        if resolved_cache_dir is not None:
-            embedder_fn = load_cached_embedder(
-                str(resolved_cache_dir),
-                fallback_embedder=base_embedder,
-            )
-        else:
-            embedder_fn = base_embedder
+            resolved_embedding_dim = embedding_dim or 768
 
         # --- Resolve DB path ---
         resolved_db_path = db_path or ":memory:"
@@ -204,15 +160,6 @@ def create_app(
 
         # --- Create MemoryStore ---
         store = MemoryStore(resolved_db_path, embedding_dim=resolved_embedding_dim)
-
-        # --- Migrate PKL embedding cache into SQLite if DB is new ---
-        if resolved_cache_dir is not None and store.num_memories == 0:
-            pkl_path = Path(resolved_cache_dir) / "embeddings.pkl"
-            if pkl_path.exists():
-                with open(pkl_path, "rb") as f:
-                    pkl_cache: dict[str, np.ndarray] = pickle.load(f)  # noqa: S301
-                for text, emb in pkl_cache.items():
-                    store.cache_embedding(text, np.array(emb, dtype=np.float32))
 
         # --- Load best experiment (decay function + tuned parameters) ---
         exp_dir = Path(experiment_dir) if experiment_dir else None
@@ -226,7 +173,7 @@ def create_app(
         # --- Restore current_tick from store metadata ---
         state_tick = int(store.get_metadata("current_tick", "0"))
 
-        _state = ServerState(store, engine, embedder_fn, tick_interval_seconds)
+        _state = ServerState(store, engine, base_embedder, tick_interval_seconds)
         _state.current_tick = state_tick
 
         yield
@@ -399,10 +346,6 @@ def main():
     parser.add_argument("--port", type=int, default=8100)
     parser.add_argument("--db-path", default=None,
                         help="Path to SQLite DB file (default: data/memories.db)")
-    parser.add_argument("--persistence-dir", default=None,
-                        help="(deprecated) Ignored, kept for backward compat")
-    parser.add_argument("--cache-dir", default=None,
-                        help="Path to embedding cache dir (default: auto-detect ./cache)")
     parser.add_argument("--experiment-dir", default=None,
                         help="Path to experiment dir (default: experiments/best)")
     parser.add_argument("--tick-interval", type=float, default=3600.0,
@@ -425,17 +368,12 @@ def main():
     # Auto-detect dimension from provider if not specified
     resolved_dim = args.embedding_dim or provider.dimension
 
-    # Resolve db_path: explicit > cache_dir fallback > default
     resolved_db_path = args.db_path
     if resolved_db_path is None:
-        if args.cache_dir:
-            resolved_db_path = str(Path(args.cache_dir) / "memories.db")
-        else:
-            resolved_db_path = str(_DEFAULT_DB_DIR / "memories.db")
+        resolved_db_path = str(_DEFAULT_DB_DIR / "memories.db")
 
     app = create_app(
         embedding_provider=provider,
-        cache_dir=args.cache_dir,
         tick_interval_seconds=args.tick_interval,
         experiment_dir=args.experiment_dir,
         db_path=resolved_db_path,
