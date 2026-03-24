@@ -268,6 +268,15 @@ def create_app(
             activation_weight=params.get("activation_weight", 0.5),
         )
 
+        # Retrieval consolidation: boost top result on successful recall
+        if results and results[0]["score"] > 0.3:
+            _state.store.reinforce(
+                results[0]["id"],
+                retrieval_boost=params.get("retrieval_boost", 0.10),
+                stability_gain=params.get("reinforcement_gain_direct", 0.2),
+                stability_cap=params.get("stability_cap", 1.0),
+            )
+
         return {"results": results}
 
     @app.post("/tick")

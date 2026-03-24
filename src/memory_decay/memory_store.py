@@ -286,6 +286,39 @@ class MemoryStore:
         )
         self._db.commit()
 
+    def reinforce(
+        self,
+        memory_id: str,
+        retrieval_boost: float = 0.10,
+        stability_gain: float = 0.05,
+        stability_cap: float = 1.0,
+    ) -> None:
+        """Boost a memory's retrieval and stability scores (retrieval consolidation).
+
+        Called when a memory is successfully recalled, implementing the testing
+        effect: successful retrieval strengthens the memory trace.
+        """
+        row = self._db.execute(
+            "SELECT retrieval_score, storage_score, stability_score FROM memories WHERE id = ?",
+            (memory_id,),
+        ).fetchone()
+        if row is None:
+            return
+
+        retrieval = min(float(row[0]) + retrieval_boost, 1.0)
+        storage = min(float(row[1]) + retrieval_boost * 0.25, 1.0)
+        stability = float(row[2])
+        saturation = max(1.0 - stability / max(stability_cap, 1e-9), 0.0)
+        stability = min(stability + stability_gain * saturation, stability_cap)
+
+        self._db.execute(
+            """UPDATE memories
+               SET retrieval_score = ?, storage_score = ?, stability_score = ?
+               WHERE id = ?""",
+            (retrieval, storage, stability, memory_id),
+        )
+        self._db.commit()
+
     def delete_memory(self, memory_id: str) -> None:
         """Delete a single memory by ID."""
         rowid_row = self._db.execute(
