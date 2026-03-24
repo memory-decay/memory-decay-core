@@ -241,8 +241,8 @@ def evaluate_cached(
     For benchmarks with cached run IDs, reads existing report.json
     instead of re-running. Used for Stage A screening with reusable samples.
     """
-    benchmarks_to_run = []
     results: dict[str, BenchResult] = {}
+    exp_dir = Path(experiment_dir)
 
     if cached_run_ids:
         for bench, run_id in cached_run_ids.items():
@@ -259,11 +259,25 @@ def evaluate_cached(
                     mrr=retrieval.get("mrr", 0.0),
                     run_id=run_id,
                 )
-                continue
-        benchmarks_to_run = [b for b in BENCHMARKS if b not in results]
 
-    if not benchmarks_to_run:
-        benchmarks_to_run = BENCHMARKS
+    for bench in BENCHMARKS:
+        if bench in results:
+            continue
+        result_file = exp_dir / f"{run_prefix}_{bench}_result.json"
+        if result_file.exists():
+            cached = json.loads(result_file.read_text())
+            summary = cached.get("summary", {})
+            retrieval = cached.get("retrieval", {})
+            results[bench] = BenchResult(
+                benchmark=bench,
+                accuracy=summary.get("accuracy", 0.0) / 100.0,
+                total=summary.get("totalQuestions", 0),
+                correct=summary.get("correctCount", 0),
+                mrr=retrieval.get("mrr", 0.0),
+                run_id=f"{run_prefix}-{bench}",
+            )
+
+    benchmarks_to_run = [b for b in BENCHMARKS if b not in results]
 
     if benchmarks_to_run:
         fresh = evaluate(
