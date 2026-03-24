@@ -300,7 +300,17 @@ The server auto-loads from `experiments/best/` on startup. Override with `--expe
 
 ## Benchmarks
 
-Best optimized configuration (soft-floor decay with retrieval consolidation, 200-tick simulation):
+### LongMemBench (End-to-End QA Accuracy)
+
+Evaluated on the full [LongMemBench](https://github.com/jasonphd/LongMemBench) benchmark (500 questions) using GPT-4o as judge, testing the complete pipeline: memory storage → decay → retrieval → answer generation.
+
+| Metric | Score |
+|--------|-------|
+| **Accuracy** | **81%** |
+
+### Internal Simulation (200-tick decay)
+
+Best optimized configuration (soft-floor decay with retrieval consolidation):
 
 | Metric | Score | Description |
 |--------|-------|-------------|
@@ -308,8 +318,6 @@ Best optimized configuration (soft-floor decay with retrieval consolidation, 200
 | **Overall Score** | **0.711** | Weighted composite of all three pillars |
 | **Recall Rate** | **0.634** | Fraction of target memories successfully retrieved at final tick |
 | **Plausibility** | **0.964** | Correlation between activation and recallability |
-
-The retention AUC of 81.6% means the system retains most important memories through extended time horizons while still allowing low-importance memories to naturally fade — matching the qualitative pattern of human memory.
 
 ## OpenClaw Plugin Integration
 
