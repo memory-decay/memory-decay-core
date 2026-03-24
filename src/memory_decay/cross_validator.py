@@ -35,7 +35,7 @@ def _run_single_fold(
 ) -> dict:
     """Run a single CV fold in a worker process."""
     t0 = time.perf_counter()
-    from memory_decay.runner import run_experiment_with_split
+    from .runner import run_experiment_with_split
 
     result = run_experiment_with_split(
         experiment_dir,

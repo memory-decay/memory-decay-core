@@ -2,7 +2,7 @@
 
 import numpy as np
 from pathlib import Path
-from memory_decay.runner import run_experiment
+from .runner import run_experiment
 
 
 METRICS = [

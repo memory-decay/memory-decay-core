@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import json
 import os
 import struct
@@ -35,6 +34,7 @@ import numpy as np
 from .decay import DecayEngine
 from .embedding_provider import EmbeddingProvider, create_embedding_provider
 from .memory_store import MemoryStore, _serialize_f32, _deserialize_f32
+from .runner import _load_decay_fn
 
 
 class CachedEmbeddingProvider:
@@ -134,14 +134,6 @@ class CachedEmbeddingProvider:
         if self._cache_conn:
             self._cache_conn.close()
             self._cache_conn = None
-
-
-def _load_decay_fn(fn_path: str):
-    """Dynamically import a decay function from a file."""
-    spec = importlib.util.spec_from_file_location("decay_fn", fn_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.compute_decay
 
 
 def prepare(
