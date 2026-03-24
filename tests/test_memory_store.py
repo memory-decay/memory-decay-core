@@ -193,12 +193,12 @@ class TestMemoryStoreAssociations:
         store.add_memory("m2", "second", _random_embedding(384, 2),
                          associations=[("m1", 0.8)])
         # Check both directions exist
-        row = store.db.execute(
+        row = store._db.execute(
             "SELECT weight FROM associations WHERE source_id='m2' AND target_id='m1'"
         ).fetchone()
         assert row is not None
         assert row[0] == pytest.approx(0.8)
-        rev = store.db.execute(
+        rev = store._db.execute(
             "SELECT weight FROM associations WHERE source_id='m1' AND target_id='m2'"
         ).fetchone()
         assert rev is not None
