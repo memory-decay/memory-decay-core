@@ -115,10 +115,8 @@ class ServerState:
         self.current_tick = 0
         self.last_tick_time = time.time()
         self.tick_interval_seconds = tick_interval_seconds
-        self._memory_counter = 0
 
     def next_memory_id(self) -> str:
-        self._memory_counter += 1
         return f"mem_{uuid.uuid4().hex[:12]}"
 
     def embed(self, text: str) -> np.ndarray:
@@ -387,7 +385,6 @@ def create_app(
         cleared = _state.store.clear()
         _state.engine.reset()
         _state.current_tick = 0
-        _state._memory_counter = 0
         _state.last_tick_time = time.time()
 
         return {"status": "ok", "cleared": cleared}
