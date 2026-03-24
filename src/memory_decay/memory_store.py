@@ -42,17 +42,17 @@ class MemoryStore:
     def __init__(self, db_path: str, embedding_dim: int = 3072):
         self._db_path = db_path
         self._embedding_dim = embedding_dim
-        self.db = sqlite3.connect(db_path, check_same_thread=False)
-        self.db.row_factory = sqlite3.Row
-        self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.execute("PRAGMA synchronous=NORMAL")
-        self.db.enable_load_extension(True)
-        sqlite_vec.load(self.db)
-        self.db.enable_load_extension(False)
+        self._db = sqlite3.connect(db_path, check_same_thread=False)
+        self._db.row_factory = sqlite3.Row
+        self._db.execute("PRAGMA journal_mode=WAL")
+        self._db.execute("PRAGMA synchronous=NORMAL")
+        self._db.enable_load_extension(True)
+        sqlite_vec.load(self._db)
+        self._db.enable_load_extension(False)
         self._init_schema()
 
     def _init_schema(self) -> None:
-        self.db.executescript(f"""
+        self._db.executescript(f"""
             CREATE TABLE IF NOT EXISTS memories (
                 id                   TEXT PRIMARY KEY,
                 user_id              TEXT NOT NULL DEFAULT '',
@@ -92,7 +92,7 @@ class MemoryStore:
                 embedding BLOB NOT NULL
             );
         """)
-        self.db.commit()
+        self._db.commit()
 
     def add_memory(
         self,
@@ -108,7 +108,7 @@ class MemoryStore:
         associations: list[tuple[str, float]] | None = None,
     ) -> None:
         # Insert into memories table first to get a rowid
-        self.db.execute(
+        self._db.execute(
             """INSERT OR REPLACE INTO memories
                (id, user_id, content, mtype, importance, speaker, created_tick,
                 last_activated_tick, last_reinforced_tick)
@@ -117,7 +117,7 @@ class MemoryStore:
              created_tick, created_tick, created_tick),
         )
         # Get the rowid assigned by SQLite
-        rowid = self.db.execute(
+        rowid = self._db.execute(
             "SELECT rowid FROM memories WHERE id = ?", (memory_id,)
         ).fetchone()[0]
 
@@ -126,23 +126,23 @@ class MemoryStore:
 
         # Insert into vec_memories with the same rowid
         # Use DELETE + INSERT because vec0 does not support OR REPLACE
-        self.db.execute("DELETE FROM vec_memories WHERE rowid = ?", (rowid,))
-        self.db.execute(
+        self._db.execute("DELETE FROM vec_memories WHERE rowid = ?", (rowid,))
+        self._db.execute(
             "INSERT INTO vec_memories(rowid, embedding) VALUES (?, ?)",
             (rowid, _serialize_f32(normed)),
         )
 
         if associations:
             for target_id, weight in associations:
-                self.db.execute(
+                self._db.execute(
                     "INSERT OR IGNORE INTO associations VALUES (?, ?, ?, ?)",
                     (memory_id, target_id, weight, created_tick),
                 )
-                self.db.execute(
+                self._db.execute(
                     "INSERT OR IGNORE INTO associations VALUES (?, ?, ?, ?)",
                     (target_id, memory_id, weight, created_tick),
                 )
-        self.db.commit()
+        self._db.commit()
 
     def search(
         self,
@@ -159,7 +159,7 @@ class MemoryStore:
         # KNN search via sqlite-vec (returns L2 distance on normalized vectors)
         # sqlite-vec requires 'k = ?' constraint in WHERE clause (not LIMIT)
         fetch_k = top_k * 3  # fetch extra for filtering/reranking
-        rows = self.db.execute(
+        rows = self._db.execute(
             """SELECT v.rowid, v.distance, m.*
                FROM vec_memories v
                JOIN memories m ON m.rowid = v.rowid
@@ -201,7 +201,7 @@ class MemoryStore:
         return results[:top_k]
 
     def get_node(self, memory_id: str) -> dict | None:
-        row = self.db.execute(
+        row = self._db.execute(
             "SELECT * FROM memories WHERE id = ?", (memory_id,)
         ).fetchone()
         if row is None:
@@ -209,7 +209,7 @@ class MemoryStore:
         return dict(row)
 
     def get_all_for_decay(self, current_tick: int) -> list[dict]:
-        rows = self.db.execute(
+        rows = self._db.execute(
             """SELECT id, retrieval_score, storage_score, stability_score,
                       importance, mtype
                FROM memories WHERE created_tick <= ?""",
@@ -219,97 +219,97 @@ class MemoryStore:
 
     def batch_update_scores(self, updates: list[tuple]) -> None:
         """Update scores in bulk. Each tuple: (retrieval, storage, stability, id)."""
-        self.db.executemany(
+        self._db.executemany(
             """UPDATE memories
                SET retrieval_score = ?, storage_score = ?, stability_score = ?
                WHERE id = ?""",
             updates,
         )
-        self.db.commit()
+        self._db.commit()
 
     def set_retrieval_score(self, memory_id: str, score: float) -> None:
-        self.db.execute(
+        self._db.execute(
             "UPDATE memories SET retrieval_score = ? WHERE id = ?",
             (score, memory_id),
         )
-        self.db.commit()
+        self._db.commit()
 
     def set_storage_score(self, memory_id: str, score: float) -> None:
-        self.db.execute(
+        self._db.execute(
             "UPDATE memories SET storage_score = ? WHERE id = ?",
             (score, memory_id),
         )
-        self.db.commit()
+        self._db.commit()
 
     def set_activation(self, memory_id: str, score: float) -> None:
-        self.db.execute(
+        self._db.execute(
             "UPDATE memories SET retrieval_score = ? WHERE id = ?",
             (score, memory_id),
         )
-        self.db.commit()
+        self._db.commit()
 
     def delete_memory(self, memory_id: str) -> None:
         """Delete a single memory by ID."""
-        rowid_row = self.db.execute(
+        rowid_row = self._db.execute(
             "SELECT rowid FROM memories WHERE id = ?", (memory_id,)
         ).fetchone()
         if rowid_row is not None:
-            self.db.execute("DELETE FROM vec_memories WHERE rowid = ?", (rowid_row[0],))
-        self.db.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
-        self.db.execute("DELETE FROM associations WHERE source_id = ? OR target_id = ?",
+            self._db.execute("DELETE FROM vec_memories WHERE rowid = ?", (rowid_row[0],))
+        self._db.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+        self._db.execute("DELETE FROM associations WHERE source_id = ? OR target_id = ?",
                         (memory_id, memory_id))
-        self.db.commit()
+        self._db.commit()
 
     def clear(self, user_id: str | None = None) -> int:
         if user_id:
             # Get rowids to delete from vec_memories
-            rowids = [r[0] for r in self.db.execute(
+            rowids = [r[0] for r in self._db.execute(
                 "SELECT rowid FROM memories WHERE user_id = ?", (user_id,)
             ).fetchall()]
-            count = self.db.execute(
+            count = self._db.execute(
                 "DELETE FROM memories WHERE user_id = ?", (user_id,)
             ).rowcount
             for rid in rowids:
-                self.db.execute("DELETE FROM vec_memories WHERE rowid = ?", (rid,))
+                self._db.execute("DELETE FROM vec_memories WHERE rowid = ?", (rid,))
         else:
-            count = self.db.execute("DELETE FROM memories").rowcount
-            self.db.execute("DELETE FROM vec_memories")
-            self.db.execute("DELETE FROM associations")
-        self.db.commit()
+            count = self._db.execute("DELETE FROM memories").rowcount
+            self._db.execute("DELETE FROM vec_memories")
+            self._db.execute("DELETE FROM associations")
+        self._db.commit()
         return count
 
     @property
     def num_memories(self) -> int:
-        return self.db.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+        return self._db.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
 
     def get_metadata(self, key: str, default: str = "") -> str:
-        row = self.db.execute(
+        row = self._db.execute(
             "SELECT value FROM metadata WHERE key = ?", (key,)
         ).fetchone()
         return row[0] if row else default
 
     def set_metadata(self, key: str, value: str) -> None:
-        self.db.execute(
+        self._db.execute(
             "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
             (key, value),
         )
-        self.db.commit()
+        self._db.commit()
 
     # --- Embedding cache ---
 
     def cache_embedding(self, text: str, embedding: np.ndarray, model: str = "") -> None:
         """Cache an embedding for a text string."""
         text_hash = hashlib.sha256(text.encode()).hexdigest()
-        self.db.execute(
+        self._db.execute(
             "INSERT OR REPLACE INTO embedding_cache (text_hash, model, embedding) VALUES (?, ?, ?)",
             (text_hash, model, _serialize_f32(embedding)),
         )
-        self.db.commit()
+        self._db.commit()
 
     def get_cached_embedding(self, text: str, model: str = "") -> np.ndarray | None:
         """Retrieve a cached embedding, or None if not found."""
         text_hash = hashlib.sha256(text.encode()).hexdigest()
-        row = self.db.execute(
+        row = self._db.execute(
             "SELECT embedding FROM embedding_cache WHERE text_hash = ?",
             (text_hash,),
         ).fetchone()
@@ -318,4 +318,4 @@ class MemoryStore:
         return _deserialize_f32(row[0], self._embedding_dim)
 
     def close(self) -> None:
-        self.db.close()
+        self._db.close()

@@ -20,10 +20,10 @@ from pathlib import Path
 BENCHMARKS = ["longmemeval", "locomo", "convomem"]
 WEIGHTS = {"longmemeval": 0.50, "locomo": 0.30, "convomem": 0.20}
 
-MEMORYBENCH_DIR = Path.home() / "memorybench"
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-SERVER_VENV_PYTHON = str(REPO_ROOT / ".venv" / "bin" / "python")
-CACHE_DIR = str(REPO_ROOT / "cache" / "openai")
+MEMORYBENCH_DIR = Path(os.environ.get("MEMORYBENCH_DIR", str(Path.home() / "memorybench")))
+SERVER_VENV_PYTHON = os.environ.get("SERVER_VENV_PYTHON", str(REPO_ROOT / ".venv" / "bin" / "python"))
+CACHE_DIR = os.environ.get("MEMORYBENCH_CACHE_DIR", str(REPO_ROOT / "cache" / "openai"))
 
 
 @dataclass
