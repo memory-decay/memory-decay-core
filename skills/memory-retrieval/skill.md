@@ -2,59 +2,35 @@
 
 You are answering a question about a user's past conversations using a memory-decay server.
 
-## Server API
-
-The memory-decay server is running at the URL provided in the prompt. Use `curl` via Bash to interact with it.
-
-### Search memories
-```bash
-curl -s http://localhost:8100/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "your search query", "top_k": 20}'
-```
-
-Response contains `results` array, each with:
-- `text`: the memory content
-- `score`: relevance score (higher = more relevant)
-- `created_tick`: relative time (higher = more recent)
-- `speaker`: who said it
-- `date`: calendar date (if enriched)
-
-### Server info
-```bash
-curl -s http://localhost:8100/health
-curl -s http://localhost:8100/stats
-```
-
 ## How to Answer
 
-1. **Read the provided context first.** Initial search results are already included in your prompt.
+1. **Read the provided memories first.** Initial search results are in `<previous_conversations>`.
 
-2. **Re-search if needed.** If the initial results don't fully answer the question:
-   - Try different keywords or phrasings
-   - Search for specific entities mentioned in the question
-   - For "how many" questions, search for each item separately to ensure completeness
+2. **ALWAYS re-search if your answer involves:**
+   - Two or more events/facts that need to be connected ("how many months between X and Y")
+   - Counting ("how many events/items did I...")
+   - Something not clearly found in the initial results
 
-3. **Temporal reasoning:**
-   - Each memory has a date. Use dates to determine chronological order.
-   - CRITICAL: Use the "Today's date" provided in the prompt, NOT your system clock. The memories may be from a different time period.
-   - For "how many days/months ago" questions: compute `today - event_date`. Show your math.
-   - For "which came first" questions: compare dates, not result order.
-   - Convert relative time references within memories to absolute dates.
+   To search, run:
+   ```bash
+   curl -s $SERVER_URL/search -H "Content-Type: application/json" -d '{"query": "your search query", "top_k": 20}'
+   ```
+   Try multiple queries with different phrasings. Extract keywords from the question and search for each separately.
 
-4. **Knowledge updates:**
-   - When multiple memories mention the same fact with different values, the MOST RECENT memory (latest date) has the current value.
+3. **Temporal reasoning — CRITICAL:**
+   - Use ONLY the "Today's date" from the prompt. NEVER use your system clock.
+   - For "how many days ago": compute `today_date - event_date` in days.
+   - For "which came first": compare the `date` fields of the memories.
+   - For relative references in memories ("yesterday", "last week"): convert using the memory's own date.
 
-5. **Inference:**
-   - Read between the lines. Use context clues to infer unstated facts.
-   - If someone discusses adoption without mentioning a partner, they're likely single.
+4. **Knowledge updates:** Multiple memories with the same fact → latest date wins.
 
-6. **Preference questions:**
-   - Reference the user's specific past experiences and successes.
-   - Tailor advice to what worked for them before.
+5. **Inference:** Read between the lines. Use context clues.
 
-## Output Format
+6. **Preference questions:** Reference the user's specific past experiences. Tailor to what worked for them.
 
-Give a concise, direct answer. Include specific dates, names, and facts. Do NOT include your reasoning process — just the answer.
+## Output
 
-If the memories truly contain no relevant information after searching, say "I don't know."
+Give ONLY the concise, direct answer. No reasoning process, no "based on the memories" preamble. Just the answer with specific dates, names, and facts.
+
+Say "I don't know" only if no relevant information exists after searching.
