@@ -42,7 +42,7 @@ class MemoryStore:
     def __init__(self, db_path: str, embedding_dim: int = 3072):
         self._db_path = db_path
         self._embedding_dim = embedding_dim
-        self.db = sqlite3.connect(db_path)
+        self.db = sqlite3.connect(db_path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=NORMAL")
@@ -246,6 +246,18 @@ class MemoryStore:
             "UPDATE memories SET retrieval_score = ? WHERE id = ?",
             (score, memory_id),
         )
+        self.db.commit()
+
+    def delete_memory(self, memory_id: str) -> None:
+        """Delete a single memory by ID."""
+        rowid_row = self.db.execute(
+            "SELECT rowid FROM memories WHERE id = ?", (memory_id,)
+        ).fetchone()
+        if rowid_row is not None:
+            self.db.execute("DELETE FROM vec_memories WHERE rowid = ?", (rowid_row[0],))
+        self.db.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+        self.db.execute("DELETE FROM associations WHERE source_id = ? OR target_id = ?",
+                        (memory_id, memory_id))
         self.db.commit()
 
     def clear(self, user_id: str | None = None) -> int:
