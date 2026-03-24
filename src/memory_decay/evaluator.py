@@ -15,7 +15,15 @@ class Evaluator:
     Prevents single-metric gaming by using a composite score.
     """
 
-    def __init__(self, graph: MemoryGraph, engine: DecayEngine, activation_weight: float = 0.5, assoc_boost: float = 0.0, bm25_weight: float = 0.0, bm25_candidates: int = 20, cross_encoder_weight: float = 0.0, ce_candidates: int = 30, mmr_lambda: float = 0.0, mmr_candidates: int = 15):
+    def __init__(
+        self,
+        graph: MemoryGraph,
+        engine: DecayEngine,
+        activation_weight: float = 0.5,
+        assoc_boost: float = 0.0,
+        bm25_weight: float = 0.0,
+        bm25_candidates: int = 20,
+    ):
         self._graph = graph
         self._engine = engine
         self._history: list[dict] = []
@@ -23,10 +31,6 @@ class Evaluator:
         self._assoc_boost = assoc_boost
         self._bm25_weight = bm25_weight
         self._bm25_candidates = bm25_candidates
-        self._cross_encoder_weight = cross_encoder_weight
-        self._ce_candidates = ce_candidates
-        self._mmr_lambda = mmr_lambda
-        self._mmr_candidates = mmr_candidates
         self._query_result_cache: dict[tuple, list[tuple[str, float]]] = {}
 
     @staticmethod
@@ -57,10 +61,6 @@ class Evaluator:
             self._assoc_boost,
             self._bm25_weight,
             self._bm25_candidates,
-            self._cross_encoder_weight,
-            self._ce_candidates,
-            self._mmr_lambda,
-            self._mmr_candidates,
         )
         cached = self._query_result_cache.get(cache_key)
         if cached is not None:

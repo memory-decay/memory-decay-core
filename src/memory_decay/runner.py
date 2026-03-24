@@ -169,10 +169,13 @@ def run_experiment(
     assoc_boost = params.get("assoc_boost", 0.0)
     bm25_weight = params.get("bm25_weight", 0.0)
     bm25_candidates = params.get("bm25_candidates", 20)
-    cross_encoder_weight = params.get("cross_encoder_weight", 0.0)
-    mmr_lambda = params.get("mmr_lambda", 0.0)
-    mmr_candidates = params.get("mmr_candidates", 15)
-    evaluator = Evaluator(graph, engine, activation_weight=activation_weight, assoc_boost=assoc_boost, bm25_weight=bm25_weight, bm25_candidates=bm25_candidates, cross_encoder_weight=cross_encoder_weight, mmr_lambda=mmr_lambda, mmr_candidates=mmr_candidates)
+    evaluator = Evaluator(
+        graph, engine,
+        activation_weight=activation_weight,
+        assoc_boost=assoc_boost,
+        bm25_weight=bm25_weight,
+        bm25_candidates=bm25_candidates,
+    )
 
     t_sim_start = time.perf_counter()
     snapshots = run_simulation(
@@ -263,18 +266,12 @@ def run_experiment_with_split(
     assoc_boost = params.get("assoc_boost", 0.0)
     bm25_weight = params.get("bm25_weight", 0.0)
     bm25_candidates = params.get("bm25_candidates", 20)
-    cross_encoder_weight = params.get("cross_encoder_weight", 0.0)
-    mmr_lambda = params.get("mmr_lambda", 0.0)
-    mmr_candidates = params.get("mmr_candidates", 15)
     evaluator = Evaluator(
         graph, engine,
         activation_weight=activation_weight,
         assoc_boost=assoc_boost,
         bm25_weight=bm25_weight,
         bm25_candidates=bm25_candidates,
-        cross_encoder_weight=cross_encoder_weight,
-        mmr_lambda=mmr_lambda,
-        mmr_candidates=mmr_candidates,
     )
 
     run_simulation(
