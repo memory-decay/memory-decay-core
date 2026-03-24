@@ -467,7 +467,8 @@ def run_simulation(
 
         # scheduled_query_plus_test: separate train + test schedules
         if reactivation_policy == "scheduled_query_plus_test":
-            assert rehearsal_targets is not None
+            if rehearsal_targets is None:
+                raise ValueError("rehearsal_targets required for this policy")
             # Train reactivation: same schedule as scheduled_query
             if tick % reactivation_interval == 0:
                 train_target = _get_scheduled_target(rehearsal_targets, tick, reactivation_interval)
@@ -506,7 +507,8 @@ def run_simulation(
 
         # retrieval_consolidation: train reactivation (every 10) + test reactivation (every 20, starting tick 80)
         if reactivation_policy == "retrieval_consolidation":
-            assert rehearsal_targets is not None
+            if rehearsal_targets is None:
+                raise ValueError("rehearsal_targets required for this policy")
             # Train: every reactivation_interval ticks (10)
             if tick % reactivation_interval == 0:
                 train_target = _get_scheduled_target(rehearsal_targets, tick, reactivation_interval)
@@ -549,10 +551,12 @@ def run_simulation(
             return
 
         if reactivation_policy == "scheduled_query":
-            assert rehearsal_targets is not None
+            if rehearsal_targets is None:
+                raise ValueError("rehearsal_targets required for this policy")
             target_id = _get_scheduled_target(rehearsal_targets, tick, reactivation_interval)
         else:  # scheduled_query_all
-            assert rehearsal_targets is not None
+            if rehearsal_targets is None:
+                raise ValueError("rehearsal_targets required for this policy")
             all_targets = list(rehearsal_targets) + [
                 tid for tid in test_memory_ids
                 if graph._graph.nodes[tid].get("created_tick", 0) <= engine.current_tick
@@ -640,7 +644,7 @@ def run_experiment(
         print(f"Loading dataset from {dataset_path}...")
         dataset = SyntheticDataGenerator.load_jsonl(dataset_path)
     else:
-        print(f"Generating {num_memories} memories with Anthropic API...")
+        print(f"Generating {num_memories} memories with OpenAI API...")
         gen = SyntheticDataGenerator(api_key=api_key)
         dataset = gen.generate_dataset(
             num_memories=num_memories,

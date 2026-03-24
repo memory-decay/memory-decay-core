@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import random
 from pathlib import Path
 from typing import Optional
@@ -251,7 +252,6 @@ JSON 배열만 출력. 정확히 {count}개여야 합니다."""
             # Attempt to fix common LLM JSON issues
             cleaned = text.replace("\n", "").strip()
             # Remove trailing commas before ] or }
-            import re
             cleaned = re.sub(r',\s*([}\]])', r'\1', cleaned)
             try:
                 items = json.loads(cleaned)
