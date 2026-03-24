@@ -300,24 +300,11 @@ The server auto-loads from `experiments/best/` on startup. Override with `--expe
 
 ## Benchmarks
 
-### LongMemBench (End-to-End QA Accuracy)
-
 Evaluated on the full [LongMemBench](https://github.com/jasonphd/LongMemBench) benchmark (500 questions) using GPT-4o as judge, testing the complete pipeline: memory storage → decay → retrieval → answer generation.
 
 | Metric | Score |
 |--------|-------|
 | **Accuracy** | **81%** |
-
-### Internal Simulation (200-tick decay)
-
-Best optimized configuration (soft-floor decay with retrieval consolidation):
-
-| Metric | Score | Description |
-|--------|-------|-------------|
-| **Retention AUC** | **0.816** | Mean recall across time checkpoints (higher = better retention) |
-| **Overall Score** | **0.711** | Weighted composite of all three pillars |
-| **Recall Rate** | **0.634** | Fraction of target memories successfully retrieved at final tick |
-| **Plausibility** | **0.964** | Correlation between activation and recallability |
 
 ## OpenClaw Plugin Integration
 
