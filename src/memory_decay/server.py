@@ -97,6 +97,7 @@ class ServerState:
         embedder: Callable | None = None,
         provider: EmbeddingProvider | None = None,
         tick_interval_seconds: float = 3600.0,
+        embedding_model: str = "",
     ):
         self.store = store
         self.engine = engine
@@ -105,13 +106,16 @@ class ServerState:
         self.current_tick = 0
         self.last_tick_time = time.time()
         self.tick_interval_seconds = tick_interval_seconds
+        self._embedding_model = embedding_model
 
     def next_memory_id(self) -> str:
         return f"mem_{uuid.uuid4().hex[:12]}"
 
     async def embed(self, text: str) -> np.ndarray:
         """Get embedding for text, using store cache first."""
-        cached = await asyncio.to_thread(self.store.get_cached_embedding, text)
+        cached = await asyncio.to_thread(
+            self.store.get_cached_embedding, text, model=self._embedding_model
+        )
         if cached is not None:
             return cached
 
@@ -123,7 +127,9 @@ class ServerState:
         else:
             raise RuntimeError("No embedding provider configured")
 
-        await asyncio.to_thread(self.store.cache_embedding, text, embedding)
+        await asyncio.to_thread(
+            self.store.cache_embedding, text, embedding, model=self._embedding_model
+        )
         return embedding
 
     async def embed_batch(self, texts: list[str]) -> list[np.ndarray]:
@@ -134,7 +140,9 @@ class ServerState:
 
         # Check cache for all texts
         for i, text in enumerate(texts):
-            cached = await asyncio.to_thread(self.store.get_cached_embedding, text)
+            cached = await asyncio.to_thread(
+                self.store.get_cached_embedding, text, model=self._embedding_model
+            )
             if cached is not None:
                 results[i] = cached
             else:
@@ -159,7 +167,9 @@ class ServerState:
             # Cache all new embeddings in one transaction
             def _cache_all():
                 for i, emb in enumerate(new_embeddings):
-                    self.store.cache_embedding(uncached_texts[i], emb, auto_commit=False)
+                    self.store.cache_embedding(
+                        uncached_texts[i], emb, model=self._embedding_model, auto_commit=False
+                    )
                 self.store.commit()
 
             await asyncio.to_thread(_cache_all)
@@ -248,12 +258,22 @@ def create_app(
 
         # --- Restore current_tick from store metadata ---
         state_tick = int(store.get_metadata("current_tick", "0"))
+        engine.current_tick = state_tick
+
+        # Resolve model name for cache keying
+        if _test_embedder:
+            model_name = "test"
+        elif embedding_provider:
+            model_name = getattr(embedding_provider, '_model', '') or getattr(embedding_provider, '_model_name', '')
+        else:
+            model_name = "ko-sroberta"
 
         _state = ServerState(
             store, engine,
             embedder=base_embedder,
             provider=resolved_provider,
             tick_interval_seconds=tick_interval_seconds,
+            embedding_model=model_name,
         )
         _state.current_tick = state_tick
 
@@ -356,6 +376,8 @@ def create_app(
                 top_k=req.top_k,
                 current_tick=_state.current_tick,
                 activation_weight=params.get("activation_weight", 0.5),
+                bm25_weight=params.get("bm25_weight", 0.0),
+                query_text=req.query,
             )
         )
 
@@ -380,7 +402,7 @@ def create_app(
         def _do_ticks():
             for _ in range(req.count):
                 _state.engine.tick()
-                _state.current_tick += 1
+            _state.current_tick = _state.engine.current_tick
             _state.last_tick_time = time.time()
 
         await asyncio.to_thread(_do_ticks)
@@ -402,7 +424,7 @@ def create_app(
             def _do_ticks():
                 for _ in range(ticks_due):
                     _state.engine.tick()
-                    _state.current_tick += 1
+                _state.current_tick = _state.engine.current_tick
                 _state.last_tick_time = time.time()
 
             await asyncio.to_thread(_do_ticks)

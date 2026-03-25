@@ -9,6 +9,8 @@ from typing import Optional
 import numpy as np
 import sqlite_vec
 
+from .bm25 import bm25_score_candidates
+
 
 def _serialize_f32(vec: np.ndarray) -> bytes:
     """Serialize numpy float32 array to bytes for sqlite-vec."""
@@ -84,15 +86,40 @@ class MemoryStore:
             );
 
             CREATE TABLE IF NOT EXISTS embedding_cache (
-                text_hash TEXT PRIMARY KEY,
-                model     TEXT DEFAULT '',
-                embedding BLOB NOT NULL
+                text_hash TEXT NOT NULL,
+                model     TEXT NOT NULL DEFAULT '',
+                embedding BLOB NOT NULL,
+                PRIMARY KEY (text_hash, model)
             );
         """)
+
+        # Migrate embedding_cache: old schema has text_hash-only PK
+        self._migrate_embedding_cache()
 
         # Handle vec_memories with dimension change detection
         self._ensure_vec_table()
         self._db.commit()
+
+    def _migrate_embedding_cache(self) -> None:
+        """Recreate embedding_cache if it has the old single-column PK."""
+        import sys
+        rows = self._db.execute("PRAGMA table_info(embedding_cache)").fetchall()
+        pk_cols = [r[1] for r in rows if r[5] > 0]  # r[5] = pk flag
+        if pk_cols == ["text_hash"]:
+            print(
+                "[memory-store] Migrating embedding_cache to composite PK (text_hash, model).",
+                file=sys.stderr,
+            )
+            self._db.execute("DROP TABLE embedding_cache")
+            self._db.execute("""
+                CREATE TABLE embedding_cache (
+                    text_hash TEXT NOT NULL,
+                    model     TEXT NOT NULL DEFAULT '',
+                    embedding BLOB NOT NULL,
+                    PRIMARY KEY (text_hash, model)
+                )
+            """)
+            self._db.commit()
 
     def _ensure_vec_table(self) -> None:
         """Create or recreate vec_memories if embedding dimension changed."""
@@ -219,14 +246,18 @@ class MemoryStore:
         current_tick: int | None = None,
         activation_weight: float = 0.0,
         user_id: str | None = None,
+        bm25_weight: float = 0.0,
+        query_text: str = "",
     ) -> list[dict]:
         # Pre-normalize query embedding to match stored embeddings
         normed_query = _normalize(query_embedding)
         query_bytes = _serialize_f32(normed_query)
 
         # KNN search via sqlite-vec (returns L2 distance on normalized vectors)
-        # sqlite-vec requires 'k = ?' constraint in WHERE clause (not LIMIT)
-        fetch_k = top_k * 3  # fetch extra for filtering/reranking
+        # Fetch extra candidates when BM25 is active for re-ranking pool
+        fetch_k = top_k * 3
+        if bm25_weight > 0:
+            fetch_k = max(fetch_k, top_k * 5)
         rows = self._db.execute(
             """SELECT v.rowid, v.distance, m.*
                FROM vec_memories v
@@ -236,28 +267,24 @@ class MemoryStore:
             (query_bytes, fetch_k),
         ).fetchall()
 
-        results = []
+        candidates = []
         for row in rows:
             if current_tick is not None and row["created_tick"] > current_tick:
                 continue
             if user_id is not None and row["user_id"] != user_id:
                 continue
 
-            # For pre-normalized vectors:
-            # L2_distance² = 2(1 - cos_sim)
-            # cos_sim = 1 - distance²/2
             distance = float(row["distance"])
             similarity = max(1.0 - (distance ** 2) / 2.0, 0.0)
 
-            # Apply activation weight (boost by retrieval_score)
             if activation_weight > 0:
                 retrieval_score = max(float(row["retrieval_score"]), 0.0)
                 similarity *= retrieval_score ** activation_weight
 
-            results.append({
+            candidates.append({
                 "id": row["id"],
                 "text": row["content"],
-                "score": round(similarity, 4),
+                "score": similarity,
                 "storage_score": round(float(row["storage_score"]), 4),
                 "retrieval_score": round(float(row["retrieval_score"]), 4),
                 "category": row["mtype"],
@@ -265,8 +292,33 @@ class MemoryStore:
                 "speaker": row["speaker"] or "",
             })
 
-        results.sort(key=lambda x: x["score"], reverse=True)
-        return results[:top_k]
+        # BM25 re-ranking pass
+        if bm25_weight > 0 and query_text and candidates:
+            doc_texts = {c["id"]: c["text"] for c in candidates}
+            bm25_scores = bm25_score_candidates(query_text, doc_texts)
+
+            if bm25_scores:
+                cos_scores = {c["id"]: c["score"] for c in candidates}
+                cos_vals = list(cos_scores.values())
+                cos_min, cos_max = min(cos_vals), max(cos_vals)
+                cos_range = cos_max - cos_min
+
+                bm25_vals = list(bm25_scores.values())
+                bm25_max = max(bm25_vals) if bm25_vals else 1.0
+
+                for c in candidates:
+                    if cos_range < 1e-8:
+                        norm_cos = 1.0  # all candidates tied on vector similarity
+                    else:
+                        norm_cos = (c["score"] - cos_min) / cos_range
+                    norm_bm25 = bm25_scores.get(c["id"], 0.0) / max(bm25_max, 1e-8)
+                    c["score"] = (1.0 - bm25_weight) * norm_cos + bm25_weight * norm_bm25
+
+        for c in candidates:
+            c["score"] = round(c["score"], 4)
+
+        candidates.sort(key=lambda x: x["score"], reverse=True)
+        return candidates[:top_k]
 
     def get_node(self, memory_id: str) -> dict | None:
         row = self._db.execute(
@@ -419,8 +471,8 @@ class MemoryStore:
         """Retrieve a cached embedding, or None if not found."""
         text_hash = hashlib.sha256(text.encode()).hexdigest()
         row = self._db.execute(
-            "SELECT embedding FROM embedding_cache WHERE text_hash = ?",
-            (text_hash,),
+            "SELECT embedding FROM embedding_cache WHERE text_hash = ? AND model = ?",
+            (text_hash, model),
         ).fetchone()
         if row is None:
             return None
