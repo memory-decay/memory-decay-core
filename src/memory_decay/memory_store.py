@@ -348,7 +348,8 @@ class MemoryStore:
 
         self._db.execute(
             """UPDATE memories
-               SET retrieval_score = ?, storage_score = ?, stability_score = ?
+               SET retrieval_score = ?, storage_score = ?, stability_score = ?,
+                   retrieval_count = retrieval_count + 1
                WHERE id = ?""",
             (retrieval, storage, stability, memory_id),
         )
