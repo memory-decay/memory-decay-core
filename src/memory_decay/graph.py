@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import math
 import os
-import re
 import time
 from collections import Counter
 from typing import Optional, Callable
 
 import networkx as nx
 import numpy as np
+
+from .bm25 import bm25_tokenize
 
 
 class MemoryGraph:
@@ -197,7 +198,7 @@ class MemoryGraph:
 
     @staticmethod
     def _bm25_tokenize(text: str) -> list[str]:
-        return re.findall(r"[0-9A-Za-z가-힣]+", text.lower())
+        return bm25_tokenize(text)
 
     def _bm25_score_candidates(
         self,
