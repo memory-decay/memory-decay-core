@@ -86,15 +86,40 @@ class MemoryStore:
             );
 
             CREATE TABLE IF NOT EXISTS embedding_cache (
-                text_hash TEXT PRIMARY KEY,
-                model     TEXT DEFAULT '',
-                embedding BLOB NOT NULL
+                text_hash TEXT NOT NULL,
+                model     TEXT NOT NULL DEFAULT '',
+                embedding BLOB NOT NULL,
+                PRIMARY KEY (text_hash, model)
             );
         """)
+
+        # Migrate embedding_cache: old schema has text_hash-only PK
+        self._migrate_embedding_cache()
 
         # Handle vec_memories with dimension change detection
         self._ensure_vec_table()
         self._db.commit()
+
+    def _migrate_embedding_cache(self) -> None:
+        """Recreate embedding_cache if it has the old single-column PK."""
+        import sys
+        rows = self._db.execute("PRAGMA table_info(embedding_cache)").fetchall()
+        pk_cols = [r[1] for r in rows if r[5] > 0]  # r[5] = pk flag
+        if pk_cols == ["text_hash"]:
+            print(
+                "[memory-store] Migrating embedding_cache to composite PK (text_hash, model).",
+                file=sys.stderr,
+            )
+            self._db.execute("DROP TABLE embedding_cache")
+            self._db.execute("""
+                CREATE TABLE embedding_cache (
+                    text_hash TEXT NOT NULL,
+                    model     TEXT NOT NULL DEFAULT '',
+                    embedding BLOB NOT NULL,
+                    PRIMARY KEY (text_hash, model)
+                )
+            """)
+            self._db.commit()
 
     def _ensure_vec_table(self) -> None:
         """Create or recreate vec_memories if embedding dimension changed."""
@@ -446,8 +471,8 @@ class MemoryStore:
         """Retrieve a cached embedding, or None if not found."""
         text_hash = hashlib.sha256(text.encode()).hexdigest()
         row = self._db.execute(
-            "SELECT embedding FROM embedding_cache WHERE text_hash = ?",
-            (text_hash,),
+            "SELECT embedding FROM embedding_cache WHERE text_hash = ? AND model = ?",
+            (text_hash, model),
         ).fetchone()
         if row is None:
             return None

@@ -287,3 +287,26 @@ class TestMemoryStoreBM25:
                                bm25_weight=0.3, query_text="doc 0")
         assert len(results) <= 3
         store.close()
+
+
+class TestEmbeddingCacheModelFilter:
+    def test_different_models_return_different_embeddings(self):
+        store = MemoryStore(":memory:", embedding_dim=384)
+        emb_a = _random_embedding(384, seed=1)
+        emb_b = _random_embedding(384, seed=2)
+        store.cache_embedding("hello", emb_a, model="model-a")
+        store.cache_embedding("hello", emb_b, model="model-b")
+        result_a = store.get_cached_embedding("hello", model="model-a")
+        result_b = store.get_cached_embedding("hello", model="model-b")
+        assert result_a is not None
+        assert result_b is not None
+        assert not np.allclose(result_a, result_b)
+        store.close()
+
+    def test_missing_model_returns_none(self):
+        store = MemoryStore(":memory:", embedding_dim=384)
+        emb = _random_embedding(384, seed=1)
+        store.cache_embedding("hello", emb, model="model-a")
+        result = store.get_cached_embedding("hello", model="model-x")
+        assert result is None
+        store.close()
