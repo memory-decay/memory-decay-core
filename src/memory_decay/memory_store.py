@@ -62,6 +62,7 @@ class MemoryStore:
                 user_id              TEXT NOT NULL DEFAULT '',
                 content              TEXT NOT NULL,
                 mtype                TEXT DEFAULT 'episode',
+                category             TEXT DEFAULT '',
                 importance           REAL DEFAULT 0.7,
                 speaker              TEXT DEFAULT '',
                 created_tick         INTEGER DEFAULT 0,
@@ -97,9 +98,23 @@ class MemoryStore:
         # Migrate embedding_cache: old schema has text_hash-only PK
         self._migrate_embedding_cache()
 
+        # Migrate: add category column if missing (existing DBs)
+        self._migrate_category_column()
+
         # Handle vec_memories with dimension change detection
         self._ensure_vec_table()
         self._db.commit()
+
+    def _migrate_category_column(self) -> None:
+        """Add category column to memories table if it doesn't exist."""
+        cols = [r[1] for r in self._db.execute("PRAGMA table_info(memories)").fetchall()]
+        if "category" not in cols:
+            print(
+                "[memory-store] Adding category column to memories table.",
+                file=sys.stderr,
+            )
+            self._db.execute("ALTER TABLE memories ADD COLUMN category TEXT DEFAULT ''")
+            self._db.commit()
 
     def _migrate_embedding_cache(self) -> None:
         """Recreate embedding_cache if it has the old single-column PK."""
@@ -169,19 +184,23 @@ class MemoryStore:
         *,
         user_id: str = "",
         mtype: str = "episode",
+        category: str = "",
         importance: float = 0.7,
         speaker: str = "",
         created_tick: int = 0,
         associations: list[tuple[str, float]] | None = None,
         auto_commit: bool = True,
     ) -> None:
+        # Default category to mtype if not provided
+        if not category:
+            category = mtype
         # Insert into memories table first to get a rowid
         self._db.execute(
             """INSERT OR REPLACE INTO memories
-               (id, user_id, content, mtype, importance, speaker, created_tick,
-                last_activated_tick, last_reinforced_tick)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (memory_id, user_id, content, mtype, importance, speaker,
+               (id, user_id, content, mtype, category, importance, speaker,
+                created_tick, last_activated_tick, last_reinforced_tick)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (memory_id, user_id, content, mtype, category, importance, speaker,
              created_tick, created_tick, created_tick),
         )
         # Get the rowid assigned by SQLite
@@ -220,7 +239,7 @@ class MemoryStore:
         """Insert multiple memories in a single transaction.
 
         Each dict must have: memory_id, content, embedding.
-        Optional: user_id, mtype, importance, speaker, created_tick, associations.
+        Optional: user_id, mtype, category, importance, speaker, created_tick, associations.
         """
         for mem in memories:
             self.add_memory(
@@ -229,6 +248,7 @@ class MemoryStore:
                 embedding=mem["embedding"],
                 user_id=mem.get("user_id", ""),
                 mtype=mem.get("mtype", "episode"),
+                category=mem.get("category", ""),
                 importance=mem.get("importance", 0.7),
                 speaker=mem.get("speaker", ""),
                 created_tick=mem.get("created_tick", 0),
@@ -285,7 +305,8 @@ class MemoryStore:
                 "score": similarity,
                 "storage_score": round(float(row["storage_score"]), 4),
                 "retrieval_score": round(float(row["retrieval_score"]), 4),
-                "category": row["mtype"],
+                "category": row["category"] or row["mtype"],
+                "mtype": row["mtype"],
                 "created_tick": row["created_tick"],
                 "speaker": row["speaker"] or "",
             })

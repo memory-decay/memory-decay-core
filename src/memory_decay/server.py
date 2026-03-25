@@ -67,6 +67,7 @@ class StoreRequest(BaseModel):
     text: str
     importance: float = Field(default=0.7, ge=0.0, le=1.0)
     mtype: str = "fact"
+    category: str = ""
     associations: Optional[List[str]] = None
     created_tick: Optional[int] = None
     speaker: Optional[str] = None
@@ -320,6 +321,7 @@ def create_app(
                 content=req.text,
                 embedding=embedding,
                 mtype=req.mtype,
+                category=req.category,
                 importance=req.importance,
                 created_tick=req.created_tick if req.created_tick is not None else _state.current_tick,
                 associations=associations,
@@ -351,6 +353,7 @@ def create_app(
                 "content": req.text,
                 "embedding": embedding,
                 "mtype": req.mtype,
+                "category": req.category,
                 "importance": req.importance,
                 "created_tick": req.created_tick if req.created_tick is not None else _state.current_tick,
                 "associations": associations,

@@ -155,7 +155,7 @@ python -m memory_decay.server \
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/store` | Store a memory with text, importance, type, and associations |
+| `POST` | `/store` | Store a memory with text, importance, type, category, and associations |
 | `POST` | `/store-batch` | Store multiple memories in one call |
 | `POST` | `/search` | Semantic search with activation weighting + retrieval consolidation |
 | `POST` | `/tick` | Advance decay by N ticks |
@@ -168,10 +168,20 @@ python -m memory_decay.server \
 #### Example Requests
 
 ```bash
-# Store a memory
+# Store a memory with category and calibrated importance
 curl -X POST http://localhost:8100/store \
   -H "Content-Type: application/json" \
-  -d '{"text": "User prefers dark mode", "importance": 0.8, "mtype": "fact"}'
+  -d '{"text": "User prefers dark mode", "importance": 0.9, "mtype": "fact", "category": "preference"}'
+
+# Store a decision
+curl -X POST http://localhost:8100/store \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Chose SQLite over Postgres for single-node simplicity", "importance": 0.8, "mtype": "fact", "category": "decision"}'
+
+# Store an episode (low importance — decays faster)
+curl -X POST http://localhost:8100/store \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Finished migrating auth middleware", "importance": 0.5, "mtype": "episode", "category": "episode"}'
 
 # Search
 curl -X POST http://localhost:8100/search \
@@ -183,6 +193,26 @@ curl -X POST http://localhost:8100/tick \
   -H "Content-Type: application/json" \
   -d '{"count": 10}'
 ```
+
+## Categories vs Types
+
+Memories have two classification fields:
+
+| Field | Values | Purpose |
+|-------|--------|---------|
+| `mtype` | `fact`, `episode` | Controls **decay rate** — facts decay slower (`lambda_fact=0.02`) than episodes (`lambda_episode=0.035`) |
+| `category` | `fact`, `decision`, `preference`, `episode` | **Semantic label** for retrieval and filtering — returned in search results |
+
+If `category` is omitted, it defaults to the `mtype` value. The recommended mapping from plugins:
+
+| Category | `mtype` | Importance | Use case |
+|----------|---------|------------|----------|
+| `preference` | `fact` | 0.8–1.0 | User's role, style, habits, likes/dislikes |
+| `decision` | `fact` | 0.8–0.9 | Why X was chosen, tradeoffs, rejected alternatives |
+| `fact` | `fact` | 0.7–0.9 | Technical facts, API behaviors, architecture |
+| `episode` | `episode` | 0.3–0.6 | What was worked on, session context |
+
+Preferences and decisions use `mtype: "fact"` because they should decay slowly like facts, but carry a distinct `category` so agents can distinguish them in search results.
 
 ## Core Concepts
 
