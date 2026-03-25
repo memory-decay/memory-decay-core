@@ -3,10 +3,26 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "memory-decay-core"
+name = "memory-decay"
 version = "0.1.0"
-description = "Core memory decay library - graph-based associations with human-like decay algorithms"
+description = "Human-like memory decay for AI agents"
+readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.10"
+authors = [
+    {name = "memory-decay contributors"},
+]
+keywords = ["memory", "decay", "ai", "agent", "forgetting", "retrieval"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "networkx>=3.0",
     "sentence-transformers>=2.2",
@@ -18,6 +34,10 @@ dependencies = [
     "sqlite-vec>=0.1.7",
 ]
 
+[project.urls]
+Homepage = "https://github.com/memory-decay/memory-decay-core"
+Repository = "https://github.com/memory-decay/memory-decay-core"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
@@ -26,3 +46,6 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
