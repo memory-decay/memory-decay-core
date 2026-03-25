@@ -242,3 +242,48 @@ class TestMemoryStoreAssociations:
         ).fetchone()
         assert rev is not None
         store.close()
+
+
+class TestMemoryStoreBM25:
+    """Tests for BM25 hybrid search in MemoryStore."""
+
+    def test_bm25_weight_zero_is_pure_vector(self):
+        """bm25_weight=0 should produce identical results to default search."""
+        store = MemoryStore(":memory:", embedding_dim=384)
+        store.add_memory("m1", "cat sat on mat", _random_embedding(384, 1))
+        store.add_memory("m2", "dog in park", _random_embedding(384, 2))
+        default = store.search(_random_embedding(384, 1), top_k=2)
+        hybrid = store.search(_random_embedding(384, 1), top_k=2, bm25_weight=0.0)
+        assert [r["id"] for r in default] == [r["id"] for r in hybrid]
+        store.close()
+
+    def test_bm25_boosts_lexical_match(self):
+        """With identical embeddings, BM25 should prefer lexical match."""
+        store = MemoryStore(":memory:", embedding_dim=384)
+        emb = _random_embedding(384, 1)
+        # Both have same embedding, but only m1 matches query lexically
+        store.add_memory("m1", "서울은 한국의 수도", emb)
+        store.add_memory("m2", "날씨가 좋습니다", emb)
+        results = store.search(emb, top_k=2, bm25_weight=0.5,
+                               query_text="서울 수도")
+        assert results[0]["id"] == "m1"
+        store.close()
+
+    def test_bm25_with_no_lexical_overlap(self):
+        """BM25 should not crash when no terms match."""
+        store = MemoryStore(":memory:", embedding_dim=384)
+        store.add_memory("m1", "hello world", _random_embedding(384, 1))
+        results = store.search(_random_embedding(384, 1), top_k=1,
+                               bm25_weight=0.3, query_text="xyz qqq")
+        assert len(results) >= 1  # still returns vector results
+        store.close()
+
+    def test_bm25_respects_top_k(self):
+        """BM25 re-ranking should still respect top_k limit."""
+        store = MemoryStore(":memory:", embedding_dim=384)
+        for i in range(10):
+            store.add_memory(f"m{i}", f"doc {i}", _random_embedding(384, i))
+        results = store.search(_random_embedding(384, 0), top_k=3,
+                               bm25_weight=0.3, query_text="doc 0")
+        assert len(results) <= 3
+        store.close()
