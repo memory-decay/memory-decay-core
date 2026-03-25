@@ -71,7 +71,6 @@ Activation
 |--------|-------|------|
 | `graph.py` | `MemoryGraph` | NetworkX DiGraph with vector embeddings, BM25 hybrid search, spreading activation |
 | `decay.py` | `DecayEngine` | Time-step decay with exponential/power-law modes, stability modulation |
-| `evaluator.py` | `Evaluator` | 3-pillar scoring: retention AUC, forgetting, plausibility |
 | `memory_store.py` | `MemoryStore` | SQLite + sqlite-vec persistence, vector KNN search, embedding cache |
 | `server.py` | FastAPI app | HTTP API for store/search/tick/forget operations |
 | `embedding_provider.py` | `EmbeddingProvider` | Pluggable embeddings: Gemini, OpenAI, local sentence-transformers |
@@ -98,7 +97,7 @@ pip install -e ".[dev]"
 ### As a Library
 
 ```python
-from memory_decay import MemoryGraph, DecayEngine, Evaluator
+from memory_decay import MemoryGraph, DecayEngine
 
 # 1. Create a memory graph with a custom embedder
 graph = MemoryGraph(embedder=my_embed_fn)
@@ -352,16 +351,14 @@ pytest tests/ -v
 ```
 memory-decay-core/
 ├── src/memory_decay/
-│   ├── __init__.py           # Public API: MemoryGraph, DecayEngine, Evaluator, MemoryStore
+│   ├── __init__.py           # Public API: MemoryGraph, DecayEngine, MemoryStore
 │   ├── graph.py              # Graph memory store + hybrid search
 │   ├── decay.py              # Decay math (exponential, power law, soft-floor)
-│   ├── evaluator.py          # 3-pillar evaluation framework
+│   ├── bm25.py               # Shared BM25 tokenizer + scorer
 │   ├── memory_store.py       # SQLite + sqlite-vec persistence
 │   ├── server.py             # FastAPI HTTP server
-│   ├── embedding_provider.py # Pluggable embedding backends
-│   └── main.py               # Simulation runner
+│   └── embedding_provider.py # Pluggable embedding backends
 ├── tests/
-│   └── test_simulation.py    # Integration tests
 ├── data/                     # Default SQLite DB location
 └── pyproject.toml
 ```
