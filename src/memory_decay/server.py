@@ -230,6 +230,7 @@ def create_app(
         # --- Resolve DB path ---
         resolved_db_path = db_path or ":memory:"
         if resolved_db_path != ":memory:":
+            resolved_db_path = str(Path(resolved_db_path).expanduser())
             db_dir = Path(resolved_db_path).parent
             db_dir.mkdir(parents=True, exist_ok=True)
 
