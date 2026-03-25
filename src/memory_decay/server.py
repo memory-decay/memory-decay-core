@@ -66,7 +66,6 @@ def _load_best_experiment(experiment_dir: Path | None = None) -> tuple[dict, obj
 class StoreRequest(BaseModel):
     text: str
     importance: float = Field(default=0.7, ge=0.0, le=1.0)
-    category: str = "other"
     mtype: str = "fact"
     associations: Optional[List[str]] = None
     created_tick: Optional[int] = None
@@ -138,16 +137,17 @@ class ServerState:
         uncached_indices: list[int] = []
         uncached_texts: list[str] = []
 
-        # Check cache for all texts
-        for i, text in enumerate(texts):
-            cached = await asyncio.to_thread(
-                self.store.get_cached_embedding, text, model=self._embedding_model
-            )
-            if cached is not None:
-                results[i] = cached
-            else:
-                uncached_indices.append(i)
-                uncached_texts.append(text)
+        # Check cache for all texts in a single thread call
+        def _check_cache():
+            for i, text in enumerate(texts):
+                cached = self.store.get_cached_embedding(text, model=self._embedding_model)
+                if cached is not None:
+                    results[i] = cached
+                else:
+                    uncached_indices.append(i)
+                    uncached_texts.append(text)
+
+        await asyncio.to_thread(_check_cache)
 
         # Batch embed uncached texts
         if uncached_texts:

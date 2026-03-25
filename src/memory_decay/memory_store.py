@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 import struct
+import sys
 from typing import Optional
 
 import numpy as np
@@ -14,7 +15,7 @@ from .bm25 import bm25_score_candidates
 
 def _serialize_f32(vec: np.ndarray) -> bytes:
     """Serialize numpy float32 array to bytes for sqlite-vec."""
-    return struct.pack(f"{len(vec)}f", *vec.astype(np.float32))
+    return vec.astype(np.float32).tobytes()
 
 
 def _deserialize_f32(data: bytes, dim: int) -> np.ndarray:
@@ -102,7 +103,6 @@ class MemoryStore:
 
     def _migrate_embedding_cache(self) -> None:
         """Recreate embedding_cache if it has the old single-column PK."""
-        import sys
         rows = self._db.execute("PRAGMA table_info(embedding_cache)").fetchall()
         pk_cols = [r[1] for r in rows if r[5] > 0]  # r[5] = pk flag
         if pk_cols == ["text_hash"]:
@@ -123,8 +123,6 @@ class MemoryStore:
 
     def _ensure_vec_table(self) -> None:
         """Create or recreate vec_memories if embedding dimension changed."""
-        import sys
-
         stored_dim = self.get_metadata("embedding_dim")
         vec_exists = self._db.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='vec_memories'"
@@ -429,8 +427,9 @@ class MemoryStore:
             count = self._db.execute(
                 "DELETE FROM memories WHERE user_id = ?", (user_id,)
             ).rowcount
-            for rid in rowids:
-                self._db.execute("DELETE FROM vec_memories WHERE rowid = ?", (rid,))
+            self._db.executemany(
+                "DELETE FROM vec_memories WHERE rowid = ?", [(r,) for r in rowids]
+            )
         else:
             count = self._db.execute("DELETE FROM memories").rowcount
             self._db.execute("DELETE FROM vec_memories")

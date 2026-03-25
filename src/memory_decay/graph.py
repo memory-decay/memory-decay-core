@@ -196,10 +196,6 @@ class MemoryGraph:
                         target_id, memory_id, weight=weight, created_tick=created_tick
                     )
 
-    @staticmethod
-    def _bm25_tokenize(text: str) -> list[str]:
-        return bm25_tokenize(text)
-
     def _bm25_score_candidates(
         self,
         query_text: str,
@@ -211,7 +207,7 @@ class MemoryGraph:
         if self._bm25_idf is None or self._bm25_doc_tokens is None:
             return {}
 
-        query_terms = list(dict.fromkeys(self._bm25_tokenize(query_text)))
+        query_terms = list(dict.fromkeys(bm25_tokenize(query_text)))
         if not query_terms:
             return {}
 
@@ -276,7 +272,7 @@ class MemoryGraph:
             bm25_doc_tokens: dict[str, list[str]] = {}
             for nid in nids:
                 content = self._graph.nodes[nid].get("content", "")
-                tokens = self._bm25_tokenize(content)
+                tokens = bm25_tokenize(content)
                 bm25_doc_tokens[nid] = tokens
                 doc_freq.update(set(tokens))
                 total_tokens += len(tokens)
