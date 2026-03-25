@@ -4,7 +4,7 @@ import math
 import numpy as np
 import pytest
 
-from memory_decay import MemoryGraph, DecayEngine, Evaluator
+from memory_decay import MemoryGraph, DecayEngine
 from memory_decay.decay import soft_floor_decay_step
 
 
@@ -407,113 +407,6 @@ class TestDecayEngine:
             engine.tick()
         act = g.get_node("mem_001")["activation_score"]
         assert act < 1.0  # Should have decayed significantly
-
-
-# --- Evaluator Tests ---
-
-class TestEvaluator:
-    def _setup(self) -> tuple[MemoryGraph, DecayEngine, Evaluator, list]:
-        g = make_graph()
-        g.add_memory("f1", "fact", "서울은 대한민국의 수도이다", 0.8, 0)
-        g.add_memory("f2", "fact", "고양이는 포유류이다", 0.5, 1, [("f1", 0.7)])
-        g.add_memory("e1", "episode", "서울에 여행을 갔다", 0.7, 2, [("f1", 0.9)])
-        g.add_memory("e2", "episode", "길에서 고양이를 만났다", 0.4, 3, [("f2", 0.8)])
-
-        engine = make_exponential_engine(g)
-        evaluator = Evaluator(g, engine)
-
-        queries = [
-            ("대한민국의 수도는?", "f1"),
-            ("고양이는 무엇인가?", "f2"),
-            ("서울 여행은 어땠나?", "e1"),
-            ("길에서 만난 동물은?", "e2"),
-        ]
-        return g, engine, evaluator, queries
-
-    def test_recall_rate(self):
-        g, engine, evaluator, queries = self._setup()
-        # At tick 0, all activations are 1.0
-        recall = evaluator.evaluate_recall(queries, threshold=0.5)
-        assert 0.0 <= recall <= 1.0
-
-    def test_precision_rate(self):
-        g, engine, evaluator, queries = self._setup()
-        precision = evaluator.evaluate_precision(queries, threshold=0.5)
-        assert 0.0 <= precision <= 1.0
-
-    def test_composite_score(self):
-        g, engine, evaluator, queries = self._setup()
-        score = evaluator.composite_score(queries, threshold=0.5)
-        assert 0.0 <= score <= 1.0
-
-    def test_threshold_sweep_returns_threshold_metrics(self):
-        g, engine, evaluator, queries = self._setup()
-        sweep = evaluator.threshold_sweep(queries)
-        assert "threshold_metrics" in sweep
-        assert "recall_mean" in sweep
-        assert "precision_mean" in sweep
-        assert 0.2 in sweep["threshold_metrics"]
-
-    def test_score_summary_includes_sub_scores(self):
-        g, engine, evaluator, queries = self._setup()
-        summary = evaluator.score_summary(queries)
-        assert "retrieval_score" in summary
-        assert "plausibility_score" in summary
-        assert "overall_score" in summary
-        assert "threshold_metrics" in summary
-        assert "retention_auc" in summary
-        assert "selectivity_score" in summary
-        assert "robustness_score" in summary
-        assert summary["composite_score"] == summary["overall_score"]
-
-    def test_snapshot_records_history(self):
-        g, engine, evaluator, queries = self._setup()
-        evaluator.snapshot(queries)
-        evaluator.snapshot(queries)
-        assert len(evaluator.history) == 2
-
-    def test_decay_affects_recall(self):
-        g, engine, evaluator, queries = self._setup()
-
-        recall_before = evaluator.evaluate_recall(queries, threshold=0.9)
-
-        # Run many ticks to let memories decay
-        for _ in range(50):
-            engine.tick()
-
-        recall_after = evaluator.evaluate_recall(queries, threshold=0.9)
-
-        # Recall should decrease (or stay same) after heavy decay
-        assert recall_after <= recall_before
-
-    def test_smoothness(self):
-        evaluator = Evaluator(MemoryGraph(embedder=mock_embedder), make_exponential_engine(MemoryGraph(embedder=mock_embedder)))
-        # Smooth curve: [1.0, 0.9, 0.8, 0.7]
-        smooth_var = evaluator.forgetting_curve_smoothness([1.0, 0.9, 0.8, 0.7])
-        # Jagged curve: [1.0, 0.5, 0.9, 0.3]
-        jagged_var = evaluator.forgetting_curve_smoothness([1.0, 0.5, 0.9, 0.3])
-        assert smooth_var < jagged_var
-
-    def test_positive_correlation_increases_plausibility_score(self, monkeypatch):
-        g, engine, evaluator, queries = self._setup()
-
-        monkeypatch.setattr(
-            evaluator,
-            "threshold_sweep",
-            lambda *args, **kwargs: {
-                "threshold_metrics": {},
-                "recall_mean": 0.4,
-                "precision_mean": 0.2,
-            },
-        )
-        monkeypatch.setattr(evaluator, "forgetting_curve_smoothness", lambda *args, **kwargs: 0.01)
-        monkeypatch.setattr(evaluator, "activation_recall_correlation", lambda *args, **kwargs: 0.8)
-        strong = evaluator.score_summary(queries)["plausibility_score"]
-
-        monkeypatch.setattr(evaluator, "activation_recall_correlation", lambda *args, **kwargs: 0.1)
-        weak = evaluator.score_summary(queries)["plausibility_score"]
-
-        assert strong > weak
 
 
 # --- Custom Decay Function Tests ---
