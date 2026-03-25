@@ -258,6 +258,7 @@ def create_app(
 
         # --- Restore current_tick from store metadata ---
         state_tick = int(store.get_metadata("current_tick", "0"))
+        engine.current_tick = state_tick
 
         # Resolve model name for cache keying
         if _test_embedder:
@@ -401,7 +402,7 @@ def create_app(
         def _do_ticks():
             for _ in range(req.count):
                 _state.engine.tick()
-                _state.current_tick += 1
+            _state.current_tick = _state.engine.current_tick
             _state.last_tick_time = time.time()
 
         await asyncio.to_thread(_do_ticks)
@@ -423,7 +424,7 @@ def create_app(
             def _do_ticks():
                 for _ in range(ticks_due):
                     _state.engine.tick()
-                    _state.current_tick += 1
+                _state.current_tick = _state.engine.current_tick
                 _state.last_tick_time = time.time()
 
             await asyncio.to_thread(_do_ticks)

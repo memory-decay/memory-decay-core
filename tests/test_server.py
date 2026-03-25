@@ -177,3 +177,20 @@ class TestSearchBM25:
         })
         r = client.post("/search", json={"query": "test", "top_k": 5})
         assert r.status_code == 200
+
+
+class TestTickSync:
+    def test_tick_counter_matches_engine(self, client):
+        """Server tick and engine tick must stay in sync."""
+        client.post("/tick", json={"count": 5})
+        health = client.get("/health").json()
+        assert health["current_tick"] == 5
+        client.post("/tick", json={"count": 3})
+        health = client.get("/health").json()
+        assert health["current_tick"] == 8
+
+    def test_tick_derived_from_engine(self, client):
+        """Verify the server reads tick from engine, not its own counter."""
+        from memory_decay.server import _state
+        client.post("/tick", json={"count": 5})
+        assert _state.engine.current_tick == _state.current_tick == 5
