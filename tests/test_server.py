@@ -1,5 +1,9 @@
 """Tests for the memory-decay FastAPI server."""
 
+import json
+import os
+import tempfile
+
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
@@ -7,14 +11,32 @@ from fastapi.testclient import TestClient
 from memory_decay.server import create_app
 
 
+dim = 8
+embedder = lambda t: np.random.RandomState(hash(t) % 2**31).randn(dim).astype(np.float32)
+
+
 @pytest.fixture
 def client():
     """Create test client with fake embedder."""
-    dim = 8
-    embedder = lambda t: np.random.RandomState(hash(t) % 2**31).randn(dim).astype(np.float32)
     app = create_app(embedding_provider=None, _test_embedder=embedder)
     with TestClient(app) as c:
         yield c
+
+
+@pytest.fixture
+def bm25_client():
+    """Create test client with BM25 enabled via experiment params."""
+    with tempfile.TemporaryDirectory() as exp_dir:
+        params_path = os.path.join(exp_dir, "params.json")
+        with open(params_path, "w") as f:
+            json.dump({"bm25_weight": 0.3}, f)
+        app = create_app(
+            embedding_provider=None,
+            _test_embedder=embedder,
+            experiment_dir=exp_dir,
+        )
+        with TestClient(app) as c:
+            yield c
 
 
 class TestHealthAndStats:
@@ -127,3 +149,31 @@ class TestReset:
         assert r.json()["status"] == "ok"
         stats = client.get("/stats").json()
         assert stats["num_memories"] == 0
+
+
+class TestSearchBM25:
+    def test_search_with_bm25_enabled(self, bm25_client):
+        """Search should use BM25 when bm25_weight is set in params."""
+        bm25_client.post("/store", json={
+            "text": "서울은 한국의 수도입니다",
+            "importance": 0.8, "mtype": "fact",
+        })
+        bm25_client.post("/store", json={
+            "text": "날씨가 좋습니다",
+            "importance": 0.8, "mtype": "fact",
+        })
+        r = bm25_client.post("/search", json={
+            "query": "한국 수도",
+            "top_k": 5,
+        })
+        assert r.status_code == 200
+        results = r.json()["results"]
+        assert len(results) >= 1
+
+    def test_search_without_bm25_still_works(self, client):
+        """Default client (bm25_weight=0) should still work normally."""
+        client.post("/store", json={
+            "text": "test memory", "importance": 0.5, "mtype": "fact",
+        })
+        r = client.post("/search", json={"query": "test", "top_k": 5})
+        assert r.status_code == 200

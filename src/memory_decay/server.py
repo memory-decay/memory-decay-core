@@ -356,6 +356,8 @@ def create_app(
                 top_k=req.top_k,
                 current_tick=_state.current_tick,
                 activation_weight=params.get("activation_weight", 0.5),
+                bm25_weight=params.get("bm25_weight", 0.0),
+                query_text=req.query,
             )
         )
 
