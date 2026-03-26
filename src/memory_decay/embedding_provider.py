@@ -39,11 +39,16 @@ class EmbeddingProvider(ABC):
 class GeminiEmbeddingProvider(EmbeddingProvider):
     """Google Gemini embedding provider."""
 
+    KNOWN_DIMS = {
+        "gemini-embedding-001": 3072,
+        "text-embedding-004": 768,
+    }
+
     def __init__(self, api_key: str, model: str = "gemini-embedding-001"):
         self._api_key = api_key
         self._model = model
         self._client = None
-        self._dim = 768
+        self._dim = self.KNOWN_DIMS.get(model, 3072)
 
     def _ensure_client(self):
         if self._client is None:

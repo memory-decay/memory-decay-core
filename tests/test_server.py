@@ -194,3 +194,44 @@ class TestTickSync:
         from memory_decay.server import _state
         client.post("/tick", json={"count": 5})
         assert _state.engine.current_tick == _state.current_tick == 5
+
+
+class TestGeminiDimensionRegression:
+    """Regression: GeminiEmbeddingProvider.dimension must match actual embed output.
+
+    Previously, GeminiEmbeddingProvider hardcoded _dim=768 but gemini-embedding-001
+    actually returns 3072-dim vectors. The server reads provider.dimension at startup
+    to create the DB table, so a mismatch causes 500 on the first /store request.
+    """
+
+    def test_store_succeeds_with_gemini_provider_dimension(self):
+        """Server creates DB with provider.dimension; /store must not fail due to dim mismatch.
+
+        Regression: GeminiEmbeddingProvider used to hardcode _dim=768 but
+        gemini-embedding-001 returns 3072-dim vectors. The server reads
+        provider.dimension at startup to size the DB table, so a mismatch
+        caused 500 on the first /store.
+        """
+        from unittest.mock import MagicMock, AsyncMock
+        from memory_decay.embedding_provider import GeminiEmbeddingProvider
+
+        provider = GeminiEmbeddingProvider(api_key="fake-key", model="gemini-embedding-001")
+        actual_dim = provider.dimension  # should be 3072 after fix
+
+        # Mock embed methods to return a vector matching the provider's reported dimension
+        fake_vec = np.random.randn(actual_dim).astype(np.float32)
+        provider.embed = MagicMock(return_value=fake_vec)
+        provider.aembed = AsyncMock(return_value=fake_vec)
+
+        app = create_app(embedding_provider=provider)
+        with TestClient(app) as c:
+            r = c.post("/store", json={
+                "text": "regression test",
+                "importance": 0.5,
+                "mtype": "fact",
+            })
+            assert r.status_code == 200, (
+                f"Expected 200 but got {r.status_code}: {r.text}. "
+                f"Provider reported dim={actual_dim}. "
+                "This fails if provider.dimension doesn't match actual embed output."
+            )
