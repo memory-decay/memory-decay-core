@@ -51,13 +51,27 @@ class TestEmbeddingProvider:
         assert len(results) == 2
         assert results[0].shape == (8,)
 
-    def test_create_provider_gemini(self, monkeypatch):
+    def test_create_provider_gemini_default_dimension(self, monkeypatch):
         monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
         p = create_embedding_provider(
             provider="gemini",
             api_key="fake-key",
         )
+        assert p.dimension == 3072  # gemini-embedding-001 actual dimension
+
+    def test_create_provider_gemini_text_embedding_004(self, monkeypatch):
+        monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+        p = create_embedding_provider(
+            provider="gemini",
+            api_key="fake-key",
+            model="text-embedding-004",
+        )
         assert p.dimension == 768
+
+    def test_gemini_known_dims_mapping(self):
+        from memory_decay.embedding_provider import GeminiEmbeddingProvider
+        assert GeminiEmbeddingProvider.KNOWN_DIMS["gemini-embedding-001"] == 3072
+        assert GeminiEmbeddingProvider.KNOWN_DIMS["text-embedding-004"] == 768
 
     def test_create_provider_openai(self):
         p = create_embedding_provider(
