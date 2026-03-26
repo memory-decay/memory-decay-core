@@ -69,9 +69,9 @@ Activation
 
 | Module | Class | Role |
 |--------|-------|------|
-| `graph.py` | `MemoryGraph` | NetworkX DiGraph with vector embeddings, BM25 hybrid search, spreading activation |
+| `graph.py` | `MemoryGraph` | In-memory NetworkX graph for prototyping (`from memory_decay.graph import MemoryGraph`) |
 | `decay.py` | `DecayEngine` | Time-step decay with exponential/power-law modes, stability modulation |
-| `memory_store.py` | `MemoryStore` | SQLite + sqlite-vec persistence, vector KNN search, embedding cache |
+| `memory_store.py` | `MemoryStore` | SQLite + sqlite-vec persistence for production use |
 | `server.py` | FastAPI app | HTTP API for store/search/tick/forget operations |
 | `embedding_provider.py` | `EmbeddingProvider` | Pluggable embeddings: Gemini, OpenAI, local sentence-transformers |
 
@@ -87,23 +87,28 @@ pip install -e ".[dev]"
 ### Dependencies
 
 - Python >= 3.10
-- NetworkX, NumPy, sentence-transformers
+- NetworkX, NumPy
 - FastAPI + Uvicorn (server mode)
 - sqlite-vec (vector search persistence)
 - Optional: `openai`, `google-genai` (for API-based embeddings)
+- Optional: `sentence-transformers` (for local embeddings, install with `pip install memory-decay[local]`)
 
 ## Quick Start
 
 ### As a Library
 
 ```python
-from memory_decay import MemoryGraph, DecayEngine
+from memory_decay import MemoryStore, DecayEngine
+from memory_decay.embedding_provider import create_embedding_provider
 
-# 1. Create a memory graph with a custom embedder
-graph = MemoryGraph(embedder=my_embed_fn)
+# 1. Create a memory store with Gemini embeddings
+store = MemoryStore(
+    db_path="./data/memories.db",
+    embedding_provider=create_embedding_provider("gemini", api_key="your-api-key"),
+)
 
 # 2. Add memories
-graph.add_memory(
+store.add_memory(
     memory_id="m1",
     mtype="fact",            # "fact" or "episode"
     content="Seoul is the capital of South Korea",
@@ -113,22 +118,22 @@ graph.add_memory(
 )
 
 # 3. Set up decay
-engine = DecayEngine(graph, decay_type="exponential")
+engine = DecayEngine(store, decay_type="exponential")
 
 # 4. Advance time — memories decay each tick
 for _ in range(100):
     engine.tick()
 
 # 5. Search with activation-weighted retrieval
-results = graph.query_by_similarity(
-    "What is the capital?",
+results = store.search(
+    query="What is the capital?",
     top_k=5,
     activation_weight=0.5,   # blend similarity with activation
     bm25_weight=0.3,         # hybrid semantic + lexical search
 )
 
 # 6. Reinforce recalled memories (testing effect)
-graph.re_activate("m1", boost_amount=0.1, source="direct", reinforce=True)
+store.re_activate("m1", boost_amount=0.1, source="direct", reinforce=True)
 ```
 
 ### As an HTTP Server
