@@ -23,6 +23,9 @@ Activation
         ■ high-impact fact    ● medium episode    ▴ low-impact episode
 ```
 
+https://github.com/user-attachments/assets/c039a480-ad60-42d9-b2ec-04f5646edfb0
+
+
 ## Key Ideas
 
 **Memory isn't a database.** Humans don't store-and-retrieve — they encode, decay, interfere, and reconstruct. This library models that process with three measurable pillars:
