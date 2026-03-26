@@ -108,6 +108,7 @@ class ServerState:
         self.last_tick_time = time.time()
         self.tick_interval_seconds = tick_interval_seconds
         self._embedding_model = embedding_model
+        self.history_interval = 1  # record activation history every N ticks
 
     def next_memory_id(self) -> str:
         return f"mem_{uuid.uuid4().hex[:12]}"
@@ -406,6 +407,8 @@ def create_app(
         def _do_ticks():
             for _ in range(req.count):
                 _state.engine.tick()
+                if _state.history_interval > 0 and _state.engine.current_tick % _state.history_interval == 0:
+                    _state.store.record_activation_history(_state.engine.current_tick)
             _state.current_tick = _state.engine.current_tick
             _state.last_tick_time = time.time()
 
@@ -428,6 +431,8 @@ def create_app(
             def _do_ticks():
                 for _ in range(ticks_due):
                     _state.engine.tick()
+                    if _state.history_interval > 0 and _state.engine.current_tick % _state.history_interval == 0:
+                        _state.store.record_activation_history(_state.engine.current_tick)
                 _state.current_tick = _state.engine.current_tick
                 _state.last_tick_time = time.time()
 
@@ -467,6 +472,81 @@ def create_app(
         cleared = await asyncio.to_thread(_do_reset)
 
         return {"status": "ok", "cleared": cleared}
+
+    # --- Admin endpoints for dashboard ---
+
+    @app.get("/admin/memories")
+    async def admin_list_memories(
+        page: int = 1,
+        per_page: int = 50,
+        category: str | None = None,
+        mtype: str | None = None,
+    ):
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+        memories, total = await asyncio.to_thread(
+            _state.store.get_all_memories,
+            page=page, per_page=per_page, category=category, mtype=mtype,
+        )
+        return {
+            "memories": memories,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "current_tick": _state.current_tick,
+        }
+
+    @app.get("/admin/memories/{memory_id}")
+    async def admin_get_memory(memory_id: str):
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+        node = await asyncio.to_thread(_state.store.get_node, memory_id)
+        if node is None:
+            raise HTTPException(404, f"Memory {memory_id} not found")
+        return {
+            "id": node["id"],
+            "content": node["content"],
+            "mtype": node["mtype"],
+            "category": node["category"],
+            "importance": round(float(node["importance"]), 4),
+            "speaker": node["speaker"] or "",
+            "created_tick": node["created_tick"],
+            "storage_score": round(float(node["storage_score"]), 4),
+            "retrieval_score": round(float(node["retrieval_score"]), 4),
+            "stability": round(float(node["stability_score"]), 4),
+            "last_activated_tick": node["last_activated_tick"],
+            "retrieval_count": node["retrieval_count"],
+            "current_tick": _state.current_tick,
+        }
+
+    @app.get("/admin/memories/{memory_id}/history")
+    async def admin_memory_history(
+        memory_id: str,
+        start_tick: int | None = None,
+        end_tick: int | None = None,
+    ):
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+        node = await asyncio.to_thread(_state.store.get_node, memory_id)
+        if node is None:
+            raise HTTPException(404, f"Memory {memory_id} not found")
+        history = await asyncio.to_thread(
+            _state.store.get_activation_history,
+            memory_id, start_tick=start_tick, end_tick=end_tick,
+        )
+        return {
+            "memory_id": memory_id,
+            "history": history,
+            "current_tick": _state.current_tick,
+        }
+
+    @app.get("/admin/history/summary")
+    async def admin_summary():
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+        summary = await asyncio.to_thread(_state.store.get_memory_summary)
+        summary["current_tick"] = _state.current_tick
+        return summary
 
     return app
 
