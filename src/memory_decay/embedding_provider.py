@@ -96,7 +96,17 @@ class LocalEmbeddingProvider(EmbeddingProvider):
 
     def _ensure_model(self):
         if self._st_model is None:
-            from sentence_transformers import SentenceTransformer
+            try:
+                from sentence_transformers import SentenceTransformer
+            except ImportError as e:
+                raise RuntimeError(
+                    "sentence-transformers is required for local embeddings but failed to import.\n"
+                    f"Underlying error: {e}\n\n"
+                    "Install with: pip install 'memory-decay[local]'\n\n"
+                    "If already installed and using Python 3.13.x, note that CPython 3.13.8 "
+                    "has an ast.parse() regression that breaks torch (pytorch/pytorch#178255).\n"
+                    "Fix: upgrade to Python 3.13.11+ or use Python 3.10-3.12."
+                ) from e
             self._st_model = SentenceTransformer(self._model_name)
             self._dim = self._st_model.get_sentence_embedding_dimension()
 

@@ -80,11 +80,21 @@ https://github.com/user-attachments/assets/c039a480-ad60-42d9-b2ec-04f5646edfb0
 
 ## Installation
 
-```bash
-pip install memory-decay
+> **Python 3.13.11+ 또는 3.10~3.12 권장.** Python 3.13.8은 torch를 깨뜨리는 CPython 버그가 있고, python.org macOS 인스톨러는 sqlite-vec가 필요로 하는 SQLite extension 로딩을 지원하지 않습니다. 자세한 내용은 아래 [macOS 호환성 참고](#macos-compatibility-notes) 참조.
 
-# For local embeddings (sentence-transformers):
-pip install "memory-decay[local]"
+```bash
+# 권장: uv로 Python 버전 고정
+uv venv --python 3.13.11   # 또는 3.10, 3.11, 3.12
+uv pip install memory-decay
+
+# 로컬 임베딩 (sentence-transformers + torch):
+uv pip install "memory-decay[local]"
+```
+
+```bash
+# pip 사용 시
+pip install memory-decay
+pip install "memory-decay[local]"   # 로컬 임베딩용
 ```
 
 ### From Source (Development)
@@ -97,12 +107,28 @@ pip install -e ".[dev]"
 
 ### Dependencies
 
-- Python >= 3.10
+- Python >= 3.10 (3.13.11+ 또는 3.10~3.12 권장)
 - NetworkX, NumPy
 - FastAPI + Uvicorn (server mode)
-- sqlite-vec (vector search persistence)
+- sqlite-vec (vector search persistence — SQLite extension 로딩 지원 필요)
 - Optional: `openai`, `google-genai` (for API-based embeddings)
 - Optional: `sentence-transformers` (for local embeddings, install with `pip install memory-decay[local]`)
+
+### macOS Compatibility Notes
+
+sqlite-vec는 Python이 SQLite loadable extension을 지원해야 하고, local 임베딩은 torch가 정상 import되어야 합니다. macOS에서는 Python 설치 방식에 따라 이 두 가지가 깨질 수 있습니다.
+
+| Python 설치 방식 | sqlite extension 로딩 | torch (local 임베딩) | 비고 |
+|---|---|---|---|
+| **uv** (python-build-standalone) | O | O | 권장 |
+| **homebrew** | O | O* | *3.13.8은 torch 불가 |
+| **pyenv** | O | O | 소스 빌드, 플래그 포함 |
+| **python.org 인스톨러** | **X** | O | `--enable-loadable-sqlite-extensions` 누락 |
+
+**알려진 이슈:**
+
+- **Python 3.13.8 + torch**: CPython 3.13.8의 `ast.parse()` 리그레션이 torch import를 깨뜨림 ([pytorch/pytorch#178255](https://github.com/pytorch/pytorch/issues/178255)). Python 3.13.11+에서 수정됨.
+- **python.org macOS 인스톨러 + sqlite-vec**: 공식 macOS 인스톨러가 SQLite extension 로딩 없이 빌드됨. uv, homebrew, 또는 pyenv를 사용할 것.
 
 ## Quick Start
 

@@ -49,10 +49,33 @@ class MemoryStore:
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.execute("PRAGMA synchronous=NORMAL")
-        self._db.enable_load_extension(True)
-        sqlite_vec.load(self._db)
-        self._db.enable_load_extension(False)
+        self._load_sqlite_vec()
         self._init_schema()
+
+    def _load_sqlite_vec(self) -> None:
+        """Load sqlite-vec extension with clear error on unsupported Python builds."""
+        if not hasattr(self._db, "enable_load_extension"):
+            raise RuntimeError(
+                "This Python build does not support SQLite loadable extensions "
+                "(sqlite3.Connection.enable_load_extension is missing).\n"
+                "This is required for sqlite-vec vector search.\n\n"
+                "Common cause: python.org macOS installer builds Python without "
+                "--enable-loadable-sqlite-extensions.\n\n"
+                "Fix: use one of these Python builds instead:\n"
+                "  - uv: uv venv --python 3.10  (recommended)\n"
+                "  - homebrew: brew install python@3.12\n"
+                "  - pyenv: pyenv install 3.12.8"
+            )
+        try:
+            self._db.enable_load_extension(True)
+            sqlite_vec.load(self._db)
+            self._db.enable_load_extension(False)
+        except AttributeError:
+            raise RuntimeError(
+                "Failed to enable SQLite loadable extensions. "
+                "Your Python's sqlite3 module was compiled without extension support.\n\n"
+                "Fix: use uv (uv venv --python 3.10) or homebrew Python."
+            )
 
     def _init_schema(self) -> None:
         # Create non-vector tables first
