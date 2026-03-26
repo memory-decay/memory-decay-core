@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import sys
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -471,6 +472,51 @@ def create_app(
 
 
 # ---------------------------------------------------------------------------
+# Preflight checks
+# ---------------------------------------------------------------------------
+
+
+def _preflight_checks(embedding_provider: str) -> None:
+    """Validate environment before starting the server."""
+    import sqlite3 as _sqlite3
+
+    # Check sqlite extension support
+    conn = _sqlite3.connect(":memory:")
+    try:
+        if not hasattr(conn, "enable_load_extension"):
+            print(
+                "ERROR: This Python build does not support SQLite loadable extensions.\n"
+                "sqlite-vec requires sqlite3.Connection.enable_load_extension().\n\n"
+                "Common cause: python.org macOS installer builds Python without\n"
+                "--enable-loadable-sqlite-extensions.\n\n"
+                "Fix: use one of these Python builds instead:\n"
+                "  - uv: uv venv --python 3.10  (recommended)\n"
+                "  - homebrew: brew install python@3.12\n"
+                "  - pyenv: pyenv install 3.12.8",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    finally:
+        conn.close()
+
+    # Check torch/sentence-transformers for local provider
+    if embedding_provider == "local":
+        try:
+            import torch  # noqa: F401
+        except Exception as e:
+            print(
+                f"ERROR: Failed to import torch (required for local embeddings).\n"
+                f"Underlying error: {e}\n\n"
+                f"If using Python 3.13.x, CPython 3.13.8 has an ast.parse() regression\n"
+                f"that breaks torch (pytorch/pytorch#178255).\n"
+                f"Fix: upgrade to Python 3.13.11+ or use Python 3.10-3.12.\n\n"
+                f"Current Python: {sys.version}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 
@@ -499,6 +545,8 @@ def main():
     parser.add_argument("--workers", type=int, default=1,
                         help="Number of uvicorn workers (default: 1)")
     args = parser.parse_args()
+
+    _preflight_checks(args.embedding_provider)
 
     provider = create_embedding_provider(
         provider=args.embedding_provider,
