@@ -4,7 +4,8 @@ import math
 import numpy as np
 import pytest
 
-from memory_decay import MemoryGraph, DecayEngine
+from memory_decay import DecayEngine
+from memory_decay.graph import MemoryGraph
 from memory_decay.decay import soft_floor_decay_step
 
 
