@@ -25,7 +25,6 @@ classifiers = [
 ]
 dependencies = [
     "networkx>=3.0",
-    "sentence-transformers>=2.2",
     "numpy>=1.24",
     "openai>=1.0",
     "google-genai>=1.0",
@@ -39,6 +38,7 @@ Homepage = "https://github.com/memory-decay/memory-decay-core"
 Repository = "https://github.com/memory-decay/memory-decay-core"
 
 [project.optional-dependencies]
+local = ["sentence-transformers>=2.2"]
 dev = [
     "pytest>=7.0",
     "httpx>=0.28.0",
