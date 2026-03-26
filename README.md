@@ -78,9 +78,17 @@ Activation
 ## Installation
 
 ```bash
-pip install -e .
+pip install memory-decay
 
-# For development
+# For local embeddings (sentence-transformers):
+pip install "memory-decay[local]"
+```
+
+### From Source (Development)
+
+```bash
+git clone https://github.com/memory-decay/memory-decay-core.git
+cd memory-decay-core
 pip install -e ".[dev]"
 ```
 
@@ -346,7 +354,12 @@ memory-decay-core is designed to back the **openclaw-memory-decay** TypeScript p
 
 ### Setup
 
-1. Start the memory-decay server:
+1. Install the package:
+```bash
+pip install memory-decay
+```
+
+2. Start the memory-decay server:
 ```bash
 python -m memory_decay.server --port 8100 --db-path ./data/agent_memories.db
 ```
