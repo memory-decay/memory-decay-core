@@ -19,6 +19,7 @@ from typing import Callable, List, Optional
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .decay import DecayEngine
@@ -81,6 +82,14 @@ class SearchRequest(BaseModel):
 
 class TickRequest(BaseModel):
     count: int = Field(default=1, ge=1, le=1000)
+
+
+class DecayParamsUpdate(BaseModel):
+    params: dict
+
+
+class TickIntervalUpdate(BaseModel):
+    tick_interval_seconds: float = Field(gt=0)
 
 
 # ---------------------------------------------------------------------------
@@ -289,6 +298,14 @@ def create_app(
         _state = None
 
     app = FastAPI(title="memory-decay", lifespan=lifespan)
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"http://localhost:\d+",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.get("/health")
     async def health():
@@ -539,6 +556,36 @@ def create_app(
             "history": history,
             "current_tick": _state.current_tick,
         }
+
+    # --- Decay params endpoints ---
+
+    @app.get("/admin/decay-params")
+    async def admin_get_decay_params():
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+        return {"params": _state.engine.get_params()}
+
+    @app.put("/admin/decay-params")
+    async def admin_put_decay_params(req: DecayParamsUpdate):
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+        _state.engine.set_params(req.params)
+        return {"params": _state.engine.get_params()}
+
+    # --- Tick interval endpoints ---
+
+    @app.get("/admin/tick-interval")
+    async def admin_get_tick_interval():
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+        return {"tick_interval_seconds": _state.tick_interval_seconds}
+
+    @app.put("/admin/tick-interval")
+    async def admin_put_tick_interval(req: TickIntervalUpdate):
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+        _state.tick_interval_seconds = req.tick_interval_seconds
+        return {"tick_interval_seconds": _state.tick_interval_seconds}
 
     @app.get("/admin/history/summary")
     async def admin_summary():

@@ -685,13 +685,46 @@ class MemoryStore:
             for r in cat_rows
         ]
 
+        timeline = self.get_timeline_summary()
+
         return {
             "total_memories": total,
             "avg_retrieval_score": avg_retrieval,
             "avg_storage_score": avg_storage,
             "at_risk_count": at_risk,
             "categories": categories,
+            "timeline": timeline,
         }
+
+    def get_timeline_summary(self, limit: int = 200) -> list[dict]:
+        """Aggregate activation_history into per-tick system-wide averages.
+
+        Returns most recent `limit` ticks, ordered ascending by tick.
+        """
+        rows = self._db.execute(
+            """SELECT tick,
+                      AVG(retrieval_score) AS avg_retrieval,
+                      AVG(storage_score)   AS avg_storage,
+                      AVG(stability)       AS avg_stability,
+                      SUM(CASE WHEN retrieval_score < 0.3 THEN 1 ELSE 0 END) AS at_risk_count
+               FROM activation_history
+               GROUP BY tick
+               ORDER BY tick DESC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+
+        # Return in ascending tick order
+        return [
+            {
+                "tick": r[0],
+                "avg_retrieval": round(float(r[1]), 4),
+                "avg_storage": round(float(r[2]), 4),
+                "avg_stability": round(float(r[3]), 4),
+                "at_risk_count": r[4],
+            }
+            for r in reversed(rows)
+        ]
 
     def close(self) -> None:
         self._db.close()
