@@ -4,27 +4,14 @@ import json
 import os
 import tempfile
 
-import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
 from memory_decay.server import create_app
 
 
-dim = 8
-embedder = lambda t: np.random.RandomState(hash(t) % 2**31).randn(dim).astype(np.float32)
-
-
 @pytest.fixture
-def client():
-    """Create test client with fake embedder."""
-    app = create_app(embedding_provider=None, _test_embedder=embedder)
-    with TestClient(app) as c:
-        yield c
-
-
-@pytest.fixture
-def bm25_client():
+def bm25_client(embedder):
     """Create test client with BM25 enabled via experiment params."""
     with tempfile.TemporaryDirectory() as exp_dir:
         params_path = os.path.join(exp_dir, "params.json")

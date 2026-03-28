@@ -414,6 +414,12 @@ def create_app(
                 )
             )
 
+        # Record activation history for all memories after search
+        if _state.history_interval > 0:
+            await asyncio.to_thread(
+                lambda: _state.store.record_activation_history(_state.current_tick)
+            )
+
         return {"results": results}
 
     @app.post("/tick")

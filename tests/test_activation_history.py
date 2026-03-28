@@ -1,21 +1,23 @@
 """Tests for activation history tracking and admin API endpoints."""
 
+import tempfile
+from typing import Optional
+
 import numpy as np
 import pytest
-from fastapi.testclient import TestClient
+from starlette.testclient import TestClient
 
 from memory_decay.decay import DecayEngine
 from memory_decay.memory_store import MemoryStore
 from memory_decay.server import create_app
 
-
-dim = 8
-embedder = lambda t: np.random.RandomState(hash(t) % 2**31).randn(dim).astype(np.float32)
+DIM = 8  # embedding dimension for tests
 
 
 def _emb(seed=42):
-    rng = np.random.RandomState(seed)
-    vec = rng.randn(dim).astype(np.float32)
+    _seed = hash(seed) % 2**31 if isinstance(seed, str) else seed
+    rng = np.random.RandomState(_seed)
+    vec = rng.randn(DIM).astype(np.float32)
     return vec / np.linalg.norm(vec)
 
 
@@ -26,7 +28,7 @@ def _emb(seed=42):
 
 class TestRecordActivationHistory:
     def test_records_snapshots(self):
-        store = MemoryStore(":memory:", embedding_dim=dim)
+        store = MemoryStore(":memory:", embedding_dim=DIM)
         store.add_memory("m1", "hello", _emb(1), importance=0.7, mtype="episode", created_tick=0)
         store.add_memory("m2", "world", _emb(2), importance=0.5, mtype="fact", created_tick=0)
 
@@ -41,7 +43,7 @@ class TestRecordActivationHistory:
         store.close()
 
     def test_skips_unchanged(self):
-        store = MemoryStore(":memory:", embedding_dim=dim)
+        store = MemoryStore(":memory:", embedding_dim=DIM)
         store.add_memory("m1", "hello", _emb(1), importance=0.7, created_tick=0)
 
         store.record_activation_history(tick=0)
@@ -54,7 +56,7 @@ class TestRecordActivationHistory:
         store.close()
 
     def test_records_after_change(self):
-        store = MemoryStore(":memory:", embedding_dim=dim)
+        store = MemoryStore(":memory:", embedding_dim=DIM)
         store.add_memory("m1", "hello", _emb(1), importance=0.7, created_tick=0)
 
         store.record_activation_history(tick=0)
@@ -68,7 +70,7 @@ class TestRecordActivationHistory:
         store.close()
 
     def test_history_tick_range_filter(self):
-        store = MemoryStore(":memory:", embedding_dim=dim)
+        store = MemoryStore(":memory:", embedding_dim=DIM)
         store.add_memory("m1", "hello", _emb(1), importance=0.7, created_tick=0)
 
         for tick in range(5):
@@ -83,7 +85,7 @@ class TestRecordActivationHistory:
         store.close()
 
     def test_empty_store_returns_zero(self):
-        store = MemoryStore(":memory:", embedding_dim=dim)
+        store = MemoryStore(":memory:", embedding_dim=DIM)
         count = store.record_activation_history(tick=0)
         assert count == 0
         store.close()
@@ -91,7 +93,7 @@ class TestRecordActivationHistory:
 
 class TestGetAllMemories:
     def test_paginated_listing(self):
-        store = MemoryStore(":memory:", embedding_dim=dim)
+        store = MemoryStore(":memory:", embedding_dim=DIM)
         for i in range(10):
             store.add_memory(f"m{i}", f"content {i}", _emb(i), created_tick=i)
 
@@ -108,7 +110,7 @@ class TestGetAllMemories:
         store.close()
 
     def test_filter_by_category(self):
-        store = MemoryStore(":memory:", embedding_dim=dim)
+        store = MemoryStore(":memory:", embedding_dim=DIM)
         store.add_memory("m1", "a", _emb(1), category="pref", created_tick=0)
         store.add_memory("m2", "b", _emb(2), category="fact", created_tick=0)
         store.add_memory("m3", "c", _emb(3), category="pref", created_tick=0)
@@ -119,7 +121,7 @@ class TestGetAllMemories:
         store.close()
 
     def test_filter_by_mtype(self):
-        store = MemoryStore(":memory:", embedding_dim=dim)
+        store = MemoryStore(":memory:", embedding_dim=DIM)
         store.add_memory("m1", "a", _emb(1), mtype="fact", created_tick=0)
         store.add_memory("m2", "b", _emb(2), mtype="episode", created_tick=0)
 
@@ -131,7 +133,7 @@ class TestGetAllMemories:
 
 class TestGetMemorySummary:
     def test_summary_stats(self):
-        store = MemoryStore(":memory:", embedding_dim=dim)
+        store = MemoryStore(":memory:", embedding_dim=DIM)
         store.add_memory("m1", "a", _emb(1), category="pref", importance=0.9, created_tick=0)
         store.add_memory("m2", "b", _emb(2), category="fact", importance=0.5, created_tick=0)
         store.set_retrieval_score("m2", 0.2)  # at-risk
@@ -144,7 +146,7 @@ class TestGetMemorySummary:
         store.close()
 
     def test_summary_empty_store(self):
-        store = MemoryStore(":memory:", embedding_dim=dim)
+        store = MemoryStore(":memory:", embedding_dim=DIM)
         summary = store.get_memory_summary()
         assert summary["total_memories"] == 0
         assert summary["at_risk_count"] == 0
@@ -159,7 +161,7 @@ class TestGetMemorySummary:
 
 class TestDecayWithHistory:
     def test_decay_records_history(self):
-        store = MemoryStore(":memory:", embedding_dim=dim)
+        store = MemoryStore(":memory:", embedding_dim=DIM)
         store.add_memory("m1", "hello", _emb(1), importance=0.7, mtype="episode", created_tick=0)
 
         engine = DecayEngine(store=store, params={
@@ -190,7 +192,7 @@ class TestDecayWithHistory:
 
 @pytest.fixture
 def client():
-    app = create_app(embedding_provider=None, _test_embedder=embedder)
+    app = create_app(embedding_provider=None, _test_embedder=_emb)
     with TestClient(app) as c:
         yield c
 
@@ -296,6 +298,36 @@ class TestAdminSummary:
         assert r.status_code == 200
         data = r.json()
         assert data["total_memories"] == 0
+
+
+class TestSearchActivationRecording:
+    """Search should automatically record activation history."""
+
+    def test_search_records_activation_history(self, client):
+        # Store a memory
+        r = client.post("/store", json={"text": "important meeting notes", "importance": 0.9, "mtype": "fact"})
+        assert r.status_code == 200
+        memory_id = r.json()["id"]
+
+        # Search for it — should trigger activation history recording
+        r = client.post("/search", json={"query": "important meeting notes", "top_k": 3})
+        assert r.status_code == 200
+        results = r.json()["results"]
+        assert len(results) == 1
+        assert results[0]["id"] == memory_id
+
+        # Verify activation history was recorded via admin API
+        r = client.get(f"/admin/memories/{memory_id}/history")
+        assert r.status_code == 200
+        history = r.json()["history"]
+        assert len(history) >= 1
+        assert history[0]["tick"] == 0  # current_tick starts at 0
+
+        # Search again — should still have history (may overwrite at same tick)
+        r = client.post("/search", json={"query": "important meeting", "top_k": 1})
+        assert r.status_code == 200
+        r = client.get(f"/admin/memories/{memory_id}/history")
+        assert len(r.json()["history"]) >= 1
 
 
 class TestExistingEndpointsUnchanged:

@@ -471,6 +471,7 @@ class MemoryStore:
         ).fetchone()
         if rowid_row is not None:
             self._db.execute("DELETE FROM vec_memories WHERE rowid = ?", (rowid_row[0],))
+        self._db.execute("DELETE FROM activation_history WHERE memory_id = ?", (memory_id,))
         self._db.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
         self._db.execute("DELETE FROM associations WHERE source_id = ? OR target_id = ?",
                         (memory_id, memory_id))
@@ -482,6 +483,11 @@ class MemoryStore:
             rowids = [r[0] for r in self._db.execute(
                 "SELECT rowid FROM memories WHERE user_id = ?", (user_id,)
             ).fetchall()]
+            self._db.execute(
+                "DELETE FROM activation_history WHERE memory_id IN "
+                "(SELECT id FROM memories WHERE user_id = ?)",
+                (user_id,),
+            )
             count = self._db.execute(
                 "DELETE FROM memories WHERE user_id = ?", (user_id,)
             ).rowcount
@@ -491,6 +497,7 @@ class MemoryStore:
         else:
             count = self._db.execute("DELETE FROM memories").rowcount
             self._db.execute("DELETE FROM vec_memories")
+            self._db.execute("DELETE FROM activation_history")
             self._db.execute("DELETE FROM associations")
         self._db.commit()
         return count
