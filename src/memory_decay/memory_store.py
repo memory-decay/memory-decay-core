@@ -5,6 +5,7 @@ import hashlib
 import sqlite3
 import struct
 import sys
+import time
 from typing import Optional
 
 import numpy as np
@@ -116,6 +117,19 @@ class MemoryStore:
                 embedding BLOB NOT NULL,
                 PRIMARY KEY (text_hash, model)
             );
+
+            CREATE TABLE IF NOT EXISTS activation_history (
+                memory_id       TEXT NOT NULL,
+                tick            INTEGER NOT NULL,
+                retrieval_score REAL NOT NULL,
+                storage_score   REAL NOT NULL,
+                stability       REAL NOT NULL,
+                recorded_at     REAL NOT NULL,
+                PRIMARY KEY (memory_id, tick)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_activation_history_memory_tick
+                ON activation_history (memory_id, tick);
         """)
 
         # Migrate embedding_cache: old schema has text_hash-only PK
@@ -457,6 +471,7 @@ class MemoryStore:
         ).fetchone()
         if rowid_row is not None:
             self._db.execute("DELETE FROM vec_memories WHERE rowid = ?", (rowid_row[0],))
+        self._db.execute("DELETE FROM activation_history WHERE memory_id = ?", (memory_id,))
         self._db.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
         self._db.execute("DELETE FROM associations WHERE source_id = ? OR target_id = ?",
                         (memory_id, memory_id))
@@ -468,6 +483,11 @@ class MemoryStore:
             rowids = [r[0] for r in self._db.execute(
                 "SELECT rowid FROM memories WHERE user_id = ?", (user_id,)
             ).fetchall()]
+            self._db.execute(
+                "DELETE FROM activation_history WHERE memory_id IN "
+                "(SELECT id FROM memories WHERE user_id = ?)",
+                (user_id,),
+            )
             count = self._db.execute(
                 "DELETE FROM memories WHERE user_id = ?", (user_id,)
             ).rowcount
@@ -477,6 +497,7 @@ class MemoryStore:
         else:
             count = self._db.execute("DELETE FROM memories").rowcount
             self._db.execute("DELETE FROM vec_memories")
+            self._db.execute("DELETE FROM activation_history")
             self._db.execute("DELETE FROM associations")
         self._db.commit()
         return count
@@ -520,6 +541,197 @@ class MemoryStore:
         if row is None:
             return None
         return _deserialize_f32(row[0], self._embedding_dim)
+
+    # --- Activation history ---
+
+    def record_activation_history(self, tick: int) -> int:
+        """Snapshot all memory scores at the given tick.
+
+        Only records memories whose scores changed since last snapshot
+        (or have no prior snapshot). Returns number of rows inserted.
+        """
+        now = time.time()
+        # Get current scores for all memories
+        rows = self._db.execute(
+            """SELECT id, retrieval_score, storage_score, stability_score
+               FROM memories"""
+        ).fetchall()
+        if not rows:
+            return 0
+
+        # Get last recorded scores for dedup
+        last = {}
+        last_rows = self._db.execute(
+            """SELECT memory_id, retrieval_score, storage_score, stability
+               FROM activation_history AS ah
+               WHERE tick = (SELECT MAX(tick) FROM activation_history WHERE memory_id = ah.memory_id)"""
+        ).fetchall()
+        for lr in last_rows:
+            last[lr[0]] = (round(float(lr[1]), 6), round(float(lr[2]), 6), round(float(lr[3]), 6))
+
+        inserts = []
+        for row in rows:
+            mid = row[0]
+            r_score = round(float(row[1]), 6)
+            s_score = round(float(row[2]), 6)
+            stab = round(float(row[3]), 6)
+            prev = last.get(mid)
+            if prev and prev == (r_score, s_score, stab):
+                continue  # skip unchanged
+            inserts.append((mid, tick, r_score, s_score, stab, now))
+
+        if inserts:
+            self._db.executemany(
+                """INSERT OR REPLACE INTO activation_history
+                   (memory_id, tick, retrieval_score, storage_score, stability, recorded_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                inserts,
+            )
+            self._db.commit()
+        return len(inserts)
+
+    def get_activation_history(
+        self,
+        memory_id: str,
+        start_tick: int | None = None,
+        end_tick: int | None = None,
+    ) -> list[dict]:
+        """Retrieve activation history for a specific memory."""
+        query = "SELECT tick, retrieval_score, storage_score, stability, recorded_at FROM activation_history WHERE memory_id = ?"
+        params: list = [memory_id]
+        if start_tick is not None:
+            query += " AND tick >= ?"
+            params.append(start_tick)
+        if end_tick is not None:
+            query += " AND tick <= ?"
+            params.append(end_tick)
+        query += " ORDER BY tick"
+        rows = self._db.execute(query, params).fetchall()
+        return [
+            {
+                "tick": r[0],
+                "retrieval_score": round(float(r[1]), 4),
+                "storage_score": round(float(r[2]), 4),
+                "stability": round(float(r[3]), 4),
+                "recorded_at": r[4],
+            }
+            for r in rows
+        ]
+
+    def get_all_memories(
+        self,
+        page: int = 1,
+        per_page: int = 50,
+        category: str | None = None,
+        mtype: str | None = None,
+    ) -> tuple[list[dict], int]:
+        """Paginated memory listing. Returns (memories, total_count)."""
+        where_clauses = []
+        params: list = []
+        if category:
+            where_clauses.append("category = ?")
+            params.append(category)
+        if mtype:
+            where_clauses.append("mtype = ?")
+            params.append(mtype)
+        where = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+        total = self._db.execute(f"SELECT COUNT(*) FROM memories{where}", params).fetchone()[0]
+
+        offset = (page - 1) * per_page
+        query_params = params + [per_page, offset]
+        rows = self._db.execute(
+            f"""SELECT id, content, mtype, category, importance, speaker,
+                       created_tick, storage_score, retrieval_score, stability_score,
+                       last_activated_tick, retrieval_count
+                FROM memories{where}
+                ORDER BY created_tick DESC
+                LIMIT ? OFFSET ?""",
+            query_params,
+        ).fetchall()
+
+        memories = [
+            {
+                "id": r[0], "content": r[1], "mtype": r[2], "category": r[3],
+                "importance": round(float(r[4]), 4), "speaker": r[5] or "",
+                "created_tick": r[6],
+                "storage_score": round(float(r[7]), 4),
+                "retrieval_score": round(float(r[8]), 4),
+                "stability": round(float(r[9]), 4),
+                "last_activated_tick": r[10], "retrieval_count": r[11],
+            }
+            for r in rows
+        ]
+        return memories, total
+
+    def get_memory_summary(self) -> dict:
+        """Aggregated stats for dashboard summary."""
+        row = self._db.execute(
+            """SELECT COUNT(*), AVG(retrieval_score), AVG(storage_score)
+               FROM memories"""
+        ).fetchone()
+        total = row[0]
+        avg_retrieval = round(float(row[1] or 0), 4)
+        avg_storage = round(float(row[2] or 0), 4)
+
+        at_risk = self._db.execute(
+            "SELECT COUNT(*) FROM memories WHERE retrieval_score < 0.3"
+        ).fetchone()[0]
+
+        cat_rows = self._db.execute(
+            """SELECT category, COUNT(*), AVG(retrieval_score), AVG(storage_score)
+               FROM memories GROUP BY category"""
+        ).fetchall()
+        categories = [
+            {
+                "category": r[0] or "(none)",
+                "count": r[1],
+                "avg_retrieval": round(float(r[2] or 0), 4),
+                "avg_storage": round(float(r[3] or 0), 4),
+            }
+            for r in cat_rows
+        ]
+
+        timeline = self.get_timeline_summary()
+
+        return {
+            "total_memories": total,
+            "avg_retrieval_score": avg_retrieval,
+            "avg_storage_score": avg_storage,
+            "at_risk_count": at_risk,
+            "categories": categories,
+            "timeline": timeline,
+        }
+
+    def get_timeline_summary(self, limit: int = 200) -> list[dict]:
+        """Aggregate activation_history into per-tick system-wide averages.
+
+        Returns most recent `limit` ticks, ordered ascending by tick.
+        """
+        rows = self._db.execute(
+            """SELECT tick,
+                      AVG(retrieval_score) AS avg_retrieval,
+                      AVG(storage_score)   AS avg_storage,
+                      AVG(stability)       AS avg_stability,
+                      SUM(CASE WHEN retrieval_score < 0.3 THEN 1 ELSE 0 END) AS at_risk_count
+               FROM activation_history
+               GROUP BY tick
+               ORDER BY tick DESC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+
+        # Return in ascending tick order
+        return [
+            {
+                "tick": r[0],
+                "avg_retrieval": round(float(r[1]), 4),
+                "avg_storage": round(float(r[2]), 4),
+                "avg_stability": round(float(r[3]), 4),
+                "at_risk_count": r[4],
+            }
+            for r in reversed(rows)
+        ]
 
     def close(self) -> None:
         self._db.close()

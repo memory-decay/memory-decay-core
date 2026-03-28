@@ -19,6 +19,7 @@ from typing import Callable, List, Optional
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .decay import DecayEngine
@@ -83,6 +84,14 @@ class TickRequest(BaseModel):
     count: int = Field(default=1, ge=1, le=1000)
 
 
+class DecayParamsUpdate(BaseModel):
+    params: dict
+
+
+class TickIntervalUpdate(BaseModel):
+    tick_interval_seconds: float = Field(gt=0)
+
+
 # ---------------------------------------------------------------------------
 # Application state
 # ---------------------------------------------------------------------------
@@ -108,6 +117,7 @@ class ServerState:
         self.last_tick_time = time.time()
         self.tick_interval_seconds = tick_interval_seconds
         self._embedding_model = embedding_model
+        self.history_interval = 1  # record activation history every N ticks
 
     def next_memory_id(self) -> str:
         return f"mem_{uuid.uuid4().hex[:12]}"
@@ -289,6 +299,14 @@ def create_app(
 
     app = FastAPI(title="memory-decay", lifespan=lifespan)
 
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"http://localhost:\d+",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     @app.get("/health")
     async def health():
         return {"status": "ok", "current_tick": _state.current_tick if _state else 0}
@@ -396,6 +414,12 @@ def create_app(
                 )
             )
 
+        # Record activation history for all memories after search
+        if _state.history_interval > 0:
+            await asyncio.to_thread(
+                lambda: _state.store.record_activation_history(_state.current_tick)
+            )
+
         return {"results": results}
 
     @app.post("/tick")
@@ -406,6 +430,8 @@ def create_app(
         def _do_ticks():
             for _ in range(req.count):
                 _state.engine.tick()
+                if _state.history_interval > 0 and _state.engine.current_tick % _state.history_interval == 0:
+                    _state.store.record_activation_history(_state.engine.current_tick)
             _state.current_tick = _state.engine.current_tick
             _state.last_tick_time = time.time()
 
@@ -428,6 +454,8 @@ def create_app(
             def _do_ticks():
                 for _ in range(ticks_due):
                     _state.engine.tick()
+                    if _state.history_interval > 0 and _state.engine.current_tick % _state.history_interval == 0:
+                        _state.store.record_activation_history(_state.engine.current_tick)
                 _state.current_tick = _state.engine.current_tick
                 _state.last_tick_time = time.time()
 
@@ -467,6 +495,111 @@ def create_app(
         cleared = await asyncio.to_thread(_do_reset)
 
         return {"status": "ok", "cleared": cleared}
+
+    # --- Admin endpoints for dashboard ---
+
+    @app.get("/admin/memories")
+    async def admin_list_memories(
+        page: int = 1,
+        per_page: int = 50,
+        category: str | None = None,
+        mtype: str | None = None,
+    ):
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+        memories, total = await asyncio.to_thread(
+            _state.store.get_all_memories,
+            page=page, per_page=per_page, category=category, mtype=mtype,
+        )
+        return {
+            "memories": memories,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "current_tick": _state.current_tick,
+        }
+
+    @app.get("/admin/memories/{memory_id}")
+    async def admin_get_memory(memory_id: str):
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+        node = await asyncio.to_thread(_state.store.get_node, memory_id)
+        if node is None:
+            raise HTTPException(404, f"Memory {memory_id} not found")
+        return {
+            "id": node["id"],
+            "content": node["content"],
+            "mtype": node["mtype"],
+            "category": node["category"],
+            "importance": round(float(node["importance"]), 4),
+            "speaker": node["speaker"] or "",
+            "created_tick": node["created_tick"],
+            "storage_score": round(float(node["storage_score"]), 4),
+            "retrieval_score": round(float(node["retrieval_score"]), 4),
+            "stability": round(float(node["stability_score"]), 4),
+            "last_activated_tick": node["last_activated_tick"],
+            "retrieval_count": node["retrieval_count"],
+            "current_tick": _state.current_tick,
+        }
+
+    @app.get("/admin/memories/{memory_id}/history")
+    async def admin_memory_history(
+        memory_id: str,
+        start_tick: int | None = None,
+        end_tick: int | None = None,
+    ):
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+        node = await asyncio.to_thread(_state.store.get_node, memory_id)
+        if node is None:
+            raise HTTPException(404, f"Memory {memory_id} not found")
+        history = await asyncio.to_thread(
+            _state.store.get_activation_history,
+            memory_id, start_tick=start_tick, end_tick=end_tick,
+        )
+        return {
+            "memory_id": memory_id,
+            "history": history,
+            "current_tick": _state.current_tick,
+        }
+
+    # --- Decay params endpoints ---
+
+    @app.get("/admin/decay-params")
+    async def admin_get_decay_params():
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+        return {"params": _state.engine.get_params()}
+
+    @app.put("/admin/decay-params")
+    async def admin_put_decay_params(req: DecayParamsUpdate):
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+        _state.engine.set_params(req.params)
+        return {"params": _state.engine.get_params()}
+
+    # --- Tick interval endpoints ---
+
+    @app.get("/admin/tick-interval")
+    async def admin_get_tick_interval():
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+        return {"tick_interval_seconds": _state.tick_interval_seconds}
+
+    @app.put("/admin/tick-interval")
+    async def admin_put_tick_interval(req: TickIntervalUpdate):
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+        _state.tick_interval_seconds = req.tick_interval_seconds
+        return {"tick_interval_seconds": _state.tick_interval_seconds}
+
+    @app.get("/admin/history/summary")
+    async def admin_summary():
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+        summary = await asyncio.to_thread(_state.store.get_memory_summary)
+        summary["current_tick"] = _state.current_tick
+        return summary
 
     return app
 
