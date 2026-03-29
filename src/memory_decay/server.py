@@ -107,11 +107,6 @@ class FeedbackRequest(BaseModel):
     items: List[FeedbackItem] = Field(default_factory=list)
 
 
-class FeedbackSingleRequest(BaseModel):
-    memory_id: str
-    signal: FeedbackSignal
-    strength: float = Field(default=0.5, ge=0.1, le=1.0)
-
 
 class TickRequest(BaseModel):
     count: int = Field(default=1, ge=1, le=1000)

@@ -369,6 +369,9 @@ class MemoryStore:
 
     _FEEDBACK_DEDUP_WINDOW = 60.0  # seconds
     _STABILITY_CAP = 1.0
+    _RETRIEVAL_DELTA_FACTOR = 0.1
+    _POSITIVE_STABILITY_FACTOR = 0.15
+    _NEGATIVE_STABILITY_FACTOR = 0.05
 
     def adjust_scores(
         self,
@@ -397,8 +400,8 @@ class MemoryStore:
                     continue
 
                 row = self._db.execute(
-                    "SELECT stability_score, retrieval_count, last_activated_tick "
-                    "FROM memories WHERE id = ?",
+                    "SELECT stability_score, retrieval_count, last_activated_tick, "
+                    "retrieval_score FROM memories WHERE id = ?",
                     (memory_id,),
                 ).fetchone()
                 if row is None:
@@ -408,16 +411,12 @@ class MemoryStore:
                 retrieval_count = int(row[1])
                 last_activated_tick = int(row[2])
 
-                row2 = self._db.execute(
-                    "SELECT retrieval_score FROM memories WHERE id = ?",
-                    (memory_id,),
-                ).fetchone()
-                retrieval = float(row2[0]) if row2 else 0.0
+                retrieval = float(row[3])
 
-                retrieval_delta = 0.1 * strength
+                retrieval_delta = self._RETRIEVAL_DELTA_FACTOR * strength
 
                 if signal == "positive":
-                    stab_delta = 0.15 * strength * (1.0 - stability / self._STABILITY_CAP)
+                    stab_delta = self._POSITIVE_STABILITY_FACTOR * strength * (1.0 - stability / self._STABILITY_CAP)
                     stability = min(max(stability + stab_delta, 0.0), 1.0)
                     retrieval = min(max(retrieval + retrieval_delta, 0.0), 1.0)
                     retrieval_count += 1
@@ -428,7 +427,7 @@ class MemoryStore:
                         (retrieval, stability, retrieval_count, last_activated_tick, memory_id),
                     )
                 else:  # negative
-                    stab_delta = 0.05 * strength
+                    stab_delta = self._NEGATIVE_STABILITY_FACTOR * strength
                     stability = min(max(stability - stab_delta, 0.0), 1.0)
                     retrieval = min(max(retrieval - retrieval_delta, 0.0), 1.0)
                     self._db.execute(
