@@ -90,6 +90,16 @@ class SearchRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=50)
 
 
+class FeedbackItem(BaseModel):
+    memory_id: str
+    signal: str = Field(description="'positive' or 'negative'")
+    strength: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
+class FeedbackRequest(BaseModel):
+    items: List[FeedbackItem]
+
+
 class TickRequest(BaseModel):
     count: int = Field(default=1, ge=1, le=1000)
 
@@ -323,6 +333,15 @@ def create_app(
 
         return {"results": results}
 
+    @app.post("/feedback")
+    def feedback(req: FeedbackRequest):
+        if not _state:
+            raise HTTPException(503, "Server not initialized")
+
+        tuples = [(item.memory_id, item.signal, item.strength) for item in req.items]
+        applied = _state.store.adjust_scores(tuples, current_tick=_state.current_tick)
+        return {"applied": applied}
+
     @app.post("/tick")
     def tick(req: TickRequest):
         if not _state:
@@ -365,6 +384,7 @@ def create_app(
         if node is None:
             raise HTTPException(404, f"Memory {memory_id} not found")
 
+        _state.store.delete_feedback_for(memory_id)
         _state.store.delete_memory(memory_id)
 
         return {"deleted": memory_id}
@@ -375,6 +395,7 @@ def create_app(
             raise HTTPException(503, "Server not initialized")
 
         cleared = _state.store.clear()
+        _state.store.clear_feedback()
         _state.engine.reset()
         _state.current_tick = 0
         _state.last_tick_time = time.time()
