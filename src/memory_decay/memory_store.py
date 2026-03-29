@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 import struct
+import time
 from typing import Optional
 
 import numpy as np
@@ -87,6 +88,15 @@ class MemoryStore:
                 text_hash TEXT PRIMARY KEY,
                 model     TEXT DEFAULT '',
                 embedding BLOB NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS feedback_log (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                memory_id  TEXT NOT NULL,
+                signal     TEXT NOT NULL,
+                strength   REAL NOT NULL DEFAULT 1.0,
+                timestamp  REAL NOT NULL,
+                tick       INTEGER NOT NULL DEFAULT 0
             );
         """)
 
@@ -354,6 +364,86 @@ class MemoryStore:
         if row is None:
             return None
         return _deserialize_f32(row[0], self._embedding_dim)
+
+    # --- Feedback ---
+
+    _FEEDBACK_DEDUP_WINDOW = 60.0  # seconds
+    _STABILITY_CAP = 1.0
+
+    def adjust_scores(
+        self,
+        items: list[tuple[str, str, float]],
+        current_tick: int = 0,
+    ) -> int:
+        """Apply feedback signals to memories.
+
+        Each item is (memory_id, signal, strength) where signal is
+        'positive' or 'negative'.  Deduplicates by (memory_id, signal)
+        within a 60-second wall-clock window.  Returns count of applied
+        adjustments (after dedup).
+        """
+        now = time.time()
+        applied = 0
+
+        with self._db:
+            for memory_id, signal, strength in items:
+                # Dedup check: skip if same memory+signal within window
+                recent = self._db.execute(
+                    "SELECT 1 FROM feedback_log "
+                    "WHERE memory_id = ? AND signal = ? AND timestamp > ?",
+                    (memory_id, signal, now - self._FEEDBACK_DEDUP_WINDOW),
+                ).fetchone()
+                if recent is not None:
+                    continue
+
+                row = self._db.execute(
+                    "SELECT stability_score, retrieval_count, last_activated_tick "
+                    "FROM memories WHERE id = ?",
+                    (memory_id,),
+                ).fetchone()
+                if row is None:
+                    continue
+
+                stability = float(row[0])
+                retrieval_count = int(row[1])
+                last_activated_tick = int(row[2])
+
+                if signal == "positive":
+                    delta = 0.15 * strength * (1.0 - stability / self._STABILITY_CAP)
+                    stability = min(max(stability + delta, 0.0), 1.0)
+                    retrieval_count += 1
+                    last_activated_tick = current_tick
+                    self._db.execute(
+                        "UPDATE memories SET stability_score=?, retrieval_count=?, "
+                        "last_activated_tick=? WHERE id=?",
+                        (stability, retrieval_count, last_activated_tick, memory_id),
+                    )
+                else:  # negative
+                    stability = min(max(stability - 0.05, 0.0), 1.0)
+                    self._db.execute(
+                        "UPDATE memories SET stability_score=? WHERE id=?",
+                        (stability, memory_id),
+                    )
+
+                # Log the feedback
+                self._db.execute(
+                    "INSERT INTO feedback_log (memory_id, signal, strength, timestamp, tick) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (memory_id, signal, strength, now, current_tick),
+                )
+                applied += 1
+
+        return applied
+
+    def clear_feedback(self) -> None:
+        """Delete all feedback_log entries."""
+        self._db.execute("DELETE FROM feedback_log")
+        self._db.commit()
+
+    def delete_feedback_for(self, memory_id: str) -> None:
+        """Delete feedback_log entries for a specific memory."""
+        self._db.execute("DELETE FROM feedback_log WHERE memory_id = ?", (memory_id,))
+        self._db.commit()
 
     def close(self) -> None:
         self._db.close()
