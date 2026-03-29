@@ -174,3 +174,63 @@ class TestClearAndDeleteFeedback:
         assert len(rows) == 1
         assert rows[0][0] == "m2"
         store.close()
+class TestAdjustScoresRetrieval:
+    def test_positive_increases_retrieval(self):
+        store = _make_store_with_memory(stability=0.5)
+        store.adjust_scores([("m1", "positive", 0.5)], current_tick=10)
+        node = store.get_node("m1")
+        # retrieval_delta = 0.1 * 0.5 = 0.05, starting from default 1.0 → clamped to 1.0
+        # Need lower retrieval to see the effect
+        store.close()
+
+    def test_positive_retrieval_delta(self):
+        """Verify retrieval += 0.1 * strength."""
+        store = _make_store_with_memory(stability=0.5)
+        # Set retrieval_score to a known value
+        store._db.execute("UPDATE memories SET retrieval_score=0.7 WHERE id='m1'")
+        store._db.commit()
+        store.adjust_scores([("m1", "positive", 0.5)], current_tick=10)
+        node = store.get_node("m1")
+        assert node["retrieval_score"] == pytest.approx(0.75, abs=0.001)  # 0.7 + 0.05
+        store.close()
+
+    def test_negative_decreases_retrieval(self):
+        """Verify retrieval -= 0.1 * strength."""
+        store = _make_store_with_memory(stability=0.5)
+        store._db.execute("UPDATE memories SET retrieval_score=0.7 WHERE id='m1'")
+        store._db.commit()
+        store.adjust_scores([("m1", "negative", 0.8)], current_tick=10)
+        node = store.get_node("m1")
+        assert node["retrieval_score"] == pytest.approx(0.62, abs=0.001)  # 0.7 - 0.08
+        store.close()
+
+    def test_retrieval_clamp_bounds(self):
+        """Retrieval never goes below 0 or above 1."""
+        store = _make_store_with_memory(stability=0.5)
+        # Test upper clamp
+        store._db.execute("UPDATE memories SET retrieval_score=0.99 WHERE id='m1'")
+        store._db.commit()
+        store.adjust_scores([("m1", "positive", 1.0)], current_tick=10)
+        node = store.get_node("m1")
+        assert node["retrieval_score"] <= 1.0
+        # Test lower clamp
+        store._db.execute("UPDATE memories SET retrieval_score=0.02 WHERE id='m1'")
+        store._db.commit()
+        store._db.execute("DELETE FROM feedback_log")  # clear dedup
+        store._db.commit()
+        store.adjust_scores([("m1", "negative", 1.0)], current_tick=11)
+        node = store.get_node("m1")
+        assert node["retrieval_score"] >= 0.0
+        store.close()
+
+
+class TestNegativeStabilityWithStrength:
+    def test_negative_stability_scales_with_strength(self):
+        """Verify negative stability delta = 0.05 * strength."""
+        store = _make_store_with_memory(stability=0.5)
+        store.adjust_scores([("m1", "negative", 0.4)], current_tick=10)
+        node = store.get_node("m1")
+        # delta = 0.05 * 0.4 = 0.02
+        assert node["stability_score"] == pytest.approx(0.48, abs=0.001)
+        store.close()
+

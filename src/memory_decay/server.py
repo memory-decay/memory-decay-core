@@ -90,14 +90,27 @@ class SearchRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=50)
 
 
+from enum import Enum
+
+class FeedbackSignal(str, Enum):
+    positive = "positive"
+    negative = "negative"
+
+
 class FeedbackItem(BaseModel):
     memory_id: str
-    signal: str = Field(description="'positive' or 'negative'")
-    strength: float = Field(default=1.0, ge=0.0, le=1.0)
+    signal: FeedbackSignal
+    strength: float = Field(default=0.5, ge=0.1, le=1.0)
 
 
 class FeedbackRequest(BaseModel):
-    items: List[FeedbackItem]
+    items: List[FeedbackItem] = Field(default_factory=list)
+
+
+class FeedbackSingleRequest(BaseModel):
+    memory_id: str
+    signal: FeedbackSignal
+    strength: float = Field(default=0.5, ge=0.1, le=1.0)
 
 
 class TickRequest(BaseModel):
@@ -337,10 +350,12 @@ def create_app(
     def feedback(req: FeedbackRequest):
         if not _state:
             raise HTTPException(503, "Server not initialized")
+        if not req.items:
+            raise HTTPException(422, "items must not be empty")
 
-        tuples = [(item.memory_id, item.signal, item.strength) for item in req.items]
+        tuples = [(item.memory_id, item.signal.value, item.strength) for item in req.items]
         applied = _state.store.adjust_scores(tuples, current_tick=_state.current_tick)
-        return {"applied": applied}
+        return {"applied": applied, "total": len(tuples)}
 
     @app.post("/tick")
     def tick(req: TickRequest):

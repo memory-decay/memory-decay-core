@@ -408,21 +408,33 @@ class MemoryStore:
                 retrieval_count = int(row[1])
                 last_activated_tick = int(row[2])
 
+                row2 = self._db.execute(
+                    "SELECT retrieval_score FROM memories WHERE id = ?",
+                    (memory_id,),
+                ).fetchone()
+                retrieval = float(row2[0]) if row2 else 0.0
+
+                retrieval_delta = 0.1 * strength
+
                 if signal == "positive":
-                    delta = 0.15 * strength * (1.0 - stability / self._STABILITY_CAP)
-                    stability = min(max(stability + delta, 0.0), 1.0)
+                    stab_delta = 0.15 * strength * (1.0 - stability / self._STABILITY_CAP)
+                    stability = min(max(stability + stab_delta, 0.0), 1.0)
+                    retrieval = min(max(retrieval + retrieval_delta, 0.0), 1.0)
                     retrieval_count += 1
                     last_activated_tick = current_tick
                     self._db.execute(
-                        "UPDATE memories SET stability_score=?, retrieval_count=?, "
-                        "last_activated_tick=? WHERE id=?",
-                        (stability, retrieval_count, last_activated_tick, memory_id),
+                        "UPDATE memories SET retrieval_score=?, stability_score=?, "
+                        "retrieval_count=?, last_activated_tick=? WHERE id=?",
+                        (retrieval, stability, retrieval_count, last_activated_tick, memory_id),
                     )
                 else:  # negative
-                    stability = min(max(stability - 0.05, 0.0), 1.0)
+                    stab_delta = 0.05 * strength
+                    stability = min(max(stability - stab_delta, 0.0), 1.0)
+                    retrieval = min(max(retrieval - retrieval_delta, 0.0), 1.0)
                     self._db.execute(
-                        "UPDATE memories SET stability_score=? WHERE id=?",
-                        (stability, memory_id),
+                        "UPDATE memories SET retrieval_score=?, stability_score=? "
+                        "WHERE id=?",
+                        (retrieval, stability, memory_id),
                     )
 
                 # Log the feedback
